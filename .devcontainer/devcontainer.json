@@ -1,0 +1,17 @@
+{
+  "name": "FluidRAG",
+  "build": { "dockerfile": "Dockerfile" },
+  "forwardPorts": [5142],
+  "postCreateCommand": "pip install -r backend/requirements.txt",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      },
+      "extensions": [
+        "ms-python.python",
+        "mhutchie.git-graph"
+      ]
+    }
+  }
+}

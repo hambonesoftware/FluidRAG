@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FluidRAG</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">FluidRAG</div>
+    <div class="subtitle">Light theme • Copilot-inspired</div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <h2>Run Extraction</h2>
+      <div class="grid">
+        <div class="form-row">
+          <label for="model">Model</label>
+          <select id="model"></select>
+        </div>
+        <div class="form-row">
+          <label for="file">Document</label>
+          <input type="file" id="file" accept=".pdf,.docx,.txt"/>
+        </div>
+        <div class="form-row right">
+          <button id="runBtn">Run</button>
+        </div>
+      </div>
+      <div id="status" class="status">Waiting…</div>
+    </section>
+
+    <section class="card">
+      <h2>Preview</h2>
+      <div id="tableWrap" class="table-wrap"></div>
+      <div id="downloadWrap" class="download-wrap hidden"></div>
+    </section>
+
+    <section class="card">
+      <h2>Logs</h2>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+
+  <script type="module" src="/js/app.mjs"></script>
+</body>
+</html>
