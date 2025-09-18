@@ -137,7 +137,6 @@ class OpenRouterClient:
                     "status": None,
                     "error": str(exc)
                 }
-                log.exception("[llm] request failed")
 
                 raise
             finally:

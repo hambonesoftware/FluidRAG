@@ -1,56 +1,9 @@
 
-function describeBody(body){
-  if(!body) return null;
-  if(body instanceof FormData){
-    const summary = {};
-    for(const [key, value] of body.entries()){
-      if(value instanceof File){
-        summary[key] = {
-          kind: "file",
-          name: value.name,
-          size: value.size,
-          type: value.type
-        };
-      }else{
-        summary[key] = {kind: "value", value};
-      }
-    }
-    return summary;
-  }
-  if(typeof body === "string"){
-    try{
-      return {kind:"json", value: JSON.parse(body)};
-    }catch{
-      return {kind:"text", value: body};
-    }
-  }
-  return body;
-}
-
 async function safeFetch(url, options){
-  const method = options?.method || "GET";
-  console.groupCollapsed(`[API] Request ${method} ${url}`);
-  if(options){
-    if(options.headers) console.log("Headers", options.headers);
-    if(Object.prototype.hasOwnProperty.call(options, "body")){
-      console.log("Body", describeBody(options.body));
-    }
-  }
-  console.groupEnd();
   try{
     const res = await fetch(url, options);
-    let data;
-    try{
-      data = await res.json();
-    }catch(err){
-      console.warn(`[API] ${url} JSON parse error`, err);
-      data = {ok:false, error:"Invalid JSON response"};
-    }
+    const data = await res.json();
     data.httpStatus = res.status;
-    console.groupCollapsed(`[API] Response ${res.status} ${url}`);
-    console.log("Headers", Object.fromEntries(res.headers.entries()));
-    console.log("Body", data);
-    console.groupEnd();
 
     return data;
   }catch(err){
