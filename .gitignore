@@ -4,6 +4,7 @@ __pycache__/
 .env
 *.zip
 
+
 !FluidRAG.zip
 
 .bin

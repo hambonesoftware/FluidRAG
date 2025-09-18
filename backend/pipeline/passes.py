@@ -3,7 +3,8 @@ import json
 import logging
 from typing import List, Dict, Any, Tuple
 
-from .llm import OpenRouterClient, OpenRouterAuthError
+from .llm import BaseLLMClient, LLMAuthError
+
 from .preprocess import approximate_tokens
 from ..prompts import PASS_PROMPTS
 
@@ -63,7 +64,9 @@ def _select_chunks_for_pass(chunks: List[Dict[str, Any]], pass_name: str, max_to
     return selected
 
 
-async def _extract_for_pass(client: OpenRouterClient, model: str, chunk: Dict[str, Any], pass_name: str):
+
+async def _extract_for_pass(client: BaseLLMClient, model: str, chunk: Dict[str, Any], pass_name: str):
+
     system = (
         f"You are analyzing a technical specification for the '{pass_name}' domain. "
         f"Return ONLY a JSON array of exact quotations from the provided text."
@@ -79,7 +82,8 @@ async def _extract_for_pass(client: OpenRouterClient, model: str, chunk: Dict[st
                 if s2 and s2 not in out:
                     out.append(s2)
         return out
-    except OpenRouterAuthError as exc:
+    except LLMAuthError as exc:
+
         log.error("[passes] Authorization failure for %s pass: %s", pass_name, exc)
         raise
     except Exception:
@@ -87,7 +91,9 @@ async def _extract_for_pass(client: OpenRouterClient, model: str, chunk: Dict[st
         return []
 
 
-async def run_all_passes_async(chunks: List[Dict[str, Any]], client: OpenRouterClient, model: str, max_tokens: int = 120_000):
+
+async def run_all_passes_async(chunks: List[Dict[str, Any]], client: BaseLLMClient, model: str, max_tokens: int = 120_000):
+
     """Run Mechanical/Electrical/Controls/Software/PM passes asynchronously over filtered chunks."""
     pass_names = list(PASS_PROMPTS.keys())
     tasks = []
