@@ -27,6 +27,7 @@ from .pipeline.llm import (
     LLMAuthError,
     provider_default_model
 )
+
 from .pipeline.passes import run_all_passes_async
 from .pipeline.csv_writer import rows_to_csv_bytes
 
@@ -48,10 +49,29 @@ OPENROUTER_FREE_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free",
     "ollama/llama3.1-8b:free",
     "qwen/qwen-2.5-7b-instruct:free",
+
     "openchat/openchat-7b:free",
     "gryphe/mythomist-7b:free",
     "google/gemma-7b-it:free"
-]
+
+DEFAULT_MODEL = OPENROUTER_FREE_MODELS[0]
+
+
+@dataclass
+class PipelineState:
+    tmpdir: str
+    filename: str
+    file_path: str
+    pages: Optional[List[str]] = None
+    pre_chunks: Optional[List[Dict[str, Any]]] = None
+    section_chunks: Optional[List[Dict[str, Any]]] = None
+    refined_chunks: Optional[List[Dict[str, Any]]] = None
+    clustered_chunks: Optional[List[Dict[str, Any]]] = None
+    model: Optional[str] = None
+
+
+PIPELINE_STATES: Dict[str, PipelineState] = {}
+
 
 _llamacpp_env = os.environ.get("LLAMACPP_MODELS", "")
 if _llamacpp_env:
@@ -159,11 +179,11 @@ def upload_file():
 def preprocess_document():
     payload = request.get_json(force=True)
     session_id = payload.get("session_id")
-    state = _get_state_or_404(session_id)
     if not state:
         return jsonify({"ok": False, "error": "Invalid session"}), 404
     provider = _normalize_provider(payload.get("provider") or state.provider)
     model = _resolve_model(provider, payload.get("model"))
+
     ts = time.time()
     pages = load_document_to_text_pages(state.file_path)
     pre_chunks = standard_pre_chunks(pages)
@@ -171,6 +191,7 @@ def preprocess_document():
     state.pre_chunks = pre_chunks
     state.model = model
     state.provider = provider
+
     elapsed = round((time.time() - ts) * 1000, 1)
     log.debug("[API] preprocess pages=%s chunks=%s", len(pages), len(pre_chunks))
     return jsonify({
@@ -231,21 +252,24 @@ def determine_headers():
     })
 
 
+
 @app.post("/api/process")
 def process_pipeline():
     payload = request.get_json(force=True)
     session_id = payload.get("session_id")
+
     state = _get_state_or_404(session_id)
     if not state:
         return jsonify({"ok": False, "error": "Invalid session"}), 404
     if not state.section_chunks:
         return jsonify({"ok": False, "error": "Determine headers before processing"}), 400
+
     provider = _normalize_provider(payload.get("provider") or state.provider)
     model = _resolve_model(provider, payload.get("model"))
     state.model = model
     state.provider = provider
     ts0 = time.time()
-    log.debug("[API] process session=%s provider=%s model=%s", session_id, provider, model)
+
 
     refined = fluid_refine_chunks(state.section_chunks)
     clustered = hep_cluster_chunks(refined)
@@ -274,6 +298,7 @@ def process_pipeline():
         )
         if key not in rows_merged:
             rows_merged[key] = {
+
                 "Document": r["document"],
                 "(Sub)Section #": r["section_number"],
                 "(Sub)Section Name": r["section_name"],
@@ -309,6 +334,7 @@ def llm_test():
     model = _resolve_model(provider, payload.get("model"))
     client = create_llm_client(provider)
 
+
     async def _probe():
         system = "You validate connectivity for FluidRAG."
         user = (
@@ -321,11 +347,13 @@ def llm_test():
         content = asyncio.run(_probe())
         parsed = json.loads(content)
     except LLMAuthError as exc:
+
         llm_debug = client.drain_debug_records()
         return jsonify({
             "ok": False,
             "error": str(exc),
             "needs_api_key": provider == "openrouter",
+
             "llm_debug": llm_debug
         }), 401
     except json.JSONDecodeError:

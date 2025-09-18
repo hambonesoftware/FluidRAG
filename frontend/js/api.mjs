@@ -1,3 +1,4 @@
+
 function describeBody(body){
   if(!body) return null;
   if(body instanceof FormData){
@@ -50,6 +51,7 @@ async function safeFetch(url, options){
     console.log("Headers", Object.fromEntries(res.headers.entries()));
     console.log("Body", data);
     console.groupEnd();
+
     return data;
   }catch(err){
     console.error(`[API] ${url} error`, err);
@@ -66,6 +68,7 @@ export async function uploadDocument(file){
   fd.append("file", file);
   return safeFetch("/api/upload", {method:"POST", body:fd});
 }
+
 
 export async function preprocessDocument(sessionId, model, provider){
   return safeFetch("/api/preprocess", {
@@ -96,5 +99,6 @@ export async function testLLM(model, provider){
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({model, provider})
+
   });
 }

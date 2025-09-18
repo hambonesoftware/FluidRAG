@@ -3,6 +3,10 @@ __pycache__/
 *.pyc
 .env
 *.zip
+
+
+!FluidRAG.zip
+
 .bin
 *.bin
 .DS_Store
