@@ -73,6 +73,7 @@ class OpenRouterClient:
             }
             self._debug_records.append(record)
             raise OpenRouterAuthError(self._auth_error_message)
+
         if not self.api_key:
             record = dict(base_record)
             record["request"].update({
@@ -136,7 +137,7 @@ class OpenRouterClient:
                     "status": None,
                     "error": str(exc)
                 }
-                log.exception("[llm] request failed")
+
                 raise
             finally:
                 self._debug_records.append(record)

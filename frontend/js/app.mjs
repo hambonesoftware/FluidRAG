@@ -115,6 +115,7 @@ async function onPreprocess(){
   log(`Preprocess complete pages=${res.pages} chunks=${res.pre_chunks}`);
 }
 
+
 async function onHeaders(){
   if(!requireSession()) return;
   if(!state.hasPre){ alert("Run preprocess before header detection."); return; }
@@ -169,6 +170,7 @@ async function onProcess(){
     wrap.classList.remove("hidden");
   }
   log("Process complete");
+
 }
 
 function b64ToBlob(b64, mime){
@@ -194,6 +196,7 @@ async function boot(){
   modelSel.addEventListener("change", updateModel);
   el("uploadBtn").addEventListener("click", onUpload);
   el("testBtn").addEventListener("click", onTestLLM);
+
   el("preprocessBtn").addEventListener("click", onPreprocess);
   el("headersBtn").addEventListener("click", onHeaders);
   el("processBtn").addEventListener("click", onProcess);

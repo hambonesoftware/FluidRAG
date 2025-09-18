@@ -38,12 +38,13 @@ ALLOWED_EXT = {".pdf", ".docx", ".txt"}
 
 OPENROUTER_FREE_MODELS = [
     "deepseek/deepseek-chat:free",
+
     "mistralai/mistral-7b-instruct:free",
     "ollama/llama3.1-8b:free",
     "openchat/openchat-7b:free",
     "gryphe/mythomist-7b:free",
     "google/gemma-7b-it:free"
-]
+
 DEFAULT_MODEL = OPENROUTER_FREE_MODELS[0]
 
 
@@ -100,6 +101,7 @@ def upload_file():
     PIPELINE_STATES[session_id] = PipelineState(tmpdir=tmpdir, filename=filename, file_path=fpath)
     log.debug("[API] upload stored session=%s path=%s", session_id, fpath)
     return jsonify({"ok": True, "session_id": session_id, "filename": filename})
+
 
 
 @app.post("/api/preprocess")
@@ -174,6 +176,7 @@ def determine_headers():
     })
 
 
+
 @app.post("/api/process")
 def process_pipeline():
     payload = request.get_json(force=True)
@@ -215,6 +218,7 @@ def process_pipeline():
         )
         if key not in rows_merged:
             rows_merged[key] = {
+
                 "Document": r["document"],
                 "(Sub)Section #": r["section_number"],
                 "(Sub)Section Name": r["section_name"],

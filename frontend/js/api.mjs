@@ -1,8 +1,10 @@
+
 async function safeFetch(url, options){
   try{
     const res = await fetch(url, options);
     const data = await res.json();
     data.httpStatus = res.status;
+
     return data;
   }catch(err){
     console.error(`[API] ${url} error`, err);
