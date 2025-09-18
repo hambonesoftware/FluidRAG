@@ -86,6 +86,7 @@ async function onUpload(){
   log(`Upload ok. session=${state.sessionId}`);
 }
 
+
 async function onTestLLM(){
   const res = await processFile(file, model, (pct)=>{});
   if(Array.isArray(res?.llm_debug)){
@@ -206,7 +207,7 @@ async function boot(){
   }
   modelSel.addEventListener("change", updateModel);
   el("uploadBtn").addEventListener("click", onUpload);
-  el("testBtn").addEventListener("click", onTestLLM);
+
   el("preprocessBtn").addEventListener("click", onPreprocess);
   el("headersBtn").addEventListener("click", onHeaders);
   el("processBtn").addEventListener("click", onProcess);
