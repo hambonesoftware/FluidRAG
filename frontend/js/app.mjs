@@ -33,6 +33,17 @@ async function onRun(){
   log(`Begin process: ${file.name}, model=${model}`);
 
   const res = await processFile(file, model, (pct)=>{});
+  if(Array.isArray(res?.llm_debug)){
+    res.llm_debug.forEach((entry, idx)=>{
+      const label = entry?.model || `LLM call ${idx+1}`;
+      console.groupCollapsed(`[LLM Request ${idx+1}] ${label}`);
+      console.log(entry?.request || {});
+      console.groupEnd();
+      console.groupCollapsed(`[LLM Response ${idx+1}] ${label}`);
+      console.log(entry?.response || {});
+      console.groupEnd();
+    });
+  }
   if(!res.ok){
     el("status").textContent = "Error: " + (res.error||"Unknown");
     log("Process error: " + (res.error||"unknown"));

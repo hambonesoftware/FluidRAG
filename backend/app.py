@@ -35,7 +35,9 @@ ALLOWED_EXT = {".pdf", ".docx", ".txt"}
 
 # Models list (free-ish on OpenRouter; users may swap/extend as desired)
 OPENROUTER_FREE_MODELS = [
+    "deepseek/deepseek-chat:free",
     "mistralai/mistral-7b-instruct:free",
+    "ollama/llama3.1-8b:free",
     "openchat/openchat-7b:free",
     "gryphe/mythomist-7b:free",
     "google/gemma-7b-it:free"
@@ -99,6 +101,7 @@ def process_file():
     log.debug("[STEP] run_all_passes_async")
     client = OpenRouterClient()
     results = asyncio.run(run_all_passes_async(clustered, client, model=model))
+    llm_debug = client.drain_debug_records()
 
     # Step 6: Merge same specification text across passes
     merged = {}
@@ -131,7 +134,8 @@ def process_file():
         "rows": rows,
         "csv_base64": b64,
         "filename": "FluidRAG_results.csv",
-        "metrics_ms": {"total": elapsed}
+        "metrics_ms": {"total": elapsed},
+        "llm_debug": llm_debug
     })
 
 # Serve frontend assets
