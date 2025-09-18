@@ -44,6 +44,7 @@ OPENROUTER_FREE_MODELS = [
     "meta-llama/llama-3.1-8b-instruct:free",
     "ollama/llama3.1-8b:free",
     "qwen/qwen-2.5-7b-instruct:free",
+
 ]
 DEFAULT_MODEL = OPENROUTER_FREE_MODELS[0]
 
@@ -101,6 +102,7 @@ def upload_file():
     PIPELINE_STATES[session_id] = PipelineState(tmpdir=tmpdir, filename=filename, file_path=fpath)
     log.debug("[API] upload stored session=%s path=%s", session_id, fpath)
     return jsonify({"ok": True, "session_id": session_id, "filename": filename})
+
 
 
 @app.post("/api/preprocess")
