@@ -26,14 +26,19 @@ function setStatus(node, message, tone){
 }
 
 function dumpLLMDebug(debug){
-  if(!Array.isArray(debug)) return;
+  if(!Array.isArray(debug) || debug.length === 0){
+    console.debug("[LLM] No debug entries to display");
+    return;
+  }
   debug.forEach((entry, idx)=>{
     const label = entry?.model || `LLM ${idx+1}`;
-    console.groupCollapsed(`[LLM Request ${idx+1}] ${label}`);
+    console.groupCollapsed(`[LLM ${idx+1}] ${label}`);
+    console.groupCollapsed("Request");
     console.log(entry?.request || {});
     console.groupEnd();
-    console.groupCollapsed(`[LLM Response ${idx+1}] ${label}`);
+    console.groupCollapsed("Response");
     console.log(entry?.response || {});
+    console.groupEnd();
     console.groupEnd();
   });
 }

@@ -38,8 +38,12 @@ ALLOWED_EXT = {".pdf", ".docx", ".txt"}
 
 OPENROUTER_FREE_MODELS = [
     "deepseek/deepseek-chat:free",
+    "deepseek/deepseek-r1:free",
     "mistralai/mistral-7b-instruct:free",
+    "mistralai/mixtral-8x7b-instruct:free",
+    "meta-llama/llama-3.1-8b-instruct:free",
     "ollama/llama3.1-8b:free",
+    "qwen/qwen-2.5-7b-instruct:free",
     "openchat/openchat-7b:free",
     "gryphe/mythomist-7b:free",
     "google/gemma-7b-it:free"
