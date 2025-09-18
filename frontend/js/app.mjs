@@ -86,11 +86,20 @@ async function onUpload(){
   log(`Upload ok. session=${state.sessionId}`);
 }
 
-async function handleTestLLM(){
-  updateModel();
-  log(`Testing LLM connectivity via ${state.model}`);
-  const res = await testLLM(state.model);
-  dumpLLMDebug(res.llm_debug);
+
+async function onTestLLM(){
+  const res = await processFile(file, model, (pct)=>{});
+  if(Array.isArray(res?.llm_debug)){
+    res.llm_debug.forEach((entry, idx)=>{
+      const label = entry?.model || `LLM call ${idx+1}`;
+      console.groupCollapsed(`[LLM Request ${idx+1}] ${label}`);
+      console.log(entry?.request || {});
+      console.groupEnd();
+      console.groupCollapsed(`[LLM Response ${idx+1}] ${label}`);
+      console.log(entry?.response || {});
+      console.groupEnd();
+    });
+  }
   if(!res.ok){
     let msg = res.error || "LLM test failed";
     if(res.needs_api_key) msg += " — set OPENROUTER_API_KEY";
@@ -198,7 +207,7 @@ async function boot(){
   }
   modelSel.addEventListener("change", updateModel);
   el("uploadBtn").addEventListener("click", onUpload);
-  el("testBtn").addEventListener("click", handleTestLLM);
+
   el("preprocessBtn").addEventListener("click", onPreprocess);
   el("headersBtn").addEventListener("click", onHeaders);
   el("processBtn").addEventListener("click", onProcess);
