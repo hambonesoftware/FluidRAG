@@ -1,3 +1,4 @@
+
 function describeBody(body){
   if(!body) return null;
   if(body instanceof FormData){
@@ -50,6 +51,7 @@ async function safeFetch(url, options){
     console.log("Headers", Object.fromEntries(res.headers.entries()));
     console.log("Body", data);
     console.groupEnd();
+
     return data;
   }catch(err){
     console.error(`[API] ${url} error`, err);

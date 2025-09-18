@@ -215,6 +215,7 @@ async function onHeaders(){
   }
 }
 
+
 async function onProcess(){
   if(!requireSession()) return;
   if(!state.hasHeaders){ alert("Detect headers before running the passes."); return; }
@@ -260,6 +261,7 @@ async function onProcess(){
   }finally{
     end();
   }
+
 }
 
 function b64ToBlob(b64, mime){
@@ -284,7 +286,9 @@ async function boot(){
   }
   modelSel.addEventListener("change", updateModel);
   el("uploadBtn").addEventListener("click", onUpload);
+
   el("testBtn").addEventListener("click", handleTestLLM);
+
   el("preprocessBtn").addEventListener("click", onPreprocess);
   el("headersBtn").addEventListener("click", onHeaders);
   el("processBtn").addEventListener("click", onProcess);
