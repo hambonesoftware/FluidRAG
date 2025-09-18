@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -9,40 +9,66 @@
 <body>
   <header class="app-header">
     <div class="brand">FluidRAG</div>
-    <div class="subtitle">Light theme • Copilot-inspired</div>
+    <div class="subtitle">Copilot-inspired light workspace for standard → Fluid → HEP</div>
   </header>
 
   <main class="container">
     <section class="card">
-      <h2>Run Extraction</h2>
-      <div class="grid">
+      <h2>1 · Document &amp; Model</h2>
+      <div class="grid grid-steps">
+        <div class="form-row">
+          <label for="file">Upload source document</label>
+          <input type="file" id="file" accept=".pdf,.docx,.txt" />
+        </div>
+        <div class="form-row">
+          <label for="provider">LLM provider</label>
+          <select id="provider"></select>
+        </div>
         <div class="form-row">
           <label for="model">Model</label>
           <select id="model"></select>
         </div>
-        <div class="form-row">
-          <label for="file">Document</label>
-          <input type="file" id="file" accept=".pdf,.docx,.txt"/>
-        </div>
         <div class="form-row right">
-          <button id="runBtn">Run</button>
+          <button id="uploadBtn">Upload</button>
+          <button id="testBtn" class="ghost">Test LLM</button>
         </div>
       </div>
-      <div id="status" class="status">Waiting…</div>
+      <div id="uploadStatus" class="status">Waiting for upload…</div>
     </section>
 
     <section class="card">
-      <h2>Preview</h2>
+      <h2>2 · Preprocess</h2>
+      <div class="actions">
+        <button id="preprocessBtn">Run standard chunking</button>
+      </div>
+      <div id="preprocessStatus" class="status">Pre-chunking pending…</div>
+    </section>
+
+    <section class="card">
+      <h2>3 · Determine Headers</h2>
+      <div class="actions">
+        <button id="headersBtn">Detect sections (≤120k tokens/request)</button>
+      </div>
+      <div id="headersStatus" class="status">Awaiting header detection…</div>
+      <div id="headersPreview" class="preview-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>4 · Process Passes &amp; Review</h2>
+      <div class="actions">
+        <button id="processBtn">Run Mechanical · Electrical · Controls · Software · PM</button>
+      </div>
+      <div id="processStatus" class="status">Processing not started.</div>
       <div id="tableWrap" class="table-wrap"></div>
       <div id="downloadWrap" class="download-wrap hidden"></div>
     </section>
 
     <section class="card">
-      <h2>Logs</h2>
+      <h2>Activity Log</h2>
       <pre id="log" class="log"></pre>
     </section>
   </main>
 
-  <script type="module" src="/js/app.mjs"></script>
+  <script type="module" src="/js/app.mjs?v=20250219"></script>
 </body>
 </html>
