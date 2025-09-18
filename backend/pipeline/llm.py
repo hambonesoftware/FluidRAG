@@ -8,6 +8,14 @@ log = logging.getLogger("FluidRAG.llm")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+
+class OpenRouterAuthError(RuntimeError):
+    """Raised when OpenRouter returns an authorization failure."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
 def _concat_old_style(system: Optional[str], user: str) -> str:
     """Return a single-string prompt where role and message are concatenated."""
     parts = []
@@ -20,6 +28,7 @@ class OpenRouterClient:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "").strip()
         self._debug_records = []
+        self._auth_error_message: Optional[str] = None
         if not self.api_key:
             log.warning("[llm] OPENROUTER_API_KEY not set; returning mock outputs")
 
@@ -51,6 +60,20 @@ class OpenRouterClient:
             "HTTP-Referer": "https://localhost/",
             "X-Title": "FluidRAG"
         }
+        if self._auth_error_message:
+            record = dict(base_record)
+            record["request"].update({
+                "headers": {**headers_log, "Authorization": "*** (cached failure)"},
+                "payload": payload
+            })
+            record["response"] = {
+                "status": 401,
+                "error": self._auth_error_message,
+                "cached": True
+            }
+            self._debug_records.append(record)
+            raise OpenRouterAuthError(self._auth_error_message)
+
         if not self.api_key:
             record = dict(base_record)
             record["request"].update({
@@ -86,12 +109,36 @@ class OpenRouterClient:
                     "content": content
                 }
                 return content or ""
-            except Exception as exc:
-                log.exception("[llm] request failed")
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code if exc.response else None
+                body_text: Optional[str] = None
+                try:
+                    body_text = exc.response.text
+                except Exception:  # pragma: no cover - defensive
+                    body_text = None
                 record["response"] = {
-                    "status": locals().get("status"),
+                    "status": status,
+                    "error": str(exc),
+                    "body_text": body_text
+                }
+                if status == 401:
+                    message = (
+                        "OpenRouter rejected the request (401 Unauthorized). "
+                        "Confirm that OPENROUTER_API_KEY is set to a valid key "
+                        "with access to the selected model."
+                    )
+                    self._auth_error_message = message
+                    log.error("[llm] %s", message)
+                    raise OpenRouterAuthError(message) from exc
+                log.exception("[llm] HTTP error from OpenRouter")
+                raise
+            except Exception as exc:
+                record["response"] = {
+                    "status": None,
                     "error": str(exc)
                 }
+                log.exception("[llm] request failed")
+
                 raise
             finally:
                 self._debug_records.append(record)
