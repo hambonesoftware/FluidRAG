@@ -60,7 +60,6 @@ ALLOWED_EXT = {".pdf", ".docx", ".txt"}
 
 
 OPENROUTER_FREE_MODELS: List[str] = [
-n
     "deepseek/deepseek-chat:free",
     "deepseek/deepseek-r1:free",
     "mistralai/mistral-7b-instruct:free",
