@@ -18,6 +18,8 @@ pip install -r backend/requirements.txt
 # 3. Configure LLM credentials
 copy .env.example .env
 # edit .env and set OPENROUTER_API_KEY for OpenRouter (optional but recommended)
+# optionally set OPENROUTER_HTTP_REFERER / OPENROUTER_APP_TITLE if your key is
+# restricted to a specific domain/application name
 # optionally set LLAMACPP_URL / LLAMACPP_MODELS / LLAMACPP_DEFAULT_MODEL for llama.cpp
 
 # 4. Run the development server
@@ -43,6 +45,7 @@ python run.py  # starts Flask and opens the frontend
 ## Configuration notes
 
 - Update `backend/app.py` → `OPENROUTER_FREE_MODELS` to adjust the OpenRouter shortlist; popular free models such as DeepSeek, Ollama, and Mistral are included by default.
+- Use `.env` to configure OpenRouter metadata headers if your API key requires them (e.g. `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE`).
 - Environment variables (`LLAMACPP_URL`, `LLAMACPP_MODELS`, `LLAMACPP_DEFAULT_MODEL`) control llama.cpp connectivity.
 - Prompts live in `backend/prompts/__init__.py` for reuse across passes.
 - Frontend modules live under `frontend/js/` and are loaded as ES modules.
