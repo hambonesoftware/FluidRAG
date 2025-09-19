@@ -1,14 +1,15 @@
+import json
 import os
 import logging
 import time
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 
 import httpx
 
 log = logging.getLogger("FluidRAG.llm")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_DEFAULT_REFERER = "https://localhost/"
+_DEFAULT_REFERER = "http://localhost:5142"
 _DEFAULT_APP_TITLE = "FluidRAG"
 
 
@@ -48,6 +49,31 @@ class OpenRouterAuthError(LLMAuthError):
     """Compatibility alias for existing OpenRouter-specific handling."""
 
 
+def _format_prompt_for_log(messages) -> str:
+    """Return a debug-friendly string representation of chat messages."""
+
+    return "\n\n".join(
+        f"{message['role']}: {message['content'].strip()}" for message in messages
+    )
+
+
+def _format_curl_command(
+    url: str,
+    header_items: Sequence[Tuple[str, str]],
+    payload: dict,
+) -> str:
+    """Return a Windows-friendly curl command mirroring the OpenRouter request."""
+
+    lines = [f"curl.exe -sS {url} ^"]
+    for key, value in header_items:
+        escaped_value = str(value).replace('"', '\\"')
+        lines.append(f'  -H "{key}: {escaped_value}" ^')
+    json_payload = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    escaped_payload = json_payload.replace('"', '\\"')
+    lines.append(f'  -d "{escaped_payload}"')
+    return "\n".join(lines)
+
+
 class BaseLLMClient:
     def __init__(self):
         self._debug_records = []
@@ -56,18 +82,6 @@ class BaseLLMClient:
         data = list(self._debug_records)
         self._debug_records.clear()
         return data
-
-
-
-
-def _concat_old_style(system: Optional[str], user: str) -> str:
-    """Return a single-string prompt where role and message are concatenated."""
-    parts = []
-    if system:
-        parts.append(f"system: {system.strip()}")
-    parts.append(f"user: {user.strip()}")
-    return "\n\n".join(parts)
-
 class OpenRouterClient(BaseLLMClient):
     def __init__(self, api_key: Optional[str] = None):
         super().__init__()
@@ -85,7 +99,11 @@ class OpenRouterClient(BaseLLMClient):
         return data
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
-        prompt = _concat_old_style(system, user)
+        messages = []
+        if system is not None:
+            messages.append({"role": "system", "content": system or ""})
+        messages.append({"role": "user", "content": user})
+        prompt = _format_prompt_for_log(messages)
         timestamp = time.time()
         base_record = {
             "model": model,
@@ -97,21 +115,36 @@ class OpenRouterClient(BaseLLMClient):
         }
         payload = {
             "model": model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": kwargs.get("temperature", 0.2),
-            "max_tokens": kwargs.get("max_tokens", 512)
+            "messages": messages,
+            "temperature": kwargs.get("temperature", 0.6),
+            "stream": kwargs.get("stream", False),
         }
-        headers_log = {
-            "HTTP-Referer": self.http_referer,
-            "X-Title": self.app_title,
-        }
+        max_tokens = kwargs.get("max_tokens")
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        header_items_common = [
+            ("Authorization", "Bearer ***"),
+            ("Content-Type", "application/json"),
+            ("HTTP-Referer", self.http_referer),
+            ("X-Title", self.app_title),
+        ]
+        headers_log = {key: value for key, value in header_items_common}
+        curl_command = _format_curl_command(OPENROUTER_URL, header_items_common, payload)
         if self._auth_error_message:
             record = dict(base_record)
             record["request"].update({
                 "headers": {**headers_log, "Authorization": "*** (cached failure)"},
-                "payload": payload
+                "payload": payload,
+                "curl": _format_curl_command(
+                    OPENROUTER_URL,
+                    [
+                        ("Authorization", "Bearer *** (cached failure)"),
+                        ("Content-Type", "application/json"),
+                        ("HTTP-Referer", self.http_referer),
+                        ("X-Title", self.app_title),
+                    ],
+                    payload,
+                ),
             })
             record["response"] = {
                 "status": 401,
@@ -124,7 +157,17 @@ class OpenRouterClient(BaseLLMClient):
             record = dict(base_record)
             record["request"].update({
                 "headers": {**headers_log, "Authorization": "(missing)"},
-                "payload": payload
+                "payload": payload,
+                "curl": _format_curl_command(
+                    OPENROUTER_URL,
+                    [
+                        ("Authorization", "Bearer (missing)"),
+                        ("Content-Type", "application/json"),
+                        ("HTTP-Referer", self.http_referer),
+                        ("X-Title", self.app_title),
+                    ],
+                    payload,
+                ),
             })
             record["response"] = {"mock": True, "body": "[]"}
             self._debug_records.append(record)
@@ -132,6 +175,7 @@ class OpenRouterClient(BaseLLMClient):
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
         }
@@ -140,7 +184,8 @@ class OpenRouterClient(BaseLLMClient):
         record = dict(base_record)
         record["request"].update({
             "headers": headers_log,
-            "payload": payload
+            "payload": payload,
+            "curl": curl_command,
         })
         try:
             async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
@@ -201,7 +246,13 @@ class LlamaCppClient(BaseLLMClient):
         self._auth_error_message: Optional[str] = None
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
-        prompt = _concat_old_style(system, user)
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        elif system is not None:
+            messages.append({"role": "system", "content": ""})
+        messages.append({"role": "user", "content": user})
+        prompt = _format_prompt_for_log(messages)
         timestamp = time.time()
         base_record = {
             "model": model,
@@ -214,10 +265,7 @@ class LlamaCppClient(BaseLLMClient):
 
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": system or ""},
-                {"role": "user", "content": user}
-            ],
+            "messages": messages,
             "temperature": kwargs.get("temperature", 0.2),
             "max_tokens": kwargs.get("max_tokens", 512)
         }
