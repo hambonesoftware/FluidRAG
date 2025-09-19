@@ -8,6 +8,32 @@ import httpx
 log = logging.getLogger("FluidRAG.llm")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+_DEFAULT_REFERER = "https://localhost/"
+_DEFAULT_APP_TITLE = "FluidRAG"
+
+
+def _env_setting(*keys: str, default: str) -> str:
+    """Return the first non-empty environment variable among ``keys``."""
+
+    for key in keys:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return default
+
+
+OPENROUTER_HTTP_REFERER = _env_setting(
+    "OPENROUTER_HTTP_REFERER",
+    "OPENROUTER_SITE_URL",
+    "HTTP_REFERER",
+    default=_DEFAULT_REFERER,
+)
+OPENROUTER_APP_TITLE = _env_setting(
+    "OPENROUTER_APP_TITLE",
+    "OPENROUTER_X_TITLE",
+    "X_TITLE",
+    default=_DEFAULT_APP_TITLE,
+)
 LLAMACPP_URL = os.environ.get("LLAMACPP_URL", "http://localhost:8080/v1/chat/completions")
 
 
@@ -46,6 +72,8 @@ class OpenRouterClient(BaseLLMClient):
     def __init__(self, api_key: Optional[str] = None):
         super().__init__()
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "").strip()
+        self.http_referer = OPENROUTER_HTTP_REFERER
+        self.app_title = OPENROUTER_APP_TITLE
 
         self._auth_error_message: Optional[str] = None
         if not self.api_key:
@@ -76,8 +104,8 @@ class OpenRouterClient(BaseLLMClient):
             "max_tokens": kwargs.get("max_tokens", 512)
         }
         headers_log = {
-            "HTTP-Referer": "https://localhost/",
-            "X-Title": "FluidRAG"
+            "HTTP-Referer": self.http_referer,
+            "X-Title": self.app_title,
         }
         if self._auth_error_message:
             record = dict(base_record)
@@ -104,8 +132,8 @@ class OpenRouterClient(BaseLLMClient):
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": "https://localhost/",
-
+            "HTTP-Referer": self.http_referer,
+            "X-Title": self.app_title,
         }
         timeout = httpx.Timeout(60.0, connect=20.0)
         headers_log = {**headers_log, "Authorization": "***"}

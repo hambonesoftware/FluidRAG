@@ -67,7 +67,6 @@ function refreshModelOptions(preferredModel = null){
     state.model = null;
     console.warn("[State] Missing provider info; unable to populate models", {providerId});
     return;
-<
   }
   const models = Array.isArray(info.models) ? info.models : [];
   models.forEach((m)=>{
