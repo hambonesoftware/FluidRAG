@@ -67,6 +67,7 @@ function refreshModelOptions(preferredModel = null){
     state.model = null;
     console.warn("[State] Missing provider info; unable to populate models", {providerId});
     return;
+<
   }
   const models = Array.isArray(info.models) ? info.models : [];
   models.forEach((m)=>{
@@ -89,6 +90,7 @@ function refreshModelOptions(preferredModel = null){
   }else{
     state.model = null;
   }
+
   console.debug("[State] Model options updated", {provider: providerId, model: state.model});
 }
 
@@ -293,12 +295,10 @@ async function onHeaders(){
   }
 }
 
-
 async function onProcess(){
   if(!requireSession()) return;
   if(!state.hasHeaders){ alert("Detect headers before running the passes."); return; }
   updateModel();
-
   if(!state.provider){ alert("Select an LLM provider first."); return; }
   if(!state.model){ alert("Select a model first."); return; }
   const providerName = providerLabel();

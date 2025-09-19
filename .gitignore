@@ -4,9 +4,6 @@ __pycache__/
 .env
 *.zip
 
-
-!FluidRAG.zip
-
 .bin
 *.bin
 .DS_Store

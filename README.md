@@ -1,6 +1,5 @@
 # FluidRAG
 
-
 FluidRAG is a standalone RAG-style specification extraction tool with a Flask backend and an ESM frontend. It applies a **standard → Fluid → HEP** preprocessing pipeline, then runs five asynchronous LLM passes (Mechanical, Electrical, Controls, Software, and Project Management) to collect exact specification statements. Duplicate specifications found by multiple passes are merged and exported as a CSV with the columns **Document**, **(Sub)Section #**, **(Sub)Section Name**, **Specification**, and **Pass**.
 
 The UI follows a light Microsoft 365 Copilot-inspired theme and surfaces detailed progress logs in both the Flask console and the browser DevTools console.
@@ -27,8 +26,8 @@ python run.py  # starts Flask and opens the frontend
 
 > Without `OPENROUTER_API_KEY`, network calls fall back to mocked responses so you can exercise the UI end-to-end.
 
-## Guided workflow
 
+## Guided workflow
 
 1. **Upload & model selection**  
    Choose an LLM provider (OpenRouter cloud or a local llama.cpp endpoint) and select a model. Upload `.pdf`, `.docx`, or `.txt` files; the backend stores them in a session-specific temp directory. Use the **Test LLM** button to verify connectivity with the provider using the legacy concatenated role/message prompt format.

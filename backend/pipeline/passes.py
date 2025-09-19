@@ -64,7 +64,6 @@ def _select_chunks_for_pass(chunks: List[Dict[str, Any]], pass_name: str, max_to
     return selected
 
 
-
 async def _extract_for_pass(client: BaseLLMClient, model: str, chunk: Dict[str, Any], pass_name: str):
 
     system = (

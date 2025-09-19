@@ -33,12 +33,6 @@ class BaseLLMClient:
 
 
 
-class OpenRouterAuthError(RuntimeError):
-    """Raised when OpenRouter returns an authorization failure."""
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
 
 def _concat_old_style(system: Optional[str], user: str) -> str:
     """Return a single-string prompt where role and message are concatenated."""
@@ -120,8 +114,9 @@ class OpenRouterClient(BaseLLMClient):
             "headers": headers_log,
             "payload": payload
         })
-        async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
-            try:
+        try:
+            async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
+
                 r = await client.post(OPENROUTER_URL, headers=headers, json=payload)
                 status = r.status_code
                 r.raise_for_status()
@@ -133,38 +128,39 @@ class OpenRouterClient(BaseLLMClient):
                     "content": content
                 }
                 return content or ""
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code if exc.response else None
-                body_text: Optional[str] = None
-                try:
-                    body_text = exc.response.text
-                except Exception:  # pragma: no cover - defensive
-                    body_text = None
-                record["response"] = {
-                    "status": status,
-                    "error": str(exc),
-                    "body_text": body_text
-                }
-                if status == 401:
-                    message = (
-                        "OpenRouter rejected the request (401 Unauthorized). "
-                        "Confirm that OPENROUTER_API_KEY is set to a valid key "
-                        "with access to the selected model."
-                    )
-                    self._auth_error_message = message
-                    log.error("[llm] %s", message)
-                    raise OpenRouterAuthError(message) from exc
-                log.exception("[llm] HTTP error from OpenRouter")
-                raise
-            except Exception as exc:
-                record["response"] = {
-                    "status": None,
-                    "error": str(exc)
-                }
-                log.exception("[llm] request failed")
-                raise
-            finally:
-                self._debug_records.append(record)
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response else None
+            body_text: Optional[str] = None
+            try:
+                body_text = exc.response.text
+            except Exception:  # pragma: no cover - defensive
+                body_text = None
+            record["response"] = {
+                "status": status,
+                "error": str(exc),
+                "body_text": body_text
+            }
+            if status == 401:
+                message = (
+                    "OpenRouter rejected the request (401 Unauthorized). "
+                    "Confirm that OPENROUTER_API_KEY is set to a valid key "
+                    "with access to the selected model."
+                )
+                self._auth_error_message = message
+                log.error("[llm] %s", message)
+                raise OpenRouterAuthError(message) from exc
+            log.exception("[llm] HTTP error from OpenRouter")
+            raise
+        except Exception as exc:
+            record["response"] = {
+                "status": None,
+                "error": str(exc)
+            }
+            log.exception("[llm] request failed")
+            raise
+        finally:
+            self._debug_records.append(record)
+
 
 
 class LlamaCppClient(BaseLLMClient):
@@ -222,13 +218,8 @@ class LlamaCppClient(BaseLLMClient):
             raise LLMAuthError(self._auth_error_message)
 
         timeout = httpx.Timeout(60.0, connect=20.0)
-        headers_log = {**headers_log, "Authorization": "***"}
-        record = dict(base_record)
-        record["request"].update({
-            "headers": headers_log,
-            "payload": payload
-        })
-        async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
+        try:
+            async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
 
                 r = await client.post(self.base_url, headers=headers, json=payload)
                 status = r.status_code
@@ -247,40 +238,38 @@ class LlamaCppClient(BaseLLMClient):
                     "content": content
                 }
                 return content or ""
-            except httpx.HTTPStatusError as exc:
-                status = exc.response.status_code if exc.response else None
-                body_text: Optional[str] = None
-                try:
-                    body_text = exc.response.text
-                except Exception:
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code if exc.response else None
+            body_text: Optional[str] = None
+            try:
+                body_text = exc.response.text
+            except Exception:
+                body_text = None
+            record["response"] = {
+                "status": status,
+                "error": str(exc),
+                "body_text": body_text
+            }
+            if status in (401, 403):
+                message = (
+                    "The llama.cpp endpoint rejected the request (authorization failure). "
+                    "Confirm that the server is running and credentials (if any) are correct."
+                )
+                self._auth_error_message = message
+                log.error("[llm] %s", message)
+                raise LLMAuthError(message) from exc
+            log.exception("[llm] HTTP error from llama.cpp endpoint")
+            raise
+        except Exception as exc:
+            record["response"] = {
+                "status": None,
+                "error": str(exc)
+            }
+            log.exception("[llm] llama.cpp request failed")
+            raise
+        finally:
+            self._debug_records.append(record)
 
-                    body_text = None
-                record["response"] = {
-                    "status": status,
-                    "error": str(exc),
-                    "body_text": body_text
-                }
-
-                if status in (401, 403):
-                    message = (
-                        "The llama.cpp endpoint rejected the request (authorization failure). "
-                        "Confirm that the server is running and credentials (if any) are correct."
-                    )
-                    self._auth_error_message = message
-                    log.error("[llm] %s", message)
-                    raise LLMAuthError(message) from exc
-                log.exception("[llm] HTTP error from llama.cpp endpoint")
-
-                raise
-            except Exception as exc:
-                record["response"] = {
-                    "status": None,
-                    "error": str(exc)
-                }
-                log.exception("[llm] llama.cpp request failed")
-                raise
-            finally:
-                self._debug_records.append(record)
 
 
 def create_llm_client(provider: str) -> BaseLLMClient:
