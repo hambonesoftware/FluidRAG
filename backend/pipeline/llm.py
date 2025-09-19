@@ -99,10 +99,12 @@ class OpenRouterClient(BaseLLMClient):
         return data
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
+
         messages = []
         if system is not None:
             messages.append({"role": "system", "content": system or ""})
         messages.append({"role": "user", "content": user})
+
         prompt = _format_prompt_for_log(messages)
         timestamp = time.time()
         base_record = {
@@ -116,8 +118,26 @@ class OpenRouterClient(BaseLLMClient):
         payload = {
             "model": model,
             "messages": messages,
-            "temperature": kwargs.get("temperature", 0.6),
+
             "stream": kwargs.get("stream", False),
+
+            "temperature": kwargs.get("temperature", 0.2),
+            "max_tokens": kwargs.get("max_tokens", 512)
+        }
+        temperature = kwargs.get("temperature")
+        if temperature is not None:
+            payload["temperature"] = temperature
+        else:
+            payload["temperature"] = 0.6
+
+        max_tokens = kwargs.get("max_tokens")
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        headers_log = {
+            "HTTP-Referer": self.http_referer,
+            "X-Title": self.app_title,
+            "Content-Type": "application/json",
+
         }
         max_tokens = kwargs.get("max_tokens")
         if max_tokens is not None:
@@ -178,6 +198,7 @@ class OpenRouterClient(BaseLLMClient):
             "Content-Type": "application/json",
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
+            "Content-Type": "application/json",
         }
         timeout = httpx.Timeout(60.0, connect=20.0)
         headers_log = {**headers_log, "Authorization": "***"}
