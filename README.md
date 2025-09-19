@@ -4,6 +4,7 @@ FluidRAG is a standalone RAG-style specification extraction tool with a Flask ba
 
 The UI follows a light Microsoft 365 Copilot-inspired theme and surfaces detailed progress logs in both the Flask console and the browser DevTools console.
 
+
 ## Quick start
 
 ```bash
@@ -25,6 +26,7 @@ python run.py  # starts Flask and opens the frontend
 
 > Without `OPENROUTER_API_KEY`, network calls fall back to mocked responses so you can exercise the UI end-to-end.
 
+
 ## Guided workflow
 
 1. **Upload & model selection**  
@@ -44,6 +46,7 @@ python run.py  # starts Flask and opens the frontend
 - Environment variables (`LLAMACPP_URL`, `LLAMACPP_MODELS`, `LLAMACPP_DEFAULT_MODEL`) control llama.cpp connectivity.
 - Prompts live in `backend/prompts/__init__.py` for reuse across passes.
 - Frontend modules live under `frontend/js/` and are loaded as ES modules.
+
 
 ## Dev containers / Codespaces
 

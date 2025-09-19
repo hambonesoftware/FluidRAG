@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 *.zip
+
 .bin
 *.bin
 .DS_Store

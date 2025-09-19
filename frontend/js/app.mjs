@@ -3,6 +3,7 @@ import { renderTable, renderHeaderPreview } from "./ui.mjs";
 
 const el = (id)=>document.getElementById(id);
 const state = {
+
   sessionId: null,
   provider: null,
   model: null,
@@ -10,6 +11,7 @@ const state = {
   hasHeaders: false,
   rows: [],
   providers: {}
+
 };
 
 const log = (msg)=>{
@@ -19,6 +21,7 @@ const log = (msg)=>{
   pre.textContent += line + "\n";
   pre.scrollTop = pre.scrollHeight;
 };
+
 
 function openGroup(label, collapsed=false){
   if(collapsed) console.groupCollapsed(label);
@@ -42,6 +45,7 @@ function setStatus(node, message, tone){
   else if(tone === "warn") node.classList.add("warn");
 }
 
+
 function providerLabel(providerId = state.provider){
   if(!providerId) return "provider";
   const info = state.providers?.[providerId];
@@ -63,6 +67,7 @@ function refreshModelOptions(preferredModel = null){
     state.model = null;
     console.warn("[State] Missing provider info; unable to populate models", {providerId});
     return;
+<
   }
   const models = Array.isArray(info.models) ? info.models : [];
   models.forEach((m)=>{
@@ -85,6 +90,7 @@ function refreshModelOptions(preferredModel = null){
   }else{
     state.model = null;
   }
+
   console.debug("[State] Model options updated", {provider: providerId, model: state.model});
 }
 
@@ -337,6 +343,7 @@ async function onProcess(){
   }finally{
     end();
   }
+
 }
 
 function b64ToBlob(b64, mime){
@@ -375,6 +382,7 @@ async function boot(){
   modelSel.addEventListener("change", updateModel);
   el("uploadBtn").addEventListener("click", onUpload);
   el("testBtn").addEventListener("click", handleTestLLM);
+
   el("preprocessBtn").addEventListener("click", onPreprocess);
   el("headersBtn").addEventListener("click", onHeaders);
   el("processBtn").addEventListener("click", onProcess);

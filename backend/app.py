@@ -47,6 +47,7 @@ except ImportError:  # pragma: no cover - fallback when executed as package modu
     from .pipeline.passes import run_all_passes_async
     from .pipeline.csv_writer import rows_to_csv_bytes
 
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -57,7 +58,9 @@ app = Flask(__name__, static_folder="../frontend", static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
 ALLOWED_EXT = {".pdf", ".docx", ".txt"}
 
+
 OPENROUTER_FREE_MODELS: List[str] = [
+n
     "deepseek/deepseek-chat:free",
     "deepseek/deepseek-r1:free",
     "mistralai/mistral-7b-instruct:free",
@@ -69,6 +72,7 @@ OPENROUTER_FREE_MODELS: List[str] = [
     "gryphe/mythomist-7b:free",
     "google/gemma-7b-it:free",
 ]
+
 
 _llamacpp_env = os.environ.get("LLAMACPP_MODELS", "")
 if _llamacpp_env:
@@ -177,6 +181,7 @@ def preprocess_document():
     payload = request.get_json(force=True)
     session_id = payload.get("session_id")
     state = _get_state_or_404(session_id)
+
     if not state:
         return jsonify({"ok": False, "error": "Invalid session"}), 404
     provider = _normalize_provider(payload.get("provider") or state.provider)
@@ -257,12 +262,15 @@ def process_pipeline():
         return jsonify({"ok": False, "error": "Invalid session"}), 404
     if not state.section_chunks:
         return jsonify({"ok": False, "error": "Determine headers before processing"}), 400
+
     provider = _normalize_provider(payload.get("provider") or state.provider)
     model = _resolve_model(provider, payload.get("model"))
     state.model = model
     state.provider = provider
     ts0 = time.time()
+
     log.debug("[API] process session=%s provider=%s model=%s", session_id, provider, model)
+
 
     refined = fluid_refine_chunks(state.section_chunks)
     clustered = hep_cluster_chunks(refined)
@@ -338,11 +346,13 @@ def llm_test():
         content = asyncio.run(_probe())
         parsed = json.loads(content)
     except LLMAuthError as exc:
+
         llm_debug = client.drain_debug_records()
         return jsonify({
             "ok": False,
             "error": str(exc),
             "needs_api_key": provider == "openrouter",
+
             "llm_debug": llm_debug
         }), 401
     except json.JSONDecodeError:

@@ -32,6 +32,8 @@ class BaseLLMClient:
         return data
 
 
+
+
 def _concat_old_style(system: Optional[str], user: str) -> str:
     """Return a single-string prompt where role and message are concatenated."""
     parts = []
@@ -44,9 +46,15 @@ class OpenRouterClient(BaseLLMClient):
     def __init__(self, api_key: Optional[str] = None):
         super().__init__()
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "").strip()
+
         self._auth_error_message: Optional[str] = None
         if not self.api_key:
             log.warning("[llm] OPENROUTER_API_KEY not set; returning mock outputs")
+
+    def drain_debug_records(self):
+        data = list(self._debug_records)
+        self._debug_records.clear()
+        return data
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
         prompt = _concat_old_style(system, user)
@@ -97,7 +105,7 @@ class OpenRouterClient(BaseLLMClient):
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "HTTP-Referer": "https://localhost/",
-            "X-Title": "FluidRAG"
+
         }
         timeout = httpx.Timeout(60.0, connect=20.0)
         headers_log = {**headers_log, "Authorization": "***"}
@@ -108,6 +116,7 @@ class OpenRouterClient(BaseLLMClient):
         })
         try:
             async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
+
                 r = await client.post(OPENROUTER_URL, headers=headers, json=payload)
                 status = r.status_code
                 r.raise_for_status()
@@ -151,6 +160,7 @@ class OpenRouterClient(BaseLLMClient):
             raise
         finally:
             self._debug_records.append(record)
+
 
 
 class LlamaCppClient(BaseLLMClient):
@@ -198,6 +208,7 @@ class LlamaCppClient(BaseLLMClient):
         })
 
         if self._auth_error_message:
+
             record["response"] = {
                 "status": 401,
                 "error": self._auth_error_message,
@@ -209,6 +220,7 @@ class LlamaCppClient(BaseLLMClient):
         timeout = httpx.Timeout(60.0, connect=20.0)
         try:
             async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
+
                 r = await client.post(self.base_url, headers=headers, json=payload)
                 status = r.status_code
                 r.raise_for_status()
@@ -219,6 +231,7 @@ class LlamaCppClient(BaseLLMClient):
                     if isinstance(message.get("message"), dict)
                     else message.get("text", "")
                 )
+
                 record["response"] = {
                     "status": status,
                     "body": data,
@@ -258,6 +271,7 @@ class LlamaCppClient(BaseLLMClient):
             self._debug_records.append(record)
 
 
+
 def create_llm_client(provider: str) -> BaseLLMClient:
     normalized = (provider or "openrouter").strip().lower()
     if normalized == "llamacpp":
@@ -270,3 +284,4 @@ def provider_default_model(provider: str) -> Optional[str]:
     if normalized == "llamacpp":
         return os.environ.get("LLAMACPP_DEFAULT_MODEL")
     return None
+
