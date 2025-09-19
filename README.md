@@ -1,75 +1,58 @@
 # FluidRAG
 
-A standalone RAG-style spec extractor with a Flask backend and ESM frontend.
-It implements a **standard → Fluid → HEP** text pipeline, then runs five
-parallel LLM passes (Mechanical, Electrical, Controls, Software, Project Management)
-to extract exact specification sentences. Results are merged and returned as a CSV.
+FluidRAG is a standalone RAG-style specification extraction tool with a Flask backend and an ESM frontend. It applies a **standard → Fluid → HEP** preprocessing pipeline, then runs five asynchronous LLM passes (Mechanical, Electrical, Controls, Software, and Project Management) to collect exact specification statements. Duplicate specifications found by multiple passes are merged and exported as a CSV with the columns **Document**, **(Sub)Section #**, **(Sub)Section Name**, **Specification**, and **Pass**.
 
-Light-theme UI inspired by M365 Copilot.
+The UI follows a light Microsoft 365 Copilot-inspired theme and surfaces detailed progress logs in both the Flask console and the browser DevTools console.
 
-## Quick Start
+## Quick start
 
 ```bash
-# 1) Create and activate venv (Windows example)
+# 1. Create and activate a virtual environment (Windows example)
 py -3.12 -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\activate
 
-# 2) Install backend deps
+# 2. Install dependencies
 pip install -r backend/requirements.txt
 
-# 3) Configure API key
+# 3. Configure LLM credentials
 copy .env.example .env
-# edit .env and set OPENROUTER_API_KEY
+# edit .env and set OPENROUTER_API_KEY for OpenRouter (optional but recommended)
+# optionally set LLAMACPP_URL / LLAMACPP_MODELS / LLAMACPP_DEFAULT_MODEL for llama.cpp
 
-# 4) Run
-python backend/app.py
-
-# 5) Open
-# http://127.0.0.1:5142/
+# 4. Run the development server
+python run.py  # starts Flask and opens the frontend
 ```
 
-> If `OPENROUTER_API_KEY` is missing, the app runs with deterministic mock
-> outputs (no real extraction). Set the key for real LLM calls.
+> Without `OPENROUTER_API_KEY`, network calls fall back to mocked responses so you can exercise the UI end-to-end.
 
-## How it works
+## Guided workflow
 
-1. **Preprocess**
-   * Load `.pdf`, `.docx`, or `.txt`
-   * Detect section headings via regex heuristics (`1`, `1.1`, etc.).
-   * Segment text into section-bounded chunks.
+1. **Upload & model selection**  
+   Choose an LLM provider (OpenRouter cloud or a local llama.cpp endpoint) and select a model. Upload `.pdf`, `.docx`, or `.txt` files; the backend stores them in a session-specific temp directory. Use the **Test LLM** button to verify connectivity with the provider using the legacy concatenated role/message prompt format.
+2. **Preprocess (standard chunking)**  
+   Split the document into overlapping ~4k-token coarse chunks while persisting per-page strings for subsequent stages.
+3. **Determine headers**  
+   Run hybrid heading detection (regex + LLM confirmation) in ≤120k-token batches to produce section/subsection spans. The API returns an outline preview and full LLM debug logs for DevTools inspection.
+4. **Fluid → HEP refinement**  
+   Refine the section chunks toward ~1–2k tokens with Fluid and attach entropy/cluster metadata via HEP to inform downstream weighting.
+5. **Async passes & merge**  
+   Rank chunks per pass using entropy and keyword heuristics, enforce a 120k-token request budget, and dispatch asynchronous LLM calls. Exact specifications are deduplicated across passes, rendered in-app, and offered as `FluidRAG_results.csv` for download.
 
-2. **Fluid Refinement**
-   * Merge very short chunks, split very long ones using overlaps to aim
-     for ~1-2k token equivalents.
+## Configuration notes
 
-3. **HEP Clustering**
-   * TF‑IDF features + k‑means.
-   * Attach `cluster_id` and a simple entropy score to each chunk.
+- Update `backend/app.py` → `OPENROUTER_FREE_MODELS` to adjust the OpenRouter shortlist; popular free models such as DeepSeek, Ollama, and Mistral are included by default.
+- Environment variables (`LLAMACPP_URL`, `LLAMACPP_MODELS`, `LLAMACPP_DEFAULT_MODEL`) control llama.cpp connectivity.
+- Prompts live in `backend/prompts/__init__.py` for reuse across passes.
+- Frontend modules live under `frontend/js/` and are loaded as ES modules.
 
-4. **Async Passes**
-   * For each chunk, run 5 extraction passes concurrently via OpenRouter.
-   * Each pass returns a JSON array of **exact quotations** matching domain criteria.
+## Dev containers / Codespaces
 
-5. **Merge & CSV**
-   * Combine identical `"Specification"` strings across passes into a single row.
-   * `"Pass"` becomes a semicolon‑separated list.
-
-## Configuration
-
-* Edit `backend/app.py` → `OPENROUTER_FREE_MODELS` to change the default model list.
-* Prompts live in `backend/prompts/__init__.py`. Tweak to your liking.
-
-## GitHub Codespaces / Dev Containers
-
-A ready-to-use dev container is included. In VS Code:
-
-1. Install **Dev Containers** extension.
-2. `File → Open Folder...` → choose this project.
-3. When prompted, **Reopen in Container**.
-4. Inside the container:
+1. Install the **Dev Containers** extension in VS Code.
+2. Open this folder and accept **Reopen in Container** when prompted.
+3. Inside the container, run:
    ```bash
    pip install -r backend/requirements.txt
-   python backend/app.py
+   python run.py
    ```
 
 ## License

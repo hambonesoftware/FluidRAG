@@ -11,11 +11,12 @@ def _entropy(vec: np.ndarray) -> float:
     p = p[p > 0]
     return float(-np.sum(p * np.log2(p)))
 
-def hep_cluster_chunks(chunks: List[Dict, ]):
+def hep_cluster_chunks(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """High-Entropy Pass (HEP): cluster by tf-idf; annotate cluster_id and seed score."""
     texts = [c["text"] for c in chunks]
     if len(texts) < 3:
-        for i, c in enumerate(chunks):
+        for c in chunks:
+            c.setdefault("meta", {})
             c["meta"]["cluster_id"] = 0
             c["meta"]["hep_entropy"] = 0.0
         return chunks
@@ -30,6 +31,7 @@ def hep_cluster_chunks(chunks: List[Dict, ]):
     labels = km.fit_predict(X)
 
     for i, c in enumerate(chunks):
+        c.setdefault("meta", {})
         c["meta"]["cluster_id"] = int(labels[i])
         c["meta"]["hep_entropy"] = float(entropies[i])
     log.debug(f"[hep] k={k} clustered {len(chunks)} chunks")
