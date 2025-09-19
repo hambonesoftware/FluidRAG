@@ -48,6 +48,14 @@ class OpenRouterAuthError(LLMAuthError):
     """Compatibility alias for existing OpenRouter-specific handling."""
 
 
+def _format_prompt_for_log(messages) -> str:
+    """Return a debug-friendly string representation of chat messages."""
+
+    return "\n\n".join(
+        f"{message['role']}: {message['content'].strip()}" for message in messages
+    )
+
+
 class BaseLLMClient:
     def __init__(self):
         self._debug_records = []
@@ -56,18 +64,6 @@ class BaseLLMClient:
         data = list(self._debug_records)
         self._debug_records.clear()
         return data
-
-
-
-
-def _concat_old_style(system: Optional[str], user: str) -> str:
-    """Return a single-string prompt where role and message are concatenated."""
-    parts = []
-    if system:
-        parts.append(f"system: {system.strip()}")
-    parts.append(f"user: {user.strip()}")
-    return "\n\n".join(parts)
-
 class OpenRouterClient(BaseLLMClient):
     def __init__(self, api_key: Optional[str] = None):
         super().__init__()
@@ -85,7 +81,11 @@ class OpenRouterClient(BaseLLMClient):
         return data
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
-        prompt = _concat_old_style(system, user)
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": user})
+        prompt = _format_prompt_for_log(messages)
         timestamp = time.time()
         base_record = {
             "model": model,
@@ -97,9 +97,7 @@ class OpenRouterClient(BaseLLMClient):
         }
         payload = {
             "model": model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": messages,
             "temperature": kwargs.get("temperature", 0.2),
             "max_tokens": kwargs.get("max_tokens", 512)
         }
@@ -201,7 +199,13 @@ class LlamaCppClient(BaseLLMClient):
         self._auth_error_message: Optional[str] = None
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
-        prompt = _concat_old_style(system, user)
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        elif system is not None:
+            messages.append({"role": "system", "content": ""})
+        messages.append({"role": "user", "content": user})
+        prompt = _format_prompt_for_log(messages)
         timestamp = time.time()
         base_record = {
             "model": model,
@@ -214,10 +218,7 @@ class LlamaCppClient(BaseLLMClient):
 
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": system or ""},
-                {"role": "user", "content": user}
-            ],
+            "messages": messages,
             "temperature": kwargs.get("temperature", 0.2),
             "max_tokens": kwargs.get("max_tokens", 512)
         }
