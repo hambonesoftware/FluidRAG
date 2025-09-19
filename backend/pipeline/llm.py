@@ -8,7 +8,7 @@ import httpx
 log = logging.getLogger("FluidRAG.llm")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_DEFAULT_REFERER = "https://localhost/"
+_DEFAULT_REFERER = "http://localhost:5142"
 _DEFAULT_APP_TITLE = "FluidRAG"
 
 
@@ -98,12 +98,23 @@ class OpenRouterClient(BaseLLMClient):
         payload = {
             "model": model,
             "messages": messages,
+            "stream": kwargs.get("stream", False),
+
             "temperature": kwargs.get("temperature", 0.2),
             "max_tokens": kwargs.get("max_tokens", 512)
         }
+        temperature = kwargs.get("temperature")
+        if temperature is not None:
+            payload["temperature"] = temperature
+        else:
+            payload["temperature"] = 0.6
+        max_tokens = kwargs.get("max_tokens")
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         headers_log = {
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
+            "Content-Type": "application/json",
         }
         if self._auth_error_message:
             record = dict(base_record)
@@ -132,6 +143,7 @@ class OpenRouterClient(BaseLLMClient):
             "Authorization": f"Bearer {self.api_key}",
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
+            "Content-Type": "application/json",
         }
         timeout = httpx.Timeout(60.0, connect=20.0)
         headers_log = {**headers_log, "Authorization": "***"}
