@@ -99,6 +99,9 @@ class OpenRouterClient(BaseLLMClient):
             "model": model,
             "messages": messages,
             "stream": kwargs.get("stream", False),
+
+            "temperature": kwargs.get("temperature", 0.2),
+            "max_tokens": kwargs.get("max_tokens", 512)
         }
         temperature = kwargs.get("temperature")
         if temperature is not None:
