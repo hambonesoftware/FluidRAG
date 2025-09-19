@@ -81,10 +81,12 @@ class OpenRouterClient(BaseLLMClient):
         return data
 
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
+
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": user})
+
         prompt = _format_prompt_for_log(messages)
         timestamp = time.time()
         base_record = {
@@ -98,6 +100,7 @@ class OpenRouterClient(BaseLLMClient):
         payload = {
             "model": model,
             "messages": messages,
+
             "stream": kwargs.get("stream", False),
 
             "temperature": kwargs.get("temperature", 0.2),
@@ -108,6 +111,7 @@ class OpenRouterClient(BaseLLMClient):
             payload["temperature"] = temperature
         else:
             payload["temperature"] = 0.6
+
         max_tokens = kwargs.get("max_tokens")
         if max_tokens is not None:
             payload["max_tokens"] = max_tokens
