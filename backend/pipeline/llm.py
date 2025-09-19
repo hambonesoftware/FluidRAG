@@ -1,7 +1,8 @@
+import json
 import os
 import logging
 import time
-from typing import Optional
+from typing import Optional, Sequence, Tuple
 
 import httpx
 
@@ -56,6 +57,23 @@ def _format_prompt_for_log(messages) -> str:
     )
 
 
+def _format_curl_command(
+    url: str,
+    header_items: Sequence[Tuple[str, str]],
+    payload: dict,
+) -> str:
+    """Return a Windows-friendly curl command mirroring the OpenRouter request."""
+
+    lines = [f"curl.exe -sS {url} ^"]
+    for key, value in header_items:
+        escaped_value = str(value).replace('"', '\\"')
+        lines.append(f'  -H "{key}: {escaped_value}" ^')
+    json_payload = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    escaped_payload = json_payload.replace('"', '\\"')
+    lines.append(f'  -d "{escaped_payload}"')
+    return "\n".join(lines)
+
+
 class BaseLLMClient:
     def __init__(self):
         self._debug_records = []
@@ -83,8 +101,8 @@ class OpenRouterClient(BaseLLMClient):
     async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
 
         messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
+        if system is not None:
+            messages.append({"role": "system", "content": system or ""})
         messages.append({"role": "user", "content": user})
 
         prompt = _format_prompt_for_log(messages)
@@ -119,12 +137,34 @@ class OpenRouterClient(BaseLLMClient):
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
             "Content-Type": "application/json",
+
         }
+        max_tokens = kwargs.get("max_tokens")
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        header_items_common = [
+            ("Authorization", "Bearer ***"),
+            ("Content-Type", "application/json"),
+            ("HTTP-Referer", self.http_referer),
+            ("X-Title", self.app_title),
+        ]
+        headers_log = {key: value for key, value in header_items_common}
+        curl_command = _format_curl_command(OPENROUTER_URL, header_items_common, payload)
         if self._auth_error_message:
             record = dict(base_record)
             record["request"].update({
                 "headers": {**headers_log, "Authorization": "*** (cached failure)"},
-                "payload": payload
+                "payload": payload,
+                "curl": _format_curl_command(
+                    OPENROUTER_URL,
+                    [
+                        ("Authorization", "Bearer *** (cached failure)"),
+                        ("Content-Type", "application/json"),
+                        ("HTTP-Referer", self.http_referer),
+                        ("X-Title", self.app_title),
+                    ],
+                    payload,
+                ),
             })
             record["response"] = {
                 "status": 401,
@@ -137,7 +177,17 @@ class OpenRouterClient(BaseLLMClient):
             record = dict(base_record)
             record["request"].update({
                 "headers": {**headers_log, "Authorization": "(missing)"},
-                "payload": payload
+                "payload": payload,
+                "curl": _format_curl_command(
+                    OPENROUTER_URL,
+                    [
+                        ("Authorization", "Bearer (missing)"),
+                        ("Content-Type", "application/json"),
+                        ("HTTP-Referer", self.http_referer),
+                        ("X-Title", self.app_title),
+                    ],
+                    payload,
+                ),
             })
             record["response"] = {"mock": True, "body": "[]"}
             self._debug_records.append(record)
@@ -145,6 +195,7 @@ class OpenRouterClient(BaseLLMClient):
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
             "Content-Type": "application/json",
@@ -154,7 +205,8 @@ class OpenRouterClient(BaseLLMClient):
         record = dict(base_record)
         record["request"].update({
             "headers": headers_log,
-            "payload": payload
+            "payload": payload,
+            "curl": curl_command,
         })
         try:
             async with httpx.AsyncClient(timeout=timeout, http2=True) as client:

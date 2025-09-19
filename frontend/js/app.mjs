@@ -116,6 +116,9 @@ function dumpLLMDebug(debug){
     const label = entry?.model || `LLM ${idx+1}`;
     withGroup(`[LLM Debug] Entry ${idx+1}: ${label}`, ()=>{
       withGroup("Request", ()=>{
+        if(entry?.request?.curl){
+          console.log(entry.request.curl);
+        }
         console.log(entry?.request || {});
       }, true);
       withGroup("Response", ()=>{
