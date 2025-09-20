@@ -11,6 +11,16 @@ try:
     load_dotenv()
 except Exception:
     pass
+    
+from dotenv import load_dotenv, find_dotenv
+dotenv_path = find_dotenv(usecwd=True)
+loaded = load_dotenv(dotenv_path, override=False)
+
+import os, logging
+k = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
+mask = (k[:12] + "..." + k[-4:]) if k else "(missing)"
+print(f"[dotenv] loaded={loaded} path={dotenv_path!r} OPENROUTER_API_KEY={bool(k)} {mask}")
+
 
 # Respect PORT from .env (or default 5142)
 PORT = int(os.environ.get("PORT", "5142"))

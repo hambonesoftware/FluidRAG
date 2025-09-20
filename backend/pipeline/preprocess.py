@@ -1,217 +1,195 @@
-import asyncio
+# -*- coding: utf-8 -*-
+from __future__ import annotations
 import json
-import re
-import logging
-from typing import List, Dict, Any, Iterable, Optional, Tuple
+import importlib
+from typing import List, Dict, Any, Iterable, Optional
 
-from pypdf import PdfReader
-from docx import Document
+# PDF extraction wrapper
+from ..ingest.pdf_extract import extract as pdf_extract
 
-log = logging.getLogger("FluidRAG.preprocess")
+# v1.7 header helpers
+from ..parse.header_config import CONFIG
+from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
+from ..parse.header_detector import is_header_line
 
-HEADER_RX = re.compile(r"^\s*(\d+(?:\.\d+)*)\s*(?:[-:]|\s+)\s*(.+?)\s*$")
-ALT_HEADER_RX = re.compile(r"^\s*Section\s+(\d+(?:\.\d+)*)\s*[-:]?\s*(.+?)\s*$", re.IGNORECASE)
+# Optional legacy section chunker (keep compatibility)
+try:
+    from ..rag.chunker import sections_from_lines, yield_section_chunks  # type: ignore
+except Exception:
+    sections_from_lines = None
+    yield_section_chunks = None
 
-APPROX_CHARS_PER_TOKEN = 4
+# ---------- Public helpers expected by routes & passes ----------
 
+def extract_pages_with_layout(pdf_path: str, sidecar_dir: Optional[str] = None) -> Dict[str, Any]:
+    """Returns pages_linear, pages_lines, page_line_styles, layout metadata."""
+    return pdf_extract(pdf_path, sidecar_dir)
+
+def load_document_to_text_pages(pdf_path: str, sidecar_dir: Optional[str] = None) -> List[str]:
+    """Legacy helper: return a list of page strings."""
+    data = extract_pages_with_layout(pdf_path, sidecar_dir)
+    return data.get("pages_linear") or []
 
 def approximate_tokens(text: str) -> int:
-    """Rough token estimate assuming ~4 characters per token."""
-    return max(1, len(text) // APPROX_CHARS_PER_TOKEN)
+    """Crude token estimate (~4 chars/token). Keep name/signature stable for passes.py."""
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
 
+def section_bounded_chunks_from_pdf(
+    pdf_path: str,
+    sidecar_dir: Optional[str] = None,
+    tok_budget_chars: int = 6400,
+    overlap_lines: int = 3,
+) -> Iterable[Dict[str, Any]]:
+    """
+    Build section-bounded chunks using lines + styles when available.
+    Falls back to simple size-based chunking if the legacy chunker isn't present.
+    """
+    data = pdf_extract(pdf_path, sidecar_dir)
+    pages_lines = data.get("pages_lines") or []
+    page_line_styles = data.get("page_line_styles") or None
 
-def load_document_to_text_pages(path: str) -> List[str]:
-    """Return list of page strings. Supports PDF, DOCX, TXT."""
-    if path.lower().endswith(".pdf"):
-        reader = PdfReader(path)
-        pages = [p.extract_text() or "" for p in reader.pages]
-        log.debug(f"[preprocess] PDF pages={len(pages)}")
-        return pages
-    elif path.lower().endswith(".docx"):
-        doc = Document(path)
-        text = "\n".join([p.text for p in doc.paragraphs])
-        # Simulate pages as 3000-char chunks for docx
-        pages = [text[i:i+3000] for i in range(0, len(text), 3000)]
-        log.debug(f"[preprocess] DOCX pseudo-pages={len(pages)}")
-        return pages
-    else:
-        with open(path, "r", encoding="utf-8", errors="ignore") as f:
-            text = f.read()
-        pages = [text[i:i+3000] for i in range(0, len(text), 3000)]
-        log.debug(f"[preprocess] TXT pseudo-pages={len(pages)}")
-        return pages
+    if callable(sections_from_lines) and callable(yield_section_chunks):
+        secs = sections_from_lines(pages_lines, page_line_styles)  # type: ignore
+        for ch in yield_section_chunks(secs, tok_budget_chars, overlap_lines):  # type: ignore
+            yield ch
+        return
 
+    # Fallback: size-based chunking
+    linear = data.get("pages_linear") or []
+    text = "\n".join(linear)
+    buf, size, idx = [], 0, 0
+    for line in text.splitlines():
+        l = (line or "") + "\n"
+        if size + len(l) > tok_budget_chars and buf:
+            yield {
+                "text": "".join(buf).strip(),
+                "section_title": "Document",
+                "section_id": "1",
+                "page_start": 1,
+                "page_end": max(1, len(linear)),
+                "chunk_index_in_section": idx,
+                "chunk_type": "paragraph",
+            }
+            idx += 1
+            buf = buf[-overlap_lines:] if overlap_lines > 0 else []
+            size = sum(len(t) for t in buf)
+        buf.append(l)
+        size += len(l)
+    if buf:
+        yield {
+            "text": "".join(buf).strip(),
+            "section_title": "Document",
+            "section_id": "1",
+            "page_start": 1,
+            "page_end": max(1, len(linear)),
+            "chunk_index_in_section": idx,
+            "chunk_type": "paragraph",
+        }
 
-def standard_pre_chunks(pages: List[str], max_tokens: int = 4000, overlap_tokens: int = 400) -> List[Dict[str, Any]]:
-    """Return coarse-grained chunks prior to header detection."""
-    text = "\n".join(pages)
-    max_chars = max_tokens * APPROX_CHARS_PER_TOKEN
-    overlap_chars = overlap_tokens * APPROX_CHARS_PER_TOKEN
-    chunks: List[Dict[str, Any]] = []
-    start = 0
-    while start < len(text):
-        end = min(len(text), start + max_chars)
-        chunk_text = text[start:end]
-        if end < len(text):
-            nl = text.rfind("\n", start, end)
-            if nl != -1 and nl > start + 200:
-                chunk_text = text[start:nl]
-                end = nl
-        chunks.append({
-            "document": "Uploaded Document",
-            "section_number": "",
-            "section_name": "Pre-chunk",
-            "text": chunk_text.strip(),
-            "meta": {"approx_start": start, "approx_end": end}
-        })
-        if end >= len(text):
-            break
-        start = max(0, end - overlap_chars)
-    log.debug(f"[preprocess] standard pre-chunks={len(chunks)}")
-    return chunks
+def standard_pre_chunks(
+    pdf_path: str,
+    sidecar_dir: Optional[str] = None,
+    tok_budget_chars: int = 6400,
+    overlap_lines: int = 3,
+) -> Iterable[Dict[str, Any]]:
+    """Legacy entry that routes to the section-bounded chunker."""
+    for ch in section_bounded_chunks_from_pdf(pdf_path, sidecar_dir, tok_budget_chars, overlap_lines):
+        yield ch
 
+# ---------- RFQ header prompt accessor (hot-reloads) ----------
 
-def _chunk_text_for_headers(pages: List[str], max_tokens: int = 120_000) -> Iterable[Dict[str, Any]]:
-    """Yield chunks (joined pages) capped to the token budget for header detection."""
-    if not pages:
-        return []
-    chunks: List[Dict[str, Any]] = []
-    current_pages: List[str] = []
-    start_page = 0
-    for idx, page in enumerate(pages):
-        candidate_pages = current_pages + [page]
-        candidate_text = "\n".join(candidate_pages)
-        candidate_tokens = approximate_tokens(candidate_text)
-        if current_pages and candidate_tokens > max_tokens:
-            chunks.append({
-                "start_page": start_page,
-                "end_page": start_page + len(current_pages) - 1,
-                "text": "\n".join(current_pages)
-            })
-            current_pages = [page]
-            start_page = idx
-        else:
-            current_pages = candidate_pages
-    if current_pages:
-        chunks.append({
-            "start_page": start_page,
-            "end_page": start_page + len(current_pages) - 1,
-            "text": "\n".join(current_pages)
-        })
-    log.debug(f"[preprocess] header LLM chunks={len(chunks)}")
-    return chunks
+def _get_header_system_prompt() -> str:
+    """Reload and return the current RFQ header system prompt from backend.prompts."""
+    try:
+        from backend import prompts as _prompts  # type: ignore
+    except Exception:
+        import backend.prompts as _prompts  # type: ignore
+    try:
+        importlib.reload(_prompts)
+    except Exception:
+        pass
+    sys_prompt = getattr(_prompts, "HEADER_DETECTION_SYSTEM", "").strip()
+    try:
+        print("[HeaderPrompt] Using system prompt:", sys_prompt[:120].replace("\n", " "))
+    except Exception:
+        pass
+    return sys_prompt
 
+# ---------- v1.7 page-mode header detection ----------
 
-def _initial_header_spans(pages: List[str]):
-    """First pass: use regex to locate section headings and spans."""
-    headers = []
-    for pi, page in enumerate(pages):
-        for li, line in enumerate(page.splitlines()):
-            m = HEADER_RX.match(line) or ALT_HEADER_RX.match(line)
-            if m:
-                num = m.group(1)
-                name = m.group(2).strip()
-                headers.append({"page": pi, "line": li, "section_number": num, "section_name": name})
-    log.debug(f"[preprocess] detected headers via regex = {len(headers)}")
-    return headers
+async def detect_headers_page_mode(
+    pages_lines: List[List[str]],
+    page_line_styles: Optional[List[List[dict]]],
+    page_texts: Optional[List[str]],
+    llm_client,
+) -> List[Dict[str, Any]]:
+    """
+    Deterministic-first header detection, page-by-page, with optional LLM adjudication.
+    Returns: [{"page": N, "headers": [{"line_idx","text","section_number","level","score","style"}]}]
+    """
+    results: List[Dict[str, Any]] = []
+    for pi, lines in enumerate(pages_lines or []):
+        styles = page_line_styles[pi] if page_line_styles and pi < len(page_line_styles) else [{} for _ in lines]
+        candidates = select_candidates(lines, styles)
 
+        det = [c for c in candidates if c["score"] >= CONFIG.get("accept_score_threshold", 2.0)]
+        ambiguous = [c for c in candidates if CONFIG.get("ambiguous_score_threshold", 1.0) <= c["score"] < CONFIG.get("accept_score_threshold", 2.0)]
+        final = det[:]
 
-def _locate_heading_in_pages(pages: List[str], section_number: str, section_name: str, start_page: int, end_page: int) -> Optional[Tuple[int, int]]:
-    search_patterns = [
-        rf"\b{re.escape(section_number)}\b\s*[-:.]?\s*{re.escape(section_name)}",
-        rf"Section\s+{re.escape(section_number)}\s*[-:.]?\s*{re.escape(section_name)}",
-        rf"{re.escape(section_number)}\s+{re.escape(section_name)}"
-    ]
-    compiled = [re.compile(pat, re.IGNORECASE) for pat in search_patterns]
-    for pi in range(start_page, min(end_page + 1, len(pages))):
-        lines = pages[pi].splitlines()
-        for li, line in enumerate(lines):
-            for rx in compiled:
-                if rx.search(line.strip()):
-                    return pi, li
-    return None
-
-
-async def detect_headers_and_sections_async(pages: List[str], client, model: str) -> List[Dict[str, Any]]:
-    """Combine regex + LLM detected headers and return section chunks."""
-    regex_headers = _initial_header_spans(pages)
-
-    from ..prompts import HEADER_DETECTION_SYSTEM
-
-    llm_headers: List[Dict[str, Any]] = []
-    header_chunks = list(_chunk_text_for_headers(pages))
-    if header_chunks:
-        tasks = []
-        for chunk in header_chunks:
-            user = (
-                "You are given an excerpt from a technical document. "
-                "Identify every numbered section or subsection heading present. "
-                "Return JSON array [{\"section_number\":\"\", \"section_name\":\"\"}] with no prose.\n\nTEXT:\n"
-                + chunk["text"]
-            )
-            tasks.append(client.acomplete(model=model, system=HEADER_DETECTION_SYSTEM, user=user, temperature=0.0, max_tokens=800))
-
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
-        for chunk, resp in zip(header_chunks, responses):
-            if isinstance(resp, Exception):
-                log.error("[preprocess] header LLM chunk %s failed: %s", chunk["start_page"], resp)
-                continue
+        need_llm = CONFIG.get("llm_enabled", True) and (ambiguous or len(candidates) > CONFIG.get("max_candidates_per_page", 40)//2)
+        if need_llm and llm_client is not None:
+            user_msg = {
+                "role": "user",
+                "content": build_adjudication_prompt(
+                    page_texts[pi] if page_texts and pi < len(page_texts) else "\n".join(lines),
+                    candidates,
+                    CONFIG.get("context_chars_per_candidate", 700),
+                ),
+            }
+            sys_prompt = _get_header_system_prompt()
             try:
-                data = json.loads(resp)
-            except json.JSONDecodeError:
-                log.error("[preprocess] header LLM response not JSON: %s", resp)
+                resp = await llm_client.chat(
+                    [{"role": "system", "content": sys_prompt}, user_msg],
+                    temperature=CONFIG.get("llm_temperature", 0.0),
+                    max_tokens=1024,
+                )
+                payload = resp.get("json") or resp.get("data") or resp.get("text")
+                if isinstance(payload, str):
+                    try:
+                        payload = json.loads(payload)
+                    except Exception:
+                        payload = []
+                if isinstance(payload, list) and (len(payload) >= max(1, int(len(det) * 0.6))):
+                    for item in payload:
+                        try:
+                            idx = int(item.get("line_idx"))
+                            name = (item.get("section_name") or "").strip()
+                            num = (item.get("section_number") or "").strip()
+                            if 0 <= idx < len(lines) and name:
+                                level = next((c["level"] for c in candidates if c["line_idx"] == idx), 3)
+                                final.append({
+                                    "line_idx": idx,
+                                    "text": lines[idx].strip(),
+                                    "section_number": num,
+                                    "level": level,
+                                    "score": 3.0,
+                                    "style": {},
+                                })
+                        except Exception:
+                            continue
+            except Exception:
+                pass
+
+        # dedup by line_idx
+        seen = set()
+        ordered = []
+        for c in sorted(final, key=lambda x: x["line_idx"]):
+            if c["line_idx"] in seen:
                 continue
-            for item in data:
-                if not isinstance(item, dict):
-                    continue
-                section_number = str(item.get("section_number", "")).strip()
-                section_name = str(item.get("section_name", "")).strip()
-                if not section_number or not section_name:
-                    continue
-                loc = _locate_heading_in_pages(pages, section_number, section_name, chunk["start_page"], chunk["end_page"])
-                if loc is None:
-                    log.debug("[preprocess] unable to localize heading %s %s", section_number, section_name)
-                    continue
-                llm_headers.append({
-                    "page": loc[0],
-                    "line": loc[1],
-                    "section_number": section_number,
-                    "section_name": section_name
-                })
+            seen.add(c["line_idx"])
+            ordered.append(c)
 
-    combined = {(h["page"], h["line"], h["section_number"], h["section_name"]): h for h in regex_headers}
-    for h in llm_headers:
-        combined[(h["page"], h["line"], h["section_number"], h["section_name"])] = h
-
-    headers = sorted(combined.values(), key=lambda h: (h["page"], h["line"]))
-    chunks: List[Dict[str, Any]] = []
-    for i, h in enumerate(headers):
-        start_page = h["page"]
-        start_line = h["line"]
-        end_page = headers[i + 1]["page"] if i + 1 < len(headers) else len(pages) - 1
-        seg_lines: List[str] = []
-        for pi in range(start_page, end_page + 1):
-            lines = pages[pi].splitlines()
-            start_idx = start_line if pi == start_page else 0
-            seg_lines.extend(lines[start_idx:])
-        text = "\n".join(seg_lines).strip()
-        if not text:
-            continue
-        chunks.append({
-            "document": "Uploaded Document",
-            "section_number": h["section_number"],
-            "section_name": h["section_name"],
-            "text": text,
-            "meta": {"start_page": start_page, "end_page": end_page}
-        })
-    if not chunks:
-        all_text = "\n".join(pages)
-        chunks = [{
-            "document": "Uploaded Document",
-            "section_number": "",
-            "section_name": "Body",
-            "text": all_text,
-            "meta": {"start_page": 0, "end_page": len(pages) - 1}
-        }]
-    log.debug(f"[preprocess] sections={len(chunks)} (regex={len(regex_headers)} llm={len(llm_headers)})")
-    return chunks
+        results.append({"page": pi + 1, "headers": ordered})
+    return results

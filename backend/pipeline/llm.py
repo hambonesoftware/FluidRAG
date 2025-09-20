@@ -1,384 +1,92 @@
-import json
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 import os
-import logging
-import time
-from typing import Optional, Sequence, Tuple
-
+import json
 import httpx
+from typing import Any, Dict, List, Optional
 
-log = logging.getLogger("FluidRAG.llm")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+DEFAULT_PROVIDER   = os.getenv("LLM_PROVIDER", "openrouter")
+DEFAULT_MODEL      = os.getenv("HEADER_MODEL", "x-ai/grok-4-fast:free")
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_DEFAULT_REFERER = "http://localhost:5142"
-_DEFAULT_APP_TITLE = "FluidRAG"
+class ORClient:
+    """Minimal async client for OpenRouter's chat completions."""
+    def __init__(self, model: str):
+        self.model = model
+        self.base  = "https://openrouter.ai/api/v1"
 
-
-def _env_setting(*keys: str, default: str) -> str:
-    """Return the first non-empty environment variable among ``keys``."""
-
-    for key in keys:
-        value = os.environ.get(key, "").strip()
-        if value:
-            return value
-    return default
-
-
-OPENROUTER_HTTP_REFERER = _env_setting(
-    "OPENROUTER_HTTP_REFERER",
-    "OPENROUTER_SITE_URL",
-    "HTTP_REFERER",
-    default=_DEFAULT_REFERER,
-)
-OPENROUTER_APP_TITLE = _env_setting(
-    "OPENROUTER_APP_TITLE",
-    "OPENROUTER_X_TITLE",
-    "X_TITLE",
-    default=_DEFAULT_APP_TITLE,
-)
-LLAMACPP_URL = os.environ.get("LLAMACPP_URL", "http://localhost:8080/v1/chat/completions")
-
-
-class LLMAuthError(RuntimeError):
-    """Raised when an LLM endpoint reports an authorization failure."""
-
-    def __init__(self, message: str):
-        super().__init__(message)
-
-
-class OpenRouterAuthError(LLMAuthError):
-    """Compatibility alias for existing OpenRouter-specific handling."""
-
-
-def _format_prompt_for_log(messages) -> str:
-    """Return a debug-friendly string representation of chat messages."""
-
-    return "\n\n".join(
-        f"{message['role']}: {message['content'].strip()}" for message in messages
-    )
-
-
-def _format_curl_command(
-    url: str,
-    header_items: Sequence[Tuple[str, str]],
-    payload: dict,
-) -> str:
-    """Return a Windows-friendly curl command mirroring the OpenRouter request."""
-
-    lines = [f"curl.exe -sS {url} ^"]
-    for key, value in header_items:
-        escaped_value = str(value).replace('"', '\\"')
-        lines.append(f'  -H "{key}: {escaped_value}" ^')
-    json_payload = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    escaped_payload = json_payload.replace('"', '\\"')
-    lines.append(f'  -d "{escaped_payload}"')
-    return "\n".join(lines)
-
-
-class BaseLLMClient:
-    def __init__(self):
-        self._debug_records = []
-
-    def drain_debug_records(self):
-        data = list(self._debug_records)
-        self._debug_records.clear()
-        return data
-class OpenRouterClient(BaseLLMClient):
-    def __init__(self, api_key: Optional[str] = None):
-        super().__init__()
-        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "").strip()
-        self.http_referer = OPENROUTER_HTTP_REFERER
-        self.app_title = OPENROUTER_APP_TITLE
-
-        self._auth_error_message: Optional[str] = None
-        if not self.api_key:
-            log.warning("[llm] OPENROUTER_API_KEY not set; returning mock outputs")
-
-    def drain_debug_records(self):
-        data = list(self._debug_records)
-        self._debug_records.clear()
-        return data
-
-    async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
-
-        messages = []
-        if system is not None:
-            messages.append({"role": "system", "content": system or ""})
-        messages.append({"role": "user", "content": user})
-
-        prompt = _format_prompt_for_log(messages)
-        timestamp = time.time()
-        base_record = {
-            "model": model,
-            "timestamp": timestamp,
-            "request": {
-                "url": OPENROUTER_URL,
-                "prompt": prompt,
-            }
-        }
+    async def chat(self, messages: List[Dict[str, str]], temperature: float = 0.0, max_tokens: int = 512) -> Dict[str, Any]:
+        if not OPENROUTER_API_KEY:
+            # No key available; pretend success with empty result
+            return {"text": "ok"}
         payload = {
-            "model": model,
+            "model": self.model,
             "messages": messages,
-
-            "stream": kwargs.get("stream", False),
-
-            "temperature": kwargs.get("temperature", 0.2),
-            "max_tokens": kwargs.get("max_tokens", 512)
+            "temperature": temperature,
+            "max_tokens": max_tokens,
         }
-        temperature = kwargs.get("temperature")
-        if temperature is not None:
-            payload["temperature"] = temperature
-        else:
-            payload["temperature"] = 0.6
-
-        max_tokens = kwargs.get("max_tokens")
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-        headers_log = {
-            "HTTP-Referer": self.http_referer,
-            "X-Title": self.app_title,
-            "Content-Type": "application/json",
-
-        }
-        max_tokens = kwargs.get("max_tokens")
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
-        header_items_common = [
-            ("Authorization", "Bearer ***"),
-            ("Content-Type", "application/json"),
-            ("HTTP-Referer", self.http_referer),
-            ("X-Title", self.app_title),
-        ]
-        headers_log = {key: value for key, value in header_items_common}
-        curl_command = _format_curl_command(OPENROUTER_URL, header_items_common, payload)
-        if self._auth_error_message:
-            record = dict(base_record)
-            record["request"].update({
-                "headers": {**headers_log, "Authorization": "*** (cached failure)"},
-                "payload": payload,
-                "curl": _format_curl_command(
-                    OPENROUTER_URL,
-                    [
-                        ("Authorization", "Bearer *** (cached failure)"),
-                        ("Content-Type", "application/json"),
-                        ("HTTP-Referer", self.http_referer),
-                        ("X-Title", self.app_title),
-                    ],
-                    payload,
-                ),
-            })
-            record["response"] = {
-                "status": 401,
-                "error": self._auth_error_message,
-                "cached": True
-            }
-            self._debug_records.append(record)
-            raise OpenRouterAuthError(self._auth_error_message)
-        if not self.api_key:
-            record = dict(base_record)
-            record["request"].update({
-                "headers": {**headers_log, "Authorization": "(missing)"},
-                "payload": payload,
-                "curl": _format_curl_command(
-                    OPENROUTER_URL,
-                    [
-                        ("Authorization", "Bearer (missing)"),
-                        ("Content-Type", "application/json"),
-                        ("HTTP-Referer", self.http_referer),
-                        ("X-Title", self.app_title),
-                    ],
-                    payload,
-                ),
-            })
-            record["response"] = {"mock": True, "body": "[]"}
-            self._debug_records.append(record)
-            return '[]'  # mock JSON for offline
-
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": self.http_referer,
-            "X-Title": self.app_title,
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
             "Content-Type": "application/json",
         }
-        timeout = httpx.Timeout(60.0, connect=20.0)
-        headers_log = {**headers_log, "Authorization": "***"}
-        record = dict(base_record)
-        record["request"].update({
-            "headers": headers_log,
-            "payload": payload,
-            "curl": curl_command,
-        })
-        try:
-            async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(f"{self.base}/chat/completions", headers=headers, json=payload)
+            r.raise_for_status()
+            data = r.json()
+            text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {"text": text}
 
-                r = await client.post(OPENROUTER_URL, headers=headers, json=payload)
-                status = r.status_code
-                r.raise_for_status()
-                data = r.json()
-                content = data["choices"][0]["message"]["content"]
-                record["response"] = {
-                    "status": status,
-                    "body": data,
-                    "content": content
-                }
-                return content or ""
-        except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code if exc.response else None
-            body_text: Optional[str] = None
-            try:
-                body_text = exc.response.text
-            except Exception:  # pragma: no cover - defensive
-                body_text = None
-            record["response"] = {
-                "status": status,
-                "error": str(exc),
-                "body_text": body_text
-            }
-            if status == 401:
-                message = (
-                    "OpenRouter rejected the request (401 Unauthorized). "
-                    "Confirm that OPENROUTER_API_KEY is set to a valid key "
-                    "with access to the selected model."
-                )
-                self._auth_error_message = message
-                log.error("[llm] %s", message)
-                raise OpenRouterAuthError(message) from exc
-            log.exception("[llm] HTTP error from OpenRouter")
-            raise
-        except Exception as exc:
-            record["response"] = {
-                "status": None,
-                "error": str(exc)
-            }
-            log.exception("[llm] request failed")
-            raise
-        finally:
-            self._debug_records.append(record)
+class LlamaCppClient:
+    """Placeholder client for a local llama.cpp server, if you wire one up later."""
+    def __init__(self, model: str, endpoint: Optional[str] = None):
+        self.model = model
+        self.endpoint = endpoint or os.getenv("LLAMACPP_ENDPOINT", "http://127.0.0.1:8080")
 
-
-
-class LlamaCppClient(BaseLLMClient):
-    """Client for llama.cpp servers that expose an OpenAI-compatible API."""
-
-    def __init__(self, base_url: Optional[str] = None, api_key: Optional[str] = None):
-        super().__init__()
-        self.base_url = (base_url or LLAMACPP_URL).rstrip("/")
-        self.api_key = api_key or os.environ.get("LLAMACPP_API_KEY", "").strip()
-        self._auth_error_message: Optional[str] = None
-
-    async def acomplete(self, model: str, system: Optional[str], user: str, **kwargs) -> str:
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        elif system is not None:
-            messages.append({"role": "system", "content": ""})
-        messages.append({"role": "user", "content": user})
-        prompt = _format_prompt_for_log(messages)
-        timestamp = time.time()
-        base_record = {
-            "model": model,
-            "timestamp": timestamp,
-            "request": {
-                "url": self.base_url,
-                "prompt": prompt,
-            }
-        }
-
+    async def chat(self, messages: List[Dict[str, str]], temperature: float = 0.0, max_tokens: int = 512) -> Dict[str, Any]:
+        # Basic completion-style bridge; adapt if your server uses a different schema.
         payload = {
-            "model": model,
+            "model": self.model,
             "messages": messages,
-            "temperature": kwargs.get("temperature", 0.2),
-            "max_tokens": kwargs.get("max_tokens", 512)
+            "temperature": temperature,
+            "max_tokens": max_tokens,
         }
+        async with httpx.AsyncClient(timeout=60) as client:
+            r = await client.post(f"{self.endpoint}/v1/chat/completions", json=payload)
+            r.raise_for_status()
+            data = r.json()
+            text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {"text": text}
 
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+def _make_client(provider: str, model: str):
+    provider = (provider or DEFAULT_PROVIDER).strip().lower()
+    model    = (model or DEFAULT_MODEL).strip()
+    if provider in ("openrouter", "openrouter.ai", "or"):
+        return ORClient(model=model)
+    if provider in ("llamacpp", "llama.cpp", "llmcpp"):
+        return LlamaCppClient(model=model)
+    # default fallback
+    return ORClient(model=model)
 
-        record = dict(base_record)
-        log_headers = dict(headers)
-        if "Authorization" in log_headers:
-            log_headers["Authorization"] = "***"
-        record["request"].update({
-            "headers": log_headers,
-            "payload": payload
-        })
+def create_llm_client(*args, **kwargs):
+    """
+    Flexible factory:
+      - create_llm_client(provider, model)
+      - create_llm_client(model="...", provider="...")
+      - create_llm_client()  -> uses env defaults
+    """
+    provider = None
+    model = None
+    if len(args) == 2:
+        provider, model = args[0], args[1]
+    elif len(args) == 1:
+        # If you ever had a positional single-arg version, treat it as model
+        model = args[0]
+    provider = kwargs.get("provider", provider)
+    model    = kwargs.get("model", model)
+    provider = provider or DEFAULT_PROVIDER
+    model    = model or DEFAULT_MODEL
+    return _make_client(provider, model)
 
-        if self._auth_error_message:
-
-            record["response"] = {
-                "status": 401,
-                "error": self._auth_error_message,
-                "cached": True
-            }
-            self._debug_records.append(record)
-            raise LLMAuthError(self._auth_error_message)
-
-        timeout = httpx.Timeout(60.0, connect=20.0)
-        try:
-            async with httpx.AsyncClient(timeout=timeout, http2=True) as client:
-
-                r = await client.post(self.base_url, headers=headers, json=payload)
-                status = r.status_code
-                r.raise_for_status()
-                data = r.json()
-                message = data.get("choices", [{}])[0]
-                content = (
-                    message.get("message", {}).get("content")
-                    if isinstance(message.get("message"), dict)
-                    else message.get("text", "")
-                )
-
-                record["response"] = {
-                    "status": status,
-                    "body": data,
-                    "content": content
-                }
-                return content or ""
-        except httpx.HTTPStatusError as exc:
-            status = exc.response.status_code if exc.response else None
-            body_text: Optional[str] = None
-            try:
-                body_text = exc.response.text
-            except Exception:
-                body_text = None
-            record["response"] = {
-                "status": status,
-                "error": str(exc),
-                "body_text": body_text
-            }
-            if status in (401, 403):
-                message = (
-                    "The llama.cpp endpoint rejected the request (authorization failure). "
-                    "Confirm that the server is running and credentials (if any) are correct."
-                )
-                self._auth_error_message = message
-                log.error("[llm] %s", message)
-                raise LLMAuthError(message) from exc
-            log.exception("[llm] HTTP error from llama.cpp endpoint")
-            raise
-        except Exception as exc:
-            record["response"] = {
-                "status": None,
-                "error": str(exc)
-            }
-            log.exception("[llm] llama.cpp request failed")
-            raise
-        finally:
-            self._debug_records.append(record)
-
-
-
-def create_llm_client(provider: str) -> BaseLLMClient:
-    normalized = (provider or "openrouter").strip().lower()
-    if normalized == "llamacpp":
-        return LlamaCppClient()
-    return OpenRouterClient()
-
-
-def provider_default_model(provider: str) -> Optional[str]:
-    normalized = (provider or "openrouter").strip().lower()
-    if normalized == "llamacpp":
-        return os.environ.get("LLAMACPP_DEFAULT_MODEL")
-    return None
-
+# Back-compat alias
+get_llm_client = create_llm_client

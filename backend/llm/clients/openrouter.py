@@ -1,0 +1,263 @@
+# backend/llm/clients/openrouter.py
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import random
+import time
+import uuid
+from typing import Any, Dict, Optional
+
+import certifi
+import httpx
+
+from ..errors import LLMAuthError, OpenRouterAuthError
+from ..utils import (
+    env_first,
+    log_prompt,
+    windows_curl,
+    OPENROUTER_URL,
+    DEFAULT_APP_TITLE,
+    DEFAULT_REFERER,
+)
+from .base import BaseLLMClient
+
+log = logging.getLogger("FluidRAG.llm.openrouter")
+
+
+class OpenRouterClient(BaseLLMClient):
+    """
+    OpenRouter chat client with robust transport + detailed, masked debug logging.
+
+    - OpenAI-compatible /chat/completions payload.
+    - Sends Authorization + (recommended) HTTP-Referer / X-Title headers.
+    - Logs: correlation id, masked headers, payload meta, latency, error category, and repro cURL.
+    - Transport hardening for Windows/proxy/AV environments (HTTP/1.1, certifi CA bundle, trust_env=False).
+    - Gentle retries for transient 408/429/5xx responses.
+    """
+
+    def __init__(self, api_key: Optional[str] = None, timeout_s: float = 60.0) -> None:
+        super().__init__()
+        self.api_key = (api_key or os.environ.get("OPENROUTER_API_KEY", "")).strip()
+        self.http_referer = (
+            env_first("OPENROUTER_HTTP_REFERER", "OPENROUTER_SITE_URL", "HTTP_REFERER", default=DEFAULT_REFERER)
+            or DEFAULT_REFERER
+        )
+        self.app_title = (
+            env_first("OPENROUTER_APP_TITLE", "OPENROUTER_X_TITLE", "X_TITLE", default=DEFAULT_APP_TITLE)
+            or DEFAULT_APP_TITLE
+        )
+        self._timeout = httpx.Timeout(timeout_s, connect=20.0)
+        self._auth_error_message: Optional[str] = None
+
+        if not self.api_key:
+            log.warning("[llm] OPENROUTER_API_KEY not set; client will return mock content")
+
+    async def acomplete(
+        self,
+        *,
+        model: str,
+        system: Optional[str],
+        user: str,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        stream: bool = False,
+        extra: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        # Build messages
+        messages = []
+        if system is not None:
+            messages.append({"role": "system", "content": system or ""})
+        messages.append({"role": "user", "content": user})
+
+        # Build payload
+        payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
+        if temperature is not None:
+            payload["temperature"] = float(temperature)
+        if max_tokens is not None:
+            payload["max_tokens"] = int(max_tokens)
+        if extra:
+            payload.update(extra)
+
+        # Headers
+        auth_header = f"Bearer {self.api_key}" if self.api_key else ""
+        headers = {
+            "Authorization": auth_header,
+            "Content-Type": "application/json",
+            "HTTP-Referer": self.http_referer,
+            "X-Title": self.app_title,
+        }
+
+        # Masked headers for logs
+        dbg_headers = dict(headers)
+        if dbg_headers.get("Authorization"):
+            dbg_headers["Authorization"] = "Bearer ***"
+
+        # Correlation + timing
+        cid = uuid.uuid4().hex[:8]
+        t0 = time.time()
+
+        # Prepare debug request record (keep original payload AND a summarized meta)
+        request_debug = {
+            "cid": cid,
+            "url": OPENROUTER_URL,
+            "headers": dbg_headers,
+            "payload": payload,  # full payload (safe—no secrets inside)
+            "payload_meta": {
+                "model": model,
+                "messages": len(messages),
+                "stream": bool(stream),
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            },
+            "prompt": log_prompt(messages),
+            "curl": windows_curl(
+                OPENROUTER_URL,
+                [
+                    ("Authorization", "Bearer ***" if self.api_key else "(missing)"),
+                    ("Content-Type", "application/json"),
+                    ("HTTP-Referer", self.http_referer),
+                    ("X-Title", self.app_title),
+                ],
+                payload,
+            ),
+        }
+        record = {"provider": "openrouter", "request": request_debug}
+
+        # Helper to finish and push the debug record
+        def _finish(status: int, body: Optional[dict], content: Optional[str], err: Optional[str] = None):
+            elapsed_ms = round((time.time() - t0) * 1000, 1)
+            record["response"] = {
+                "cid": cid,
+                "status": status,
+                "elapsed_ms": elapsed_ms,
+                "error": err,
+                "body_meta": (
+                    {
+                        "id": body.get("id"),
+                        "model": body.get("model"),
+                        "usage": body.get("usage"),
+                    }
+                    if isinstance(body, dict)
+                    else None
+                ),
+                "content_preview": (content or "")[:160] if content else None,
+            }
+            self._push_debug(record)
+
+        # Cached auth error (avoid spamming)
+        if self._auth_error_message:
+            _finish(401, None, None, f"auth_cached: {self._auth_error_message}")
+            raise OpenRouterAuthError(self._auth_error_message)
+
+        # Mock path (no API key)
+        if not self.api_key:
+            content = '{"status":"mock","provider":"openrouter"}'
+            _finish(200, {"id": None, "model": model, "usage": None}, content, None)
+            return content
+
+        # ---- Real request with robust transport & retries ----
+        retriable = {408, 409, 425, 429, 500, 502, 503, 504}
+        attempts = 3
+
+        async def _do_request() -> httpx.Response:
+            async with httpx.AsyncClient(
+                timeout=self._timeout,
+                http2=False,                 # more robust on Windows / corp proxies
+                verify=certifi.where(),      # pin CA bundle
+                trust_env=False,             # ignore proxy/env unless explicitly configured
+            ) as client:
+                return await client.post(OPENROUTER_URL, headers=headers, json=payload)
+
+        for i in range(1, attempts + 1):
+            try:
+                resp = await _do_request()
+                status = resp.status_code
+
+                # Try JSON; if not JSON, keep the raw text in a body wrapper
+                body: Optional[dict] = None
+                try:
+                    body = resp.json()
+                except Exception:
+                    try:
+                        text = await resp.aread()
+                        body = {"_text": text.decode("utf-8", "replace")}
+                    except Exception:
+                        body = None
+
+                if status == 401:
+                    msg = (
+                        "OpenRouter rejected the request (401 Unauthorized). "
+                        "Confirm that OPENROUTER_API_KEY is valid and that the selected model is allowed."
+                    )
+                    self._auth_error_message = msg
+                    _finish(status, body, None, "auth")
+                    raise OpenRouterAuthError(msg)
+
+                if status in retriable:
+                    # Backoff & retry
+                    wait = (0.4 * (2 ** (i - 1))) + random.uniform(0, 0.25)
+                    _finish(status, body, None, f"retriable_{status}_attempt_{i}")
+                    if i < attempts:
+                        await asyncio.sleep(wait)
+                        continue
+                    # attempts exhausted -> raise for status
+                    resp.raise_for_status()
+
+                resp.raise_for_status()
+
+                # success path
+                content = (
+                    (body or {}).get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "")
+                    or ""
+                )
+                _finish(status, body, content, None)
+                return content
+
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code if e.response else 0
+                text_body: Optional[str] = None
+                try:
+                    raw = await e.response.aread()
+                    text_body = raw.decode("utf-8", "replace")
+                except Exception:
+                    pass
+
+                category = {
+                    400: "bad_request",
+                    401: "auth",
+                    402: "credits",
+                    403: "moderation",
+                    408: "timeout",
+                    429: "rate_limit",
+                    502: "upstream",
+                    503: "unavailable",
+                    504: "gateway_timeout",
+                }.get(status, "http_error")
+
+                _finish(status, {"_text": text_body} if text_body else None, None, f"{category}: {str(e)}")
+
+                if status == 401:
+                    raise OpenRouterAuthError("Unauthorized") from e
+
+                if status in retriable and i < attempts:
+                    wait = (0.4 * (2 ** (i - 1))) + random.uniform(0, 0.25)
+                    await asyncio.sleep(wait)
+                    continue
+
+                raise
+
+            except Exception as e:
+                # network/transport error; retry a couple times
+                _finish(0, None, None, f"exception: {str(e)}")
+                if i < attempts:
+                    await asyncio.sleep(0.3 + random.uniform(0, 0.2))
+                    continue
+                raise
+
+        # Should never hit here because we either returned or raised
+        _finish(0, None, None, "unexpected_fallthrough")
+        raise RuntimeError("OpenRouterClient: unexpected fallthrough in retry loop")
