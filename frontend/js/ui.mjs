@@ -42,14 +42,19 @@ export function renderHeaderPreview(target, preview){
     const title = document.createElement("strong");
     title.textContent = `${item.section_number || '—'} ${item.section_name || ''}`.trim();
     const meta = document.createElement("span");
-    const pageLabel = item.page_start ?? item.page_found;
-    if(pageLabel){
-      meta.textContent = `p.${pageLabel} • ${item.chars || 0} chars`;
-    }else{
-      meta.textContent = `${item.chars || 0} chars`;
-    }
+    const bits = [];
+    const pageLabel = item.page_start ?? item.page_found ?? item.page;
+    if(pageLabel) bits.push(`p.${pageLabel}`);
+    if(item.heading_level) bits.push(`L${item.heading_level}`);
+    bits.push(`${item.chars || 0} chars`);
+    meta.textContent = bits.join(" • ");
     div.appendChild(title);
     div.appendChild(meta);
+    if(item.content !== undefined){
+      const pre = document.createElement("pre");
+      pre.textContent = item.content || "(no captured content)";
+      div.appendChild(pre);
+    }
     target.appendChild(div);
   });
 
