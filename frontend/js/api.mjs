@@ -86,6 +86,14 @@ export async function determineHeaders(sessionId, model, provider){
   });
 }
 
+export async function determineLocalHeaders(sessionId){
+  return safeFetch("/api/pdf/headers/session", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({session_id:sessionId})
+  });
+}
+
 export async function processPasses(sessionId, model, provider){
   return safeFetch("/api/process", {
     method:"POST",

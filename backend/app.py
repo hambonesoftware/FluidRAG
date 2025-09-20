@@ -11,6 +11,7 @@ from .routes import models as models_route      # noqa: F401
 from .routes import upload as upload_route      # noqa: F401
 from .routes import preprocess as preprocess_route  # noqa: F401
 from .routes import headers as headers_route    # noqa: F401
+from .routes import pdf_headers as pdf_headers_route  # noqa: F401
 from .routes import process as process_route    # noqa: F401
 from .routes import llm_test as llm_test_route  # noqa: F401
 
@@ -39,6 +40,7 @@ def create_app() -> Flask:
     app.register_blueprint(upload_route.bp)
     app.register_blueprint(preprocess_route.bp)
     app.register_blueprint(headers_route.bp)
+    app.register_blueprint(pdf_headers_route.bp)
     app.register_blueprint(process_route.bp)
     app.register_blueprint(llm_test_route.bp)
 
