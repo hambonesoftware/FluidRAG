@@ -2,6 +2,8 @@
 from __future__ import annotations
 from __future__ import annotations
 
+import asyncio
+
 import base64
 import csv
 import io
@@ -42,6 +44,8 @@ except Exception:  # pragma: no cover - compatibility shim
 
 
 CHUNK_GROUP_TOKEN_LIMIT = 12000
+DEFAULT_PASS_CONCURRENCY = 1
+
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
 
 
@@ -174,6 +178,20 @@ def _parse_pass_response(text: str, pass_name: str) -> Tuple[List[Dict[str, str]
     return rows, csv_block, json_block
 
 
+def _resolve_pass_concurrency(payload: Dict[str, Any]) -> int:
+    source = (
+        payload.get("max_parallel_passes")
+        or payload.get("pass_concurrency")
+        or os.getenv("LLM_PASS_CONCURRENCY")
+        or DEFAULT_PASS_CONCURRENCY
+    )
+    try:
+        value = int(source)
+    except (TypeError, ValueError):
+        return DEFAULT_PASS_CONCURRENCY
+    return max(1, value)
+
+
 async def _run_pass(
     pass_name: str,
     system_prompt: str,
@@ -262,8 +280,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     llm_debug: List[Dict[str, Any]] = []
     metrics: Dict[str, float] = {}
 
-    total_start = time.perf_counter()
-    for pass_name, system_prompt in PASS_PROMPTS.items():
+
+    pass_items = list(PASS_PROMPTS.items())
+    concurrency_limit = _resolve_pass_concurrency(payload)
+
+    async def _execute_pass(pass_name: str, system_prompt: str):
+
         start = time.perf_counter()
         pass_rows, debug_records, pass_csv_segments = await _run_pass(
             pass_name,
@@ -274,10 +296,44 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             metadata,
         )
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
-        metrics[pass_name] = elapsed_ms
-        rows.extend(pass_rows)
-        csv_segments.extend(pass_csv_segments)
-        llm_debug.extend(debug_records)
+        return pass_name, pass_rows, debug_records, pass_csv_segments, elapsed_ms
+
+    total_start = time.perf_counter()
+
+    if concurrency_limit <= 1 or len(pass_items) <= 1:
+        for pass_name, system_prompt in pass_items:
+            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms = await _execute_pass(
+                pass_name, system_prompt
+            )
+            metrics[name] = elapsed_ms
+            rows.extend(pass_rows)
+            csv_segments.extend(pass_csv_segments)
+            llm_debug.extend(debug_records)
+    else:
+        semaphore = asyncio.Semaphore(concurrency_limit)
+        async def _bounded_execute(pass_name: str, system_prompt: str):
+            async with semaphore:
+                return await _execute_pass(pass_name, system_prompt)
+
+        tasks = [
+            asyncio.create_task(_bounded_execute(pass_name, system_prompt))
+            for pass_name, system_prompt in pass_items
+        ]
+
+        results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float]] = {}
+        for task in asyncio.as_completed(tasks):
+            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms = await task
+            results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms)
+
+        for pass_name, _system_prompt in pass_items:
+            if pass_name not in results:
+                continue
+            pass_rows, debug_records, pass_csv_segments, elapsed_ms = results[pass_name]
+            metrics[pass_name] = elapsed_ms
+            rows.extend(pass_rows)
+            csv_segments.extend(pass_csv_segments)
+            llm_debug.extend(debug_records)
+
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
