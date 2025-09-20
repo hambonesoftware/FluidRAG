@@ -23,6 +23,7 @@ def process_route():
             asyncio.set_event_loop(loop)
             out = loop.run_until_complete(run_all_passes_async(data))
         finally:
+            asyncio.set_event_loop(None)
             loop.close()
 
         status = 200 if out.get("ok", False) else out.get("httpStatus", 500)
