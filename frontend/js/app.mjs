@@ -1,5 +1,8 @@
 import { getModels, uploadDocument, preprocessDocument, determineHeaders, determineLocalHeaders, processPasses, testLLM } from "./api.mjs";
+
 import { renderTable, renderHeaderPreview, renderLocalHeaders } from "./ui.mjs";
+
+
 
 const el = (id)=>document.getElementById(id);
 const state = {
@@ -8,9 +11,11 @@ const state = {
   provider: null,
   model: null,
   hasPre: false,
+  hasLocalHeaders: false,
   hasHeaders: false,
   localHeaders: [],
   rows: [],
+  localHeaders: [],
   providers: {}
 
 };
@@ -162,9 +167,11 @@ function updateModel(){
 
 function resetAfterUpload(){
   state.hasPre = false;
+  state.hasLocalHeaders = false;
   state.hasHeaders = false;
   state.localHeaders = [];
   state.rows = [];
+
   const tableWrap = el("tableWrap");
   if(tableWrap) renderTable(tableWrap, []);
   const downloadWrap = el("downloadWrap");
@@ -179,6 +186,38 @@ function resetAfterUpload(){
   if(headerStatus) setStatus(headerStatus, "Header detection pending…");
   const processStatus = el("processStatus");
   if(processStatus) setStatus(processStatus, "Processing not started.");
+
+}
+
+async function onLocalHeaders(){
+  if(!requireSession()) return;
+  const end = openGroup("[Flow] Local header detection", false);
+  try{
+    console.log("State before local header detection", {...state});
+    setStatus(el("localHeadersStatus"), "Detecting headers locally…");
+    log("Local header detection start");
+    withGroup("[Flow] Local headers → Request payload", ()=>{
+      console.log({session_id: state.sessionId});
+    }, true);
+    const res = await determineLocalHeaders(state.sessionId);
+    withGroup(`[Flow] Local headers → Raw response (${res.httpStatus ?? "?"})`, ()=>{
+      console.log(res);
+    }, true);
+    if(!res.ok){
+      const msg = res.error || "Local header detection failed";
+      setStatus(el("localHeadersStatus"), msg, "warn");
+      log(`Local headers error: ${msg}`);
+      return;
+    }
+    const headers = Array.isArray(res.headers) ? res.headers : [];
+    state.localHeaders = headers;
+    state.hasLocalHeaders = headers.length > 0;
+    setStatus(el("localHeadersStatus"), `Detected ${headers.length} header${headers.length === 1 ? "" : "s"} locally`, "success");
+    renderLocalHeaderPreview(el("localHeadersPreview"), headers);
+    log(`Local headers detected count=${headers.length}`);
+  }finally{
+    end();
+  }
 }
 
 async function onUpload(){
@@ -323,12 +362,14 @@ async function onHeaders(){
   const end = openGroup("[Flow] Header detection", false);
   try{
     console.log("State before header detection", {...state});
+
     const statusNode = el("headersStatus");
     if(statusNode){
       const localCount = Array.isArray(state.localHeaders) ? state.localHeaders.length : 0;
       const prefix = localCount ? `Local candidates=${localCount}. ` : "";
       setStatus(statusNode, `${prefix}Contacting ${providerName}…`);
     }
+
     withGroup("[Flow] Header detection → Request payload", ()=>{
       console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
     }, true);
@@ -342,6 +383,7 @@ async function onHeaders(){
       let msg = res.error || "Header detection failed";
       if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
+
       if(statusNode) setStatus(statusNode, msg, "warn");
       log(`Headers error after local count=${state.localHeaders?.length || 0}: ${msg}`);
       return;
@@ -352,6 +394,7 @@ async function onHeaders(){
     if(statusNode) setStatus(statusNode, `Sections detected: ${sections}${localCount ? ` • local candidates ${localCount}` : ""}`, "success");
     const previewTarget = el("headersPreview");
     renderHeaderPreview(previewTarget, res.preview || []);
+
     log(`Headers detected sections=${res.sections}`);
     console.log("State after header detection", {...state});
   }finally{
@@ -462,6 +505,7 @@ async function boot(){
   if(headersLLMBtn) headersLLMBtn.addEventListener("click", onHeaders);
   const processBtn = el("processBtn");
   if(processBtn) processBtn.addEventListener("click", onProcess);
+
   log("Boot complete");
 }
 

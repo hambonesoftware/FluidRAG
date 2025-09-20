@@ -47,6 +47,7 @@ export function renderHeaderPreview(target, preview){
     div.appendChild(meta);
     target.appendChild(div);
   });
+
 }
 
 export function renderLocalHeaders(target, headers){
