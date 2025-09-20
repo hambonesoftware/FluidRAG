@@ -1,5 +1,5 @@
-import { getModels, uploadDocument, preprocessDocument, determineHeaders, processPasses, testLLM } from "./api.mjs";
-import { renderTable, renderHeaderPreview } from "./ui.mjs";
+import { getModels, uploadDocument, preprocessDocument, determineHeaders, determineLocalHeaders, processPasses, testLLM } from "./api.mjs";
+import { renderTable, renderHeaderPreview, renderLocalHeaderPreview } from "./ui.mjs";
 
 const el = (id)=>document.getElementById(id);
 const state = {
@@ -8,8 +8,10 @@ const state = {
   provider: null,
   model: null,
   hasPre: false,
+  hasLocalHeaders: false,
   hasHeaders: false,
   rows: [],
+  localHeaders: [],
   providers: {}
 
 };
@@ -148,14 +150,49 @@ function updateModel(){
 
 function resetAfterUpload(){
   state.hasPre = false;
+  state.hasLocalHeaders = false;
   state.hasHeaders = false;
   state.rows = [];
+  state.localHeaders = [];
   renderTable(el("tableWrap"), []);
   el("downloadWrap").classList.add("hidden");
+  el("localHeadersPreview").innerHTML = "";
   el("headersPreview").innerHTML = "";
   setStatus(el("preprocessStatus"), "Pre-chunking pending…");
+  setStatus(el("localHeadersStatus"), "Local header detection pending…");
   setStatus(el("headersStatus"), "Awaiting header detection…");
   setStatus(el("processStatus"), "Processing not started.");
+}
+
+async function onLocalHeaders(){
+  if(!requireSession()) return;
+  const end = openGroup("[Flow] Local header detection", false);
+  try{
+    console.log("State before local header detection", {...state});
+    setStatus(el("localHeadersStatus"), "Detecting headers locally…");
+    log("Local header detection start");
+    withGroup("[Flow] Local headers → Request payload", ()=>{
+      console.log({session_id: state.sessionId});
+    }, true);
+    const res = await determineLocalHeaders(state.sessionId);
+    withGroup(`[Flow] Local headers → Raw response (${res.httpStatus ?? "?"})`, ()=>{
+      console.log(res);
+    }, true);
+    if(!res.ok){
+      const msg = res.error || "Local header detection failed";
+      setStatus(el("localHeadersStatus"), msg, "warn");
+      log(`Local headers error: ${msg}`);
+      return;
+    }
+    const headers = Array.isArray(res.headers) ? res.headers : [];
+    state.localHeaders = headers;
+    state.hasLocalHeaders = headers.length > 0;
+    setStatus(el("localHeadersStatus"), `Detected ${headers.length} header${headers.length === 1 ? "" : "s"} locally`, "success");
+    renderLocalHeaderPreview(el("localHeadersPreview"), headers);
+    log(`Local headers detected count=${headers.length}`);
+  }finally{
+    end();
+  }
 }
 
 async function onUpload(){
@@ -386,6 +423,7 @@ async function boot(){
   el("testBtn").addEventListener("click", handleTestLLM);
 
   el("preprocessBtn").addEventListener("click", onPreprocess);
+  el("localHeadersBtn").addEventListener("click", onLocalHeaders);
   el("headersBtn").addEventListener("click", onHeaders);
   el("processBtn").addEventListener("click", onProcess);
   log("Boot complete");

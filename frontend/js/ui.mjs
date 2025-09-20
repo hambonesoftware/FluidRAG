@@ -46,3 +46,26 @@ export function renderHeaderPreview(target, preview){
     target.appendChild(div);
   });
 }
+
+export function renderLocalHeaderPreview(target, headers){
+  if(!Array.isArray(headers) || headers.length === 0){
+    target.innerHTML = "";
+    return;
+  }
+  target.innerHTML = "";
+  headers.slice(0, 10).forEach((item)=>{
+    const div = document.createElement("div");
+    div.className = "preview-item";
+    const title = document.createElement("strong");
+    title.textContent = item.text || "(untitled)";
+    const meta = document.createElement("span");
+    const parts = [];
+    if(typeof item.page === "number") parts.push(`Page ${item.page}`);
+    if(typeof item.level === "number") parts.push(`Level ${item.level}`);
+    if(typeof item.font_size === "number") parts.push(`${item.font_size.toFixed(2)} pt`);
+    meta.textContent = parts.join(" • ");
+    div.appendChild(title);
+    div.appendChild(meta);
+    target.appendChild(div);
+  });
+}

@@ -51,8 +51,11 @@
 
       <h2>3 · Determine Headers</h2>
       <div class="actions">
-        <button id="headersBtn">Detect sections (≤120k tokens/request)</button>
+        <button id="localHeadersBtn" class="ghost">Detect headers locally (no LLM)</button>
+        <button id="headersBtn">Detect sections with LLM (≤120k tokens/request)</button>
       </div>
+      <div id="localHeadersStatus" class="status">Local header detection pending…</div>
+      <div id="localHeadersPreview" class="preview-list"></div>
       <div id="headersStatus" class="status">Awaiting header detection…</div>
       <div id="headersPreview" class="preview-list"></div>
     </section>
