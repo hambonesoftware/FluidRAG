@@ -3,6 +3,7 @@ from __future__ import annotations
 from __future__ import annotations
 
 import asyncio
+
 import base64
 import csv
 import io
@@ -44,6 +45,7 @@ except Exception:  # pragma: no cover - compatibility shim
 
 CHUNK_GROUP_TOKEN_LIMIT = 12000
 DEFAULT_PASS_CONCURRENCY = 1
+
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
 
 
@@ -278,10 +280,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     llm_debug: List[Dict[str, Any]] = []
     metrics: Dict[str, float] = {}
 
+
     pass_items = list(PASS_PROMPTS.items())
     concurrency_limit = _resolve_pass_concurrency(payload)
 
     async def _execute_pass(pass_name: str, system_prompt: str):
+
         start = time.perf_counter()
         pass_rows, debug_records, pass_csv_segments = await _run_pass(
             pass_name,
@@ -329,6 +333,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             rows.extend(pass_rows)
             csv_segments.extend(pass_csv_segments)
             llm_debug.extend(debug_records)
+
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
