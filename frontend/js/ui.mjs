@@ -46,4 +46,3 @@ export function renderHeaderPreview(target, preview){
     target.appendChild(div);
   });
 }
-
