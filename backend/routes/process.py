@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from flask import Blueprint, request, jsonify, make_response
+
 from ..pipeline.passes import run_all_passes_async
 
 bp = Blueprint("process", __name__)
@@ -24,9 +25,13 @@ def process_route():
         finally:
             loop.close()
 
-        response = jsonify({"ok": True, "httpStatus": 200, "result": out})
+        status = 200 if out.get("ok", False) else out.get("httpStatus", 500)
+        if "httpStatus" not in out:
+            out["httpStatus"] = status
+
+        response = jsonify(out)
         response.headers["Access-Control-Allow-Origin"] = "*"
-        return response, 200
+        return response, status
 
     except Exception as e:
         return jsonify({"ok": False, "httpStatus": 500, "error": str(e)}), 500
