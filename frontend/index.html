@@ -51,10 +51,15 @@
 
       <h2>3 · Determine Headers</h2>
       <div class="actions">
-        <button id="headersBtn">Detect sections (≤120k tokens/request)</button>
+        <button id="headersBtn">Detect headers (LLM)</button>
       </div>
-      <div id="headersStatus" class="status">Awaiting header detection…</div>
-      <div id="headersPreview" class="preview-list"></div>
+      <div id="headersStatus" class="status">Header detection pending…</div>
+      <div class="grid-headers">
+        <div class="preview-column">
+          <h3>Final sections</h3>
+          <div id="headersPreview" class="preview-list"></div>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -73,6 +78,6 @@
     </section>
   </main>
 
-  <script type="module" src="/js/app.mjs?v=20250219"></script>
+  <script type="module" src="/js/app.mjs?v=20250301"></script>
 </body>
 </html>

@@ -1,4 +1,5 @@
 export function renderTable(target, rows){
+  if(!target) return;
   if(!Array.isArray(rows) || rows.length === 0){
     target.innerHTML = '<div class="empty">No specifications yet. Run the passes to populate results.</div>';
     return;
@@ -29,6 +30,7 @@ export function renderTable(target, rows){
 }
 
 export function renderHeaderPreview(target, preview){
+  if(!target) return;
   if(!Array.isArray(preview) || preview.length === 0){
     target.innerHTML = "";
     return;
@@ -46,3 +48,4 @@ export function renderHeaderPreview(target, preview){
     target.appendChild(div);
   });
 }
+
