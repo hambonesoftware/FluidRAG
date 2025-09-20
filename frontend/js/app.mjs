@@ -1,5 +1,7 @@
 import { getModels, uploadDocument, preprocessDocument, determineHeaders, determineLocalHeaders, processPasses, testLLM } from "./api.mjs";
-import { renderTable, renderHeaderPreview, renderLocalHeaderPreview } from "./ui.mjs";
+
+import { renderTable, renderHeaderPreview } from "./ui.mjs";
+
 
 const el = (id)=>document.getElementById(id);
 const state = {
@@ -159,8 +161,9 @@ function resetAfterUpload(){
   el("localHeadersPreview").innerHTML = "";
   el("headersPreview").innerHTML = "";
   setStatus(el("preprocessStatus"), "Pre-chunking pending…");
-  setStatus(el("localHeadersStatus"), "Local header detection pending…");
-  setStatus(el("headersStatus"), "Awaiting header detection…");
+
+  setStatus(el("headersStatus"), "Header detection pending…");
+
   setStatus(el("processStatus"), "Processing not started.");
 }
 
@@ -306,11 +309,30 @@ async function onHeaders(){
   const end = openGroup("[Flow] Header detection", false);
   try{
     console.log("State before header detection", {...state});
-    setStatus(el("headersStatus"), `Detecting headers via ${providerName}…`);
-    log(`Header detection start via ${providerName}`);
+    setStatus(el("headersStatus"), "Detecting headers locally…");
+    log("Header detection start (local heuristics)");
+    let localCount = 0;
+    withGroup("[Flow] Local headers → Request payload", ()=>{
+      console.log({session_id: state.sessionId});
+    }, true);
+    const localRes = await determineLocalHeaders(state.sessionId);
+    withGroup(`[Flow] Local headers → Raw response (${localRes.httpStatus ?? "?"})`, ()=>{
+      console.log(localRes);
+    }, true);
+    if(!localRes.ok){
+      const msg = localRes.error || "Local header detection failed";
+      setStatus(el("headersStatus"), msg, "warn");
+      log(`Local headers error: ${msg}`);
+      return;
+    }
+    localCount = Array.isArray(localRes.headers) ? localRes.headers.length : 0;
+    log(`Local headers detected count=${localCount}`);
+    setStatus(el("headersStatus"), `Local heuristics detected ${localCount} candidate${localCount === 1 ? "" : "s"}. Contacting ${providerName}…`);
+
     withGroup("[Flow] Header detection → Request payload", ()=>{
       console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
     }, true);
+    log(`Header detection start via ${providerName}`);
     const res = await determineHeaders(state.sessionId, state.model, state.provider);
     withGroup(`[Flow] Header detection → Raw response (${res.httpStatus ?? "?"})`, ()=>{
       console.log(res);
@@ -321,11 +343,11 @@ async function onHeaders(){
       if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
       setStatus(el("headersStatus"), msg, "warn");
-      log(`Headers error: ${msg}`);
+      log(`Headers error after local count=${localCount}: ${msg}`);
       return;
     }
     state.hasHeaders = true;
-    setStatus(el("headersStatus"), `Sections detected: ${res.sections}`, "success");
+    setStatus(el("headersStatus"), `Sections detected: ${res.sections} (local candidates ${localCount})`, "success");
     renderHeaderPreview(el("headersPreview"), res.preview || []);
     log(`Headers detected sections=${res.sections}`);
     console.log("State after header detection", {...state});
