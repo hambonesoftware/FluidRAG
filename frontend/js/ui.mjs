@@ -1,4 +1,5 @@
 export function renderTable(target, rows){
+  if(!target) return;
   if(!Array.isArray(rows) || rows.length === 0){
     target.innerHTML = '<div class="empty">No specifications yet. Run the passes to populate results.</div>';
     return;
@@ -29,6 +30,7 @@ export function renderTable(target, rows){
 }
 
 export function renderHeaderPreview(target, preview){
+  if(!target) return;
   if(!Array.isArray(preview) || preview.length === 0){
     target.innerHTML = "";
     return;
@@ -45,4 +47,31 @@ export function renderHeaderPreview(target, preview){
     div.appendChild(meta);
     target.appendChild(div);
   });
+
 }
+
+export function renderLocalHeaders(target, headers){
+  if(!target) return;
+  if(!Array.isArray(headers) || headers.length === 0){
+    target.innerHTML = "";
+    return;
+  }
+  target.innerHTML = "";
+  headers.forEach(item=>{
+    const div = document.createElement("div");
+    div.className = "preview-item";
+    const title = document.createElement("strong");
+    title.textContent = item.text || "";
+    const bits = [];
+    if(item.page) bits.push(`p.${item.page}`);
+    if(item.level) bits.push(`L${item.level}`);
+    if(item.is_bold) bits.push("bold");
+    if(item.font_size) bits.push(`${item.font_size}px`);
+    const meta = document.createElement("span");
+    meta.textContent = bits.join(" · ");
+    div.appendChild(title);
+    div.appendChild(meta);
+    target.appendChild(div);
+  });
+}
+

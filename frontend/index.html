@@ -52,11 +52,21 @@
       <h2>3 · Determine Headers</h2>
       <div class="actions">
 
-        <button id="headersBtn">Detect sections (local heuristics → LLM)</button>
+        <button id="headersLocalBtn">Run local header heuristics</button>
+        <button id="headersLLMBtn">Run LLM adjudication</button>
       </div>
       <div id="headersStatus" class="status">Header detection pending…</div>
+      <div class="grid-headers">
+        <div class="preview-column">
+          <h3>Local candidates</h3>
+          <div id="headersLocalPreview" class="preview-list"></div>
+        </div>
+        <div class="preview-column">
+          <h3>Final sections</h3>
+          <div id="headersPreview" class="preview-list"></div>
+        </div>
+      </div>
 
-      <div id="headersPreview" class="preview-list"></div>
     </section>
 
     <section class="card">
@@ -75,6 +85,6 @@
     </section>
   </main>
 
-  <script type="module" src="/js/app.mjs?v=20250219"></script>
+  <script type="module" src="/js/app.mjs?v=20250301"></script>
 </body>
 </html>

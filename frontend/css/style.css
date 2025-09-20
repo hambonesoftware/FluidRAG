@@ -83,6 +83,9 @@ button.ghost{
 button.ghost:hover{background:#dbe5ff;box-shadow:none;}
 
 .actions{display:flex;gap:12px;flex-wrap:wrap;}
+.grid-headers{display:grid;gap:16px;margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}
+.grid-headers h3{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;}
+.preview-column{display:flex;flex-direction:column;}
 
 .status{color:var(--muted);padding:6px 2px 0;font-size:13px;}
 .status.success{color:var(--success);}

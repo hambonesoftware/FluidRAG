@@ -1,6 +1,7 @@
 import { getModels, uploadDocument, preprocessDocument, determineHeaders, determineLocalHeaders, processPasses, testLLM } from "./api.mjs";
 
-import { renderTable, renderHeaderPreview } from "./ui.mjs";
+import { renderTable, renderHeaderPreview, renderLocalHeaders } from "./ui.mjs";
+
 
 
 const el = (id)=>document.getElementById(id);
@@ -12,6 +13,7 @@ const state = {
   hasPre: false,
   hasLocalHeaders: false,
   hasHeaders: false,
+  localHeaders: [],
   rows: [],
   localHeaders: [],
   providers: {}
@@ -20,6 +22,10 @@ const state = {
 
 const log = (msg)=>{
   const pre = el("log");
+  if(!pre){
+    console.warn("[UI] Missing log element", {msg});
+    return;
+  }
   const line = `[UI] ${new Date().toLocaleTimeString()} ${msg}`;
   console.log(line);
   pre.textContent += line + "\n";
@@ -47,6 +53,15 @@ function setStatus(node, message, tone){
   node.classList.remove("success","warn");
   if(tone === "success") node.classList.add("success");
   else if(tone === "warn") node.classList.add("warn");
+}
+
+function updateStatus(id, message, tone){
+  const node = el(id);
+  if(!node){
+    console.warn("[UI] Missing status element", {id, message});
+    return;
+  }
+  setStatus(node, message, tone);
 }
 
 
@@ -154,17 +169,24 @@ function resetAfterUpload(){
   state.hasPre = false;
   state.hasLocalHeaders = false;
   state.hasHeaders = false;
-  state.rows = [];
   state.localHeaders = [];
-  renderTable(el("tableWrap"), []);
-  el("downloadWrap").classList.add("hidden");
-  el("localHeadersPreview").innerHTML = "";
-  el("headersPreview").innerHTML = "";
-  setStatus(el("preprocessStatus"), "Pre-chunking pending…");
+  state.rows = [];
 
-  setStatus(el("headersStatus"), "Header detection pending…");
+  const tableWrap = el("tableWrap");
+  if(tableWrap) renderTable(tableWrap, []);
+  const downloadWrap = el("downloadWrap");
+  if(downloadWrap) downloadWrap.classList.add("hidden");
+  const headersPreview = el("headersPreview");
+  if(headersPreview) headersPreview.innerHTML = "";
+  const headersLocalPreview = el("headersLocalPreview");
+  if(headersLocalPreview) headersLocalPreview.innerHTML = "";
+  const preStatus = el("preprocessStatus");
+  if(preStatus) setStatus(preStatus, "Pre-chunking pending…");
+  const headerStatus = el("headersStatus");
+  if(headerStatus) setStatus(headerStatus, "Header detection pending…");
+  const processStatus = el("processStatus");
+  if(processStatus) setStatus(processStatus, "Processing not started.");
 
-  setStatus(el("processStatus"), "Processing not started.");
 }
 
 async function onLocalHeaders(){
@@ -210,7 +232,7 @@ async function onUpload(){
     }
     console.log("Selected file", {name:file.name, size:file.size, type:file.type});
     console.log("State before upload", {...state});
-    setStatus(el("uploadStatus"), `Uploading ${file.name}…`);
+    updateStatus("uploadStatus", `Uploading ${file.name}…`);
     log(`Uploading ${file.name}`);
     const res = await uploadDocument(file);
     withGroup("[Flow] Upload → API response", ()=>{
@@ -218,13 +240,13 @@ async function onUpload(){
     }, true);
     if(!res.ok){
       const msg = res.error || "Upload failed";
-      setStatus(el("uploadStatus"), `Upload error: ${msg}`, "warn");
+      updateStatus("uploadStatus", `Upload error: ${msg}`, "warn");
       log(`Upload error: ${msg}`);
       return;
     }
     state.sessionId = res.session_id;
     resetAfterUpload();
-    setStatus(el("uploadStatus"), `Uploaded ${res.filename}. Session ${state.sessionId.slice(0,8)}…`, "success");
+    updateStatus("uploadStatus", `Uploaded ${res.filename}. Session ${state.sessionId.slice(0,8)}…`, "success");
     log(`Upload ok. session=${state.sessionId}`);
     console.log("State after upload", {...state});
   }finally{
@@ -256,11 +278,11 @@ async function handleTestLLM(){
       let msg = res.error || "LLM test failed";
       if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
-      setStatus(el("uploadStatus"), msg, "warn");
+      updateStatus("uploadStatus", msg, "warn");
       log(`LLM test error: ${msg}`);
       return;
     }
-    setStatus(el("uploadStatus"), `LLM connectivity confirmed (${providerName}): ${res.response?.status || "ok"}`, "success");
+    updateStatus("uploadStatus", `LLM connectivity confirmed (${providerName}): ${res.response?.status || "ok"}`, "success");
     log(`LLM test succeeded via ${providerName}`);
   }finally{
     end();
@@ -275,7 +297,7 @@ async function onPreprocess(){
   const end = openGroup("[Flow] Preprocess", false);
   try{
     console.log("State before preprocess", {...state});
-    setStatus(el("preprocessStatus"), "Running standard chunking…");
+    updateStatus("preprocessStatus", "Running standard chunking…");
     log("Preprocess start");
     withGroup("[Flow] Preprocess → Request payload", ()=>{
       console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
@@ -286,14 +308,45 @@ async function onPreprocess(){
     }, true);
     if(!res.ok){
       const msg = res.error || "Preprocess failed";
-      setStatus(el("preprocessStatus"), msg, "warn");
+      updateStatus("preprocessStatus", msg, "warn");
       log(`Preprocess error: ${msg}`);
       return;
     }
     state.hasPre = true;
-    setStatus(el("preprocessStatus"), `Pages=${res.pages}, pre-chunks=${res.pre_chunks}`, "success");
+    updateStatus("preprocessStatus", `Pages=${res.pages}, pre-chunks=${res.pre_chunks}`, "success");
     log(`Preprocess complete pages=${res.pages} chunks=${res.pre_chunks}`);
     console.log("State after preprocess", {...state});
+  }finally{
+    end();
+  }
+}
+
+async function onLocalHeaders(){
+  if(!requireSession()) return;
+  const end = openGroup("[Flow] Local header detection", false);
+  try{
+    const statusNode = el("headersStatus");
+    if(statusNode) setStatus(statusNode, "Detecting headers via local heuristics…");
+    log("Local header detection start");
+    withGroup("[Flow] Local headers → Request payload", ()=>{
+      console.log({session_id: state.sessionId});
+    }, true);
+    const res = await determineLocalHeaders(state.sessionId);
+    withGroup(`[Flow] Local headers → Raw response (${res.httpStatus ?? "?"})`, ()=>{
+      console.log(res);
+    }, true);
+    if(!res.ok){
+      const msg = res.error || "Local header detection failed";
+      if(statusNode) setStatus(statusNode, msg, "warn");
+      log(`Local headers error: ${msg}`);
+      return;
+    }
+    state.localHeaders = Array.isArray(res.headers) ? res.headers : [];
+    const count = state.localHeaders.length;
+    log(`Local headers detected count=${count}`);
+    if(statusNode) setStatus(statusNode, `Local heuristics detected ${count} candidate${count === 1 ? "" : "s"}.`);
+    const previewTarget = el("headersLocalPreview");
+    renderLocalHeaders(previewTarget, state.localHeaders);
   }finally{
     end();
   }
@@ -309,25 +362,13 @@ async function onHeaders(){
   const end = openGroup("[Flow] Header detection", false);
   try{
     console.log("State before header detection", {...state});
-    setStatus(el("headersStatus"), "Detecting headers locally…");
-    log("Header detection start (local heuristics)");
-    let localCount = 0;
-    withGroup("[Flow] Local headers → Request payload", ()=>{
-      console.log({session_id: state.sessionId});
-    }, true);
-    const localRes = await determineLocalHeaders(state.sessionId);
-    withGroup(`[Flow] Local headers → Raw response (${localRes.httpStatus ?? "?"})`, ()=>{
-      console.log(localRes);
-    }, true);
-    if(!localRes.ok){
-      const msg = localRes.error || "Local header detection failed";
-      setStatus(el("headersStatus"), msg, "warn");
-      log(`Local headers error: ${msg}`);
-      return;
+
+    const statusNode = el("headersStatus");
+    if(statusNode){
+      const localCount = Array.isArray(state.localHeaders) ? state.localHeaders.length : 0;
+      const prefix = localCount ? `Local candidates=${localCount}. ` : "";
+      setStatus(statusNode, `${prefix}Contacting ${providerName}…`);
     }
-    localCount = Array.isArray(localRes.headers) ? localRes.headers.length : 0;
-    log(`Local headers detected count=${localCount}`);
-    setStatus(el("headersStatus"), `Local heuristics detected ${localCount} candidate${localCount === 1 ? "" : "s"}. Contacting ${providerName}…`);
 
     withGroup("[Flow] Header detection → Request payload", ()=>{
       console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
@@ -342,13 +383,18 @@ async function onHeaders(){
       let msg = res.error || "Header detection failed";
       if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
-      setStatus(el("headersStatus"), msg, "warn");
-      log(`Headers error after local count=${localCount}: ${msg}`);
+
+      if(statusNode) setStatus(statusNode, msg, "warn");
+      log(`Headers error after local count=${state.localHeaders?.length || 0}: ${msg}`);
       return;
     }
     state.hasHeaders = true;
-    setStatus(el("headersStatus"), `Sections detected: ${res.sections} (local candidates ${localCount})`, "success");
-    renderHeaderPreview(el("headersPreview"), res.preview || []);
+    const sections = Number(res.sections) || 0;
+    const localCount = Array.isArray(state.localHeaders) ? state.localHeaders.length : 0;
+    if(statusNode) setStatus(statusNode, `Sections detected: ${sections}${localCount ? ` • local candidates ${localCount}` : ""}`, "success");
+    const previewTarget = el("headersPreview");
+    renderHeaderPreview(previewTarget, res.preview || []);
+
     log(`Headers detected sections=${res.sections}`);
     console.log("State after header detection", {...state});
   }finally{
@@ -366,7 +412,7 @@ async function onProcess(){
   const end = openGroup("[Flow] Pass processing", false);
   try{
     console.log("State before process", {...state});
-    setStatus(el("processStatus"), `Running asynchronous passes via ${providerName}…`);
+    updateStatus("processStatus", `Running asynchronous passes via ${providerName}…`);
     log(`Passes start via ${providerName}`);
     withGroup("[Flow] Pass processing → Request payload", ()=>{
       console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
@@ -380,12 +426,12 @@ async function onProcess(){
       let msg = res.error || "Process failed";
       if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
-      setStatus(el("processStatus"), msg, "warn");
+      updateStatus("processStatus", msg, "warn");
       log(`Process error: ${msg}`);
       return;
     }
     state.rows = res.rows || [];
-    setStatus(el("processStatus"), `Rows=${state.rows.length} • total=${res.metrics_ms?.total ?? "?"} ms`, "success");
+    updateStatus("processStatus", `Rows=${state.rows.length} • total=${res.metrics_ms?.total ?? "?"} ms`, "success");
     renderTable(el("tableWrap"), state.rows);
     if(res.csv_base64){
       const blob = b64ToBlob(res.csv_base64, "text/csv");
@@ -416,9 +462,14 @@ function b64ToBlob(b64, mime){
 
 async function boot(){
   log("Boot start");
-  renderTable(el("tableWrap"), []);
+  const tableWrap = el("tableWrap");
+  if(tableWrap) renderTable(tableWrap, []);
   const providerSel = el("provider");
   const modelSel = el("model");
+  if(!providerSel || !modelSel){
+    console.error("[UI] Missing provider/model select elements");
+    return;
+  }
   const models = await getModels();
   if(models.ok && models.providers){
     state.providers = models.providers;
@@ -441,13 +492,20 @@ async function boot(){
   }
   providerSel.addEventListener("change", updateProvider);
   modelSel.addEventListener("change", updateModel);
-  el("uploadBtn").addEventListener("click", onUpload);
-  el("testBtn").addEventListener("click", handleTestLLM);
+  const uploadBtn = el("uploadBtn");
+  if(uploadBtn) uploadBtn.addEventListener("click", onUpload);
+  const testBtn = el("testBtn");
+  if(testBtn) testBtn.addEventListener("click", handleTestLLM);
 
-  el("preprocessBtn").addEventListener("click", onPreprocess);
-  el("localHeadersBtn").addEventListener("click", onLocalHeaders);
-  el("headersBtn").addEventListener("click", onHeaders);
-  el("processBtn").addEventListener("click", onProcess);
+  const preprocessBtn = el("preprocessBtn");
+  if(preprocessBtn) preprocessBtn.addEventListener("click", onPreprocess);
+  const headersLocalBtn = el("headersLocalBtn");
+  if(headersLocalBtn) headersLocalBtn.addEventListener("click", onLocalHeaders);
+  const headersLLMBtn = el("headersLLMBtn");
+  if(headersLLMBtn) headersLLMBtn.addEventListener("click", onHeaders);
+  const processBtn = el("processBtn");
+  if(processBtn) processBtn.addEventListener("click", onProcess);
+
   log("Boot complete");
 }
 
