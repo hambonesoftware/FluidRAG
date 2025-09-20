@@ -178,8 +178,7 @@ function resetAfterUpload(){
   if(downloadWrap) downloadWrap.classList.add("hidden");
   const headersPreview = el("headersPreview");
   if(headersPreview) headersPreview.innerHTML = "";
-  const headersLocalPreview = el("headersLocalPreview");
-  if(headersLocalPreview) headersLocalPreview.innerHTML = "";
+
   const preStatus = el("preprocessStatus");
   if(preStatus) setStatus(preStatus, "Pre-chunking pending…");
   const headerStatus = el("headersStatus");
@@ -187,37 +186,6 @@ function resetAfterUpload(){
   const processStatus = el("processStatus");
   if(processStatus) setStatus(processStatus, "Processing not started.");
 
-}
-
-async function onLocalHeaders(){
-  if(!requireSession()) return;
-  const end = openGroup("[Flow] Local header detection", false);
-  try{
-    console.log("State before local header detection", {...state});
-    setStatus(el("localHeadersStatus"), "Detecting headers locally…");
-    log("Local header detection start");
-    withGroup("[Flow] Local headers → Request payload", ()=>{
-      console.log({session_id: state.sessionId});
-    }, true);
-    const res = await determineLocalHeaders(state.sessionId);
-    withGroup(`[Flow] Local headers → Raw response (${res.httpStatus ?? "?"})`, ()=>{
-      console.log(res);
-    }, true);
-    if(!res.ok){
-      const msg = res.error || "Local header detection failed";
-      setStatus(el("localHeadersStatus"), msg, "warn");
-      log(`Local headers error: ${msg}`);
-      return;
-    }
-    const headers = Array.isArray(res.headers) ? res.headers : [];
-    state.localHeaders = headers;
-    state.hasLocalHeaders = headers.length > 0;
-    setStatus(el("localHeadersStatus"), `Detected ${headers.length} header${headers.length === 1 ? "" : "s"} locally`, "success");
-    renderLocalHeaderPreview(el("localHeadersPreview"), headers);
-    log(`Local headers detected count=${headers.length}`);
-  }finally{
-    end();
-  }
 }
 
 async function onUpload(){
@@ -365,9 +333,7 @@ async function onHeaders(){
 
     const statusNode = el("headersStatus");
     if(statusNode){
-      const localCount = Array.isArray(state.localHeaders) ? state.localHeaders.length : 0;
-      const prefix = localCount ? `Local candidates=${localCount}. ` : "";
-      setStatus(statusNode, `${prefix}Contacting ${providerName}…`);
+      setStatus(statusNode, `Contacting ${providerName}…`);
     }
 
     withGroup("[Flow] Header detection → Request payload", ()=>{
@@ -385,13 +351,14 @@ async function onHeaders(){
       if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
 
       if(statusNode) setStatus(statusNode, msg, "warn");
-      log(`Headers error after local count=${state.localHeaders?.length || 0}: ${msg}`);
+      log(`Headers error: ${msg}`);
+
       return;
     }
     state.hasHeaders = true;
     const sections = Number(res.sections) || 0;
-    const localCount = Array.isArray(state.localHeaders) ? state.localHeaders.length : 0;
-    if(statusNode) setStatus(statusNode, `Sections detected: ${sections}${localCount ? ` • local candidates ${localCount}` : ""}`, "success");
+
+    if(statusNode) setStatus(statusNode, `Sections detected: ${sections}`, "success");
     const previewTarget = el("headersPreview");
     renderHeaderPreview(previewTarget, res.preview || []);
 
@@ -497,12 +464,11 @@ async function boot(){
   const testBtn = el("testBtn");
   if(testBtn) testBtn.addEventListener("click", handleTestLLM);
 
+
   const preprocessBtn = el("preprocessBtn");
   if(preprocessBtn) preprocessBtn.addEventListener("click", onPreprocess);
-  const headersLocalBtn = el("headersLocalBtn");
-  if(headersLocalBtn) headersLocalBtn.addEventListener("click", onLocalHeaders);
-  const headersLLMBtn = el("headersLLMBtn");
-  if(headersLLMBtn) headersLLMBtn.addEventListener("click", onHeaders);
+  const headersBtn = el("headersBtn");
+  if(headersBtn) headersBtn.addEventListener("click", onHeaders);
   const processBtn = el("processBtn");
   if(processBtn) processBtn.addEventListener("click", onProcess);
 

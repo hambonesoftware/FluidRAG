@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, make_response
 import os
 
 from ..pipeline import preprocess as pp
+from ..state import get_state
 
 bp = Blueprint("preprocess", __name__)
 
@@ -39,17 +40,27 @@ def preprocess_route():
         chunks = []
         std_chunks = getattr(pp, "standard_pre_chunks", None)
         if callable(std_chunks):
-            for ch in std_chunks(pdf_path, sidecar_dir=sidecar_dir):
+            for ch in std_chunks(pdf_path, sidecar_dir=sidecar_dir, session_id=session_id):
                 chunks.append(ch)
         else:
-            for ch in pp.section_bounded_chunks_from_pdf(pdf_path, sidecar_dir=sidecar_dir):
+            for ch in pp.section_bounded_chunks_from_pdf(
+                pdf_path,
+                sidecar_dir=sidecar_dir,
+                session_id=session_id,
+            ):
                 chunks.append(ch)
+
+        if session_id:
+            state = get_state(session_id)
+            if state is not None:
+                state.pre_chunks = chunks
 
         resp = {
             "ok": True,
             "httpStatus": 200,
             "pages": len(pages_linear),
             "chunks": len(chunks),
+            "pre_chunks": len(chunks),
             "preview": [
                 {
                     "chars": len(ch.get("text", "")),
