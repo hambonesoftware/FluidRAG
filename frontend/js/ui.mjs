@@ -42,7 +42,12 @@ export function renderHeaderPreview(target, preview){
     const title = document.createElement("strong");
     title.textContent = `${item.section_number || '—'} ${item.section_name || ''}`.trim();
     const meta = document.createElement("span");
-    meta.textContent = `${item.chars || 0} chars`;
+    const pageLabel = item.page_start ?? item.page_found;
+    if(pageLabel){
+      meta.textContent = `p.${pageLabel} • ${item.chars || 0} chars`;
+    }else{
+      meta.textContent = `${item.chars || 0} chars`;
+    }
     div.appendChild(title);
     div.appendChild(meta);
     target.appendChild(div);

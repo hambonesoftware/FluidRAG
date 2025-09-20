@@ -50,6 +50,60 @@ def preprocess_route():
             ):
                 chunks.append(ch)
 
+        def _chunk_sort_key(item):
+            page_start = item.get("page_start")
+            try:
+                page_start = int(page_start)
+            except Exception:
+                page_start = 1
+            section_id = str(item.get("section_id") or "")
+            chunk_idx = item.get("chunk_index_in_section")
+            try:
+                chunk_idx = int(chunk_idx)
+            except Exception:
+                chunk_idx = 0
+            return (page_start, section_id, chunk_idx)
+
+        if chunks:
+            chunks.sort(key=_chunk_sort_key)
+
+        # Aggregate preview rows by section to surface fuller spans
+        preview_sections = {}
+        for ch in chunks:
+            sec_id = str(ch.get("section_id") or "")
+            sec_name = ch.get("section_title") or "Document"
+            page_start = ch.get("page_start")
+            page_end = ch.get("page_end")
+            try:
+                page_start_i = int(page_start)
+            except Exception:
+                page_start_i = 1
+            try:
+                page_end_i = int(page_end)
+            except Exception:
+                page_end_i = page_start_i
+            key = (sec_id, sec_name)
+            entry = preview_sections.setdefault(
+                key,
+                {
+                    "section_number": sec_id,
+                    "section_name": sec_name,
+                    "chars": 0,
+                    "page_start": page_start_i,
+                    "page_end": page_end_i,
+                },
+            )
+            entry["chars"] += len(ch.get("text") or "")
+            if page_start_i < entry["page_start"]:
+                entry["page_start"] = page_start_i
+            if page_end_i > entry.get("page_end", page_end_i):
+                entry["page_end"] = page_end_i
+
+        preview_list = sorted(
+            preview_sections.values(),
+            key=lambda item: (item.get("page_start", 1), item.get("section_number", "")),
+        )[:5]
+
         if session_id:
             state = get_state(session_id)
             if state is not None:
@@ -61,13 +115,7 @@ def preprocess_route():
             "pages": len(pages_linear),
             "chunks": len(chunks),
             "pre_chunks": len(chunks),
-            "preview": [
-                {
-                    "chars": len(ch.get("text", "")),
-                    "section_name": ch.get("section_title", "Document"),
-                    "section_number": ch.get("section_id", "1"),
-                } for ch in chunks[:5]
-            ],
+            "preview": preview_list,
         }
         response = jsonify(resp)
         response.headers["Access-Control-Allow-Origin"] = "*"

@@ -173,6 +173,7 @@ def determine_headers():
                     "chars": len(h.get("text") or ""),
                     "section_name": h.get("text") or "",
                     "section_number": h.get("section_number") or "",
+                    "page_found": page_entry.get("page"),
                 })
                 if len(preview) >= 5:
                     break
