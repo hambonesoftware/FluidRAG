@@ -1,4 +1,5 @@
 export function renderTable(target, rows){
+  if(!target) return;
   if(!Array.isArray(rows) || rows.length === 0){
     target.innerHTML = '<div class="empty">No specifications yet. Run the passes to populate results.</div>';
     return;
@@ -29,6 +30,7 @@ export function renderTable(target, rows){
 }
 
 export function renderHeaderPreview(target, preview){
+  if(!target) return;
   if(!Array.isArray(preview) || preview.length === 0){
     target.innerHTML = "";
     return;
@@ -40,9 +42,15 @@ export function renderHeaderPreview(target, preview){
     const title = document.createElement("strong");
     title.textContent = `${item.section_number || '—'} ${item.section_name || ''}`.trim();
     const meta = document.createElement("span");
-    meta.textContent = `${item.chars || 0} chars`;
+    const pageLabel = item.page_start ?? item.page_found;
+    if(pageLabel){
+      meta.textContent = `p.${pageLabel} • ${item.chars || 0} chars`;
+    }else{
+      meta.textContent = `${item.chars || 0} chars`;
+    }
     div.appendChild(title);
     div.appendChild(meta);
     target.appendChild(div);
   });
 }
+

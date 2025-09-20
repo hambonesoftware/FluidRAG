@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 import importlib
-from typing import List, Dict, Any, Iterable, Optional
+from typing import List, Dict, Any, Iterable, Optional, Tuple
 
 # PDF extraction wrapper
 from ..ingest.pdf_extract import extract as pdf_extract
@@ -11,14 +11,195 @@ from ..ingest.pdf_extract import extract as pdf_extract
 from ..parse.header_config import CONFIG
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
 from ..parse.header_detector import is_header_line
+from ..state import get_state
 
 # Optional legacy section chunker (keep compatibility)
 try:
-    from ..rag.chunker import sections_from_lines, yield_section_chunks  # type: ignore
+    from ..rag.chunker import sections_from_lines  # type: ignore
 except Exception:
     sections_from_lines = None
-    yield_section_chunks = None
 
+# ---------- Internal helpers for section-aware chunking ----------
+
+def _collect_lines_between(
+    pages_lines: List[List[str]],
+    start: Tuple[int, int],
+    end: Tuple[int, int],
+) -> Tuple[List[str], int]:
+    """Return lines between two (page_idx, line_idx) positions and last page touched."""
+    if not pages_lines:
+        return [], 0
+
+    max_page = len(pages_lines) - 1
+    start_page = max(0, min(start[0], max_page))
+    end_page = max(0, min(end[0], max_page))
+    start_line = max(0, start[1])
+    end_line = max(0, end[1])
+
+    if end_page < start_page or (end_page == start_page and end_line <= start_line):
+        return [], start_page
+
+    collected: List[str] = []
+    last_page = start_page
+    for page_idx in range(start_page, end_page + 1):
+        lines = pages_lines[page_idx] if 0 <= page_idx < len(pages_lines) else []
+        begin = start_line if page_idx == start_page else 0
+        finish = end_line if page_idx == end_page else len(lines)
+        begin = max(0, min(begin, len(lines)))
+        finish = max(0, min(finish, len(lines)))
+        if finish < begin:
+            finish = begin
+        segment = lines[begin:finish]
+        if segment:
+            collected.extend(segment)
+            last_page = page_idx
+    return collected, last_page
+
+
+def _sections_from_detected_headers(
+    pages_lines: List[List[str]],
+    detected: Optional[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Build section descriptors from stored header detection output."""
+    if not pages_lines or not detected:
+        return []
+
+    entries: List[Dict[str, Any]] = []
+    for page_block in detected:
+        page = int(page_block.get("page", 0) or 0)
+        headers = page_block.get("headers") or []
+        if page < 1 or page > len(pages_lines) or not headers:
+            continue
+        for header in headers:
+            try:
+                line_idx = int(header.get("line_idx", -1))
+            except Exception:
+                continue
+            if line_idx < 0:
+                continue
+            entries.append(
+                {
+                    "page": page,
+                    "line_idx": line_idx,
+                    "text": (header.get("text") or "").strip(),
+                    "section_number": (header.get("section_number") or "").strip(),
+                    "level": header.get("level"),
+                }
+            )
+
+    if not entries:
+        return []
+
+    entries.sort(key=lambda item: (item["page"], item["line_idx"]))
+    sections: List[Dict[str, Any]] = []
+
+    # Optional preamble before the first detected header
+    first = entries[0]
+    first_page_idx = max(0, first["page"] - 1)
+    first_line_idx = max(0, first["line_idx"])
+    pre_lines, pre_last_page = _collect_lines_between(
+        pages_lines,
+        (0, 0),
+        (first_page_idx, first_line_idx),
+    )
+    if pre_lines:
+        sections.append(
+            {
+                "title": "Preamble",
+                "id": "0",
+                "content": pre_lines,
+                "page_start": 1,
+                "page_end": pre_last_page + 1,
+                "heading_level": 1,
+            }
+        )
+
+    doc_last_page = len(pages_lines) - 1
+    doc_last_line = len(pages_lines[doc_last_page]) if doc_last_page >= 0 else 0
+
+    for idx, entry in enumerate(entries, start=1):
+        page_idx = max(0, entry["page"] - 1)
+        page_lines = pages_lines[page_idx] if 0 <= page_idx < len(pages_lines) else []
+        if page_lines:
+            clamped_idx = max(0, min(entry["line_idx"], len(page_lines) - 1))
+        else:
+            clamped_idx = 0
+
+        header_text = entry["text"] or (page_lines[clamped_idx].strip() if 0 <= clamped_idx < len(page_lines) else "")
+        next_entry = entries[idx] if idx < len(entries) else None
+        if next_entry:
+            next_page_idx = max(0, next_entry["page"] - 1)
+            next_line_idx = max(0, next_entry["line_idx"])
+            end_pos = (next_page_idx, next_line_idx)
+        else:
+            end_pos = (doc_last_page, doc_last_line)
+
+        start_after_header = (page_idx, clamped_idx + 1)
+        between_lines, last_page = _collect_lines_between(
+            pages_lines,
+            start_after_header,
+            end_pos,
+        )
+
+        content_lines = [header_text] if header_text else []
+        if between_lines:
+            content_lines.extend(between_lines)
+
+        if not content_lines:
+            continue
+
+        section_number = entry["section_number"] or str(idx)
+        sections.append(
+            {
+                "title": header_text or f"Section {section_number}",
+                "id": section_number,
+                "content": content_lines,
+                "page_start": entry["page"],
+                "page_end": max(entry["page"], last_page + 1),
+                "heading_level": entry.get("level"),
+            }
+        )
+
+    return sections
+
+
+def _emit_section_chunk(section: Dict[str, Any], buf: List[str], idx: int) -> Dict[str, Any]:
+    text = "".join(buf).strip()
+    return {
+        "text": text,
+        "section_title": section.get("title", "Document"),
+        "section_id": section.get("id", "1"),
+        "page_start": int(section.get("page_start", 1) or 1),
+        "page_end": int(section.get("page_end", section.get("page_start", 1)) or 1),
+        "chunk_index_in_section": idx,
+        "chunk_type": "paragraph",
+        "heading_level": section.get("heading_level"),
+    }
+
+
+def _yield_chunks_from_sections(
+    sections: List[Dict[str, Any]],
+    tok_budget_chars: int,
+    overlap_lines: int,
+) -> Iterable[Dict[str, Any]]:
+    for section in sections:
+        lines = section.get("content") or []
+        if not lines:
+            continue
+        buf: List[str] = []
+        size = 0
+        idx = 0
+        for line in lines:
+            segment = (line or "") + "\n"
+            if size + len(segment) > tok_budget_chars and buf:
+                yield _emit_section_chunk(section, buf, idx)
+                idx += 1
+                buf = buf[-overlap_lines:] if overlap_lines > 0 else []
+                size = sum(len(part) for part in buf)
+            buf.append(segment)
+            size += len(segment)
+        if buf:
+            yield _emit_section_chunk(section, buf, idx)
 # ---------- Public helpers expected by routes & passes ----------
 
 def extract_pages_with_layout(pdf_path: str, sidecar_dir: Optional[str] = None) -> Dict[str, Any]:
@@ -41,6 +222,7 @@ def section_bounded_chunks_from_pdf(
     sidecar_dir: Optional[str] = None,
     tok_budget_chars: int = 6400,
     overlap_lines: int = 3,
+    session_id: Optional[str] = None,
 ) -> Iterable[Dict[str, Any]]:
     """
     Build section-bounded chunks using lines + styles when available.
@@ -50,11 +232,23 @@ def section_bounded_chunks_from_pdf(
     pages_lines = data.get("pages_lines") or []
     page_line_styles = data.get("page_line_styles") or None
 
-    if callable(sections_from_lines) and callable(yield_section_chunks):
-        secs = sections_from_lines(pages_lines, page_line_styles)  # type: ignore
-        for ch in yield_section_chunks(secs, tok_budget_chars, overlap_lines):  # type: ignore
-            yield ch
+    session_sections: List[Dict[str, Any]] = []
+    if session_id:
+        state = get_state(session_id)
+        if state and state.headers:
+            session_sections = _sections_from_detected_headers(pages_lines, state.headers)
+
+    if session_sections:
+        for chunk in _yield_chunks_from_sections(session_sections, tok_budget_chars, overlap_lines):
+            yield chunk
         return
+
+    if callable(sections_from_lines):
+        secs = sections_from_lines(pages_lines, page_line_styles)  # type: ignore
+        if secs:
+            for chunk in _yield_chunks_from_sections(secs, tok_budget_chars, overlap_lines):
+                yield chunk
+            return
 
     # Fallback: size-based chunking
     linear = data.get("pages_linear") or []
@@ -63,39 +257,48 @@ def section_bounded_chunks_from_pdf(
     for line in text.splitlines():
         l = (line or "") + "\n"
         if size + len(l) > tok_budget_chars and buf:
-            yield {
-                "text": "".join(buf).strip(),
-                "section_title": "Document",
-                "section_id": "1",
-                "page_start": 1,
-                "page_end": max(1, len(linear)),
-                "chunk_index_in_section": idx,
-                "chunk_type": "paragraph",
-            }
+            yield _emit_section_chunk(
+                {
+                    "title": "Document",
+                    "id": "1",
+                    "page_start": 1,
+                    "page_end": max(1, len(linear)),
+                },
+                buf,
+                idx,
+            )
             idx += 1
             buf = buf[-overlap_lines:] if overlap_lines > 0 else []
             size = sum(len(t) for t in buf)
         buf.append(l)
         size += len(l)
     if buf:
-        yield {
-            "text": "".join(buf).strip(),
-            "section_title": "Document",
-            "section_id": "1",
-            "page_start": 1,
-            "page_end": max(1, len(linear)),
-            "chunk_index_in_section": idx,
-            "chunk_type": "paragraph",
-        }
+        yield _emit_section_chunk(
+            {
+                "title": "Document",
+                "id": "1",
+                "page_start": 1,
+                "page_end": max(1, len(linear)),
+            },
+            buf,
+            idx,
+        )
 
 def standard_pre_chunks(
     pdf_path: str,
     sidecar_dir: Optional[str] = None,
     tok_budget_chars: int = 6400,
     overlap_lines: int = 3,
+    session_id: Optional[str] = None,
 ) -> Iterable[Dict[str, Any]]:
     """Legacy entry that routes to the section-bounded chunker."""
-    for ch in section_bounded_chunks_from_pdf(pdf_path, sidecar_dir, tok_budget_chars, overlap_lines):
+    for ch in section_bounded_chunks_from_pdf(
+        pdf_path,
+        sidecar_dir,
+        tok_budget_chars,
+        overlap_lines,
+        session_id=session_id,
+    ):
         yield ch
 
 # ---------- RFQ header prompt accessor (hot-reloads) ----------

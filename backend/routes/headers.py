@@ -9,6 +9,7 @@ from ..pipeline.preprocess import extract_pages_with_layout
 from ..pipeline.llm import create_llm_client
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
 from ..parse.header_config import CONFIG
+from ..state import get_state
 
 bp = Blueprint("headers", __name__)
 
@@ -159,6 +160,11 @@ def determine_headers():
             sections_count += len(headers)
             results.append({"page": pi+1, "headers": headers})
 
+        if session_id:
+            session_state = get_state(session_id)
+            if session_state is not None:
+                session_state.headers = results
+
         # Legacy "preview" for UI
         preview = []
         for page_entry in results:
@@ -167,6 +173,7 @@ def determine_headers():
                     "chars": len(h.get("text") or ""),
                     "section_name": h.get("text") or "",
                     "section_number": h.get("section_number") or "",
+                    "page_found": page_entry.get("page"),
                 })
                 if len(preview) >= 5:
                     break

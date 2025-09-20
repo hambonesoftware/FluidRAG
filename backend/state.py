@@ -14,6 +14,7 @@ class PipelineState:
     clustered_chunks: Optional[List[Dict[str, Any]]] = None
     model: Optional[str] = None
     provider: Optional[str] = None
+    headers: Optional[List[Dict[str, Any]]] = None
 
 PIPELINE_STATES: Dict[str, PipelineState] = {}
 
