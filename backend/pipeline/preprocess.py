@@ -107,10 +107,14 @@ def _sections_from_detected_headers(
             {
                 "title": "Preamble",
                 "id": "0",
+                "section_number": "0",
                 "content": pre_lines,
                 "page_start": 1,
                 "page_end": pre_last_page + 1,
                 "heading_level": 1,
+                "source_page": 1,
+                "source_line_idx": 0,
+                "sequence_index": 0,
             }
         )
 
@@ -153,10 +157,14 @@ def _sections_from_detected_headers(
             {
                 "title": header_text or f"Section {section_number}",
                 "id": section_number,
+                "section_number": section_number,
                 "content": content_lines,
                 "page_start": entry["page"],
                 "page_end": max(entry["page"], last_page + 1),
                 "heading_level": entry.get("level"),
+                "source_page": entry["page"],
+                "source_line_idx": entry["line_idx"],
+                "sequence_index": idx,
             }
         )
 
