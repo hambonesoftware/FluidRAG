@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import time
-import logging
 import asyncio
+import logging
+import time
 from flask import Blueprint, request, jsonify, make_response
 
-from ..pipeline.llm import create_llm_client
+from ..llm.factory import create_llm_client
 from ..utils.envsafe import s
 
 log = logging.getLogger("FluidRAG.api.llm_test")
@@ -29,13 +29,7 @@ def llm_test():
         model = s(payload.get("model")) or "x-ai/grok-4-fast:free"
         message = s(payload.get("message")) or "ping"
 
-        # Instantiate LLM client (provider currently unused; extend if you add more backends)
-        client = create_llm_client(model=model)
-
-        messages = [
-            {"role": "system", "content": "You are a simple health-check. Reply with a short acknowledgement."},
-            {"role": "user", "content": message},
-        ]
+        client = create_llm_client(provider)
 
         t0 = time.time()
 
@@ -44,19 +38,24 @@ def llm_test():
         try:
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
-                client.chat(messages, temperature=0.0, max_tokens=32)
+                asyncio.wait_for(
+                    client.acomplete(
+                        model=model,
+                        system="You are a simple health-check. Reply with a short acknowledgement.",
+                        user=message,
+                        temperature=0.0,
+                        max_tokens=128,
+                        extra={"stream": False},
+                    ),
+                    timeout=45.0,
+                )
             )
         finally:
             loop.close()
 
         dt_ms = int((time.time() - t0) * 1000)
 
-        # Try to normalize the response content
-        text = ""
-        if isinstance(result, dict):
-            text = result.get("text") or result.get("data") or result.get("content") or ""
-        if not isinstance(text, str):
-            text = str(text)
+        text = result if isinstance(result, str) else str(result)
 
         resp = jsonify({
             "ok": True,
