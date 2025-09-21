@@ -5,6 +5,7 @@ import asyncio
 import base64
 import csv
 import io
+import json
 import logging
 import os
 import time
@@ -17,7 +18,10 @@ from ..llm.errors import LLMAuthError
 from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
 from ..state import get_state
-from ..utils.envsafe import env, s
+from ..utils.envsafe import env
+from ..utils.strings import s
+
+from .merge import merge_pass_outputs
 
 from .fluid import fluid_refine_chunks
 from .hep_cluster import hep_cluster_chunks
@@ -63,6 +67,18 @@ DEFAULT_PASS_BACKOFF_MAX_MS = 4500
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
 
 PASS_STAGGER_SECONDS = 5.0
+
+
+
+def _snapshot(value: Any, limit: int = 3000) -> str:
+    try:
+        text = json.dumps(value, ensure_ascii=False)
+    except Exception:
+        text = repr(value)
+    if len(text) > limit:
+        truncated = len(text) - limit
+        return f"{text[:limit]} … [truncated {truncated} chars]"
+    return text
 
 
 def _ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
@@ -132,12 +148,12 @@ def _build_groups(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _format_chunk_for_prompt(chunk: Dict[str, Any], idx: int, total: int) -> str:
-    doc = chunk.get("document") or "Document"
-    sec_num = str(chunk.get("section_number") or chunk.get("section_id") or "").strip()
-    sec_name = str(chunk.get("section_name") or chunk.get("section_title") or "").strip()
+    doc = s(chunk.get("document")) or "Document"
+    sec_num = s(chunk.get("section_number") or chunk.get("section_id"))
+    sec_name = s(chunk.get("section_name") or chunk.get("section_title"))
     page_start = chunk.get("page_start") or chunk.get("page") or 1
     page_end = chunk.get("page_end") or page_start
-    body = (chunk.get("text") or "").strip()
+    body = s(chunk.get("text"))
     header_bits = [f"Document: {doc}"]
     if sec_num or sec_name:
         section_label = " ".join(bit for bit in [sec_num, sec_name] if bit).strip()
@@ -151,7 +167,7 @@ def _build_user_prompt(metadata: Dict[str, Any], group: Dict[str, Any], batch_in
     chunk_texts = [
         _format_chunk_for_prompt(chunk, idx, len(group["chunks"]))
         for idx, chunk in enumerate(group["chunks"])
-        if (chunk.get("text") or "").strip()
+        if s(chunk.get("text"))
     ]
     document = metadata.get("document") or "Document"
     lines = [
@@ -187,7 +203,7 @@ def _parse_pass_response(text: str, pass_name: str) -> Tuple[List[Dict[str, str]
         for row in reader:
             if not any(row.values()):
                 continue
-            normalized = {col: row.get(col, "").strip() for col in CSV_COLUMNS}
+            normalized = {col: s(row.get(col)) for col in CSV_COLUMNS}
             if not normalized["Pass"]:
                 normalized["Pass"] = pass_name
             rows.append(normalized)
@@ -501,6 +517,8 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not model:
         model = env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
 
+    req_id = s(payload.get("req_id")) or uuid.uuid4().hex[:8]
+
 
     state = get_state(session_id)
     if state is None:
@@ -528,11 +546,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     groups = _build_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
 
-    rows: List[Dict[str, str]] = []
-    csv_segments: List[str] = []
+    debug_enabled = bool(payload.get("debug") or payload.get("_debug"))
+
     llm_debug: List[Dict[str, Any]] = []
     metrics: Dict[str, float] = {}
     all_errors: List[Dict[str, Any]] = []
+    pass_outputs: Dict[str, Any] = {}
 
     pass_items = list(PASS_PROMPTS.items())
     requested_concurrency = _resolve_pass_concurrency(payload)
@@ -540,7 +559,10 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
     log.info(
-        "[passes] session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
+
+        "[passes] req=%s session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
+        req_id,
+
         session_id,
         provider,
         model,
@@ -586,6 +608,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         for idx, (pass_name, system_prompt) in enumerate(pass_items)
     ]
 
+
     results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
     for task in asyncio.as_completed(tasks):
         name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
@@ -597,10 +620,30 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
 
         metrics[pass_name] = elapsed_ms
-        rows.extend(pass_rows)
-        csv_segments.extend(pass_csv_segments)
         llm_debug.extend(debug_records)
         all_errors.extend(pass_errors)
+        payload_preview = {"items": pass_rows}
+        pass_outputs[pass_name] = payload_preview
+        log.info(
+            "[passes %s] %s payload snapshot: %s",
+            req_id,
+            pass_name,
+            _snapshot(payload_preview),
+        )
+
+    try:
+        merged = merge_pass_outputs(pass_outputs, req_id=req_id)
+    except Exception:
+        log.exception("[passes %s] unhandled exception while constructing rows", req_id)
+        return {
+            "ok": False,
+            "httpStatus": 500,
+            "error": "merge_failed",
+        }
+
+    rows = merged.get("rows", [])
+    merge_problems = merged.get("problems", [])
+
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
@@ -619,6 +662,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         "chunk_count": len(chunks),
         "httpStatus": 200,
     }
+
+    if debug_enabled:
+        response.setdefault("debug", {})
+        response["debug"]["merge"] = {
+            "problems": merge_problems,
+            "rows_count": len(rows),
+        }
 
     if all_errors:
         first = all_errors[0]

@@ -7,7 +7,8 @@ import time
 from flask import Blueprint, request, jsonify, make_response
 
 from ..llm.factory import create_llm_client
-from ..utils.envsafe import s
+from ..utils.strings import s
+
 
 log = logging.getLogger("FluidRAG.api.llm_test")
 

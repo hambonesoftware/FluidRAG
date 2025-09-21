@@ -18,7 +18,8 @@ from ..llm.factory import create_llm_client, provider_default_model
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
 from ..parse.header_config import CONFIG
 from ..state import get_state
-from ..utils.envsafe import env, s
+from ..utils.envsafe import env
+from ..utils.strings import s
 
 bp = Blueprint("headers", __name__)
 
