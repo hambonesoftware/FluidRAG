@@ -16,6 +16,7 @@ import httpx
 
 from ..llm.errors import LLMAuthError
 from ..llm.clients.openrouter import call_openrouter_chat
+
 from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
 from ..state import get_state
@@ -76,6 +77,7 @@ ALL_PASSES = [
     "Software",
     "Project Management",
 ]
+
 
 
 def _snapshot(value: Any, limit: int = 3000) -> str:
@@ -283,6 +285,7 @@ async def _run_pass(
 
     base_req_id = s(req_id) or uuid.uuid4().hex[:8]
     req_id = base_req_id
+
     temperature = _float_from_env("LLM_PASS_TEMPERATURE", DEFAULT_PASS_TEMPERATURE)
     max_tokens = _int_from_env("LLM_PASS_MAX_TOKENS", DEFAULT_PASS_MAX_TOKENS)
     max_attempts = max(1, _int_from_env("LLM_PASS_MAX_ATTEMPTS", DEFAULT_PASS_MAX_ATTEMPTS))
@@ -336,7 +339,7 @@ async def _run_pass(
 
         for attempt in range(1, max_attempts + 1):
             attempts_used = attempt
-            response_meta = None
+
             try:
                 log.info(
                     "[passes] req=%s pass=%s batch=%d/%d attempt=%d",
@@ -412,7 +415,7 @@ async def _run_pass(
                             extra={"stream": False},
                         ),
                         timeout=timeout_s,
-                    )
+
                 break
             except asyncio.TimeoutError:
                 error_msg = f"timeout after {timeout_s:.1f}s"
@@ -563,7 +566,7 @@ async def _run_pass(
         }
         if response_meta is not None:
             success_record["meta"] = response_meta
-        batch_debug.append(success_record)
+
 
     debug_records = client.drain_debug_records()
     debug_records.extend(batch_debug)
@@ -610,6 +613,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+
     state = get_state(session_id)
     if state is None:
         return {"ok": False, "httpStatus": 404, "error": "Unknown session. Upload the document again."}
@@ -636,9 +640,9 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     groups = _build_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
 
-    debug_enabled = bool(payload.get("debug") or payload.get("_debug"))
+
     debug_llm_io = bool(payload.get("_debug_llm_io") or payload.get("debug_llm_io"))
-    only_mechanical = bool(payload.get("_only_mechanical") or payload.get("only_mechanical"))
+
 
     llm_debug: List[Dict[str, Any]] = []
     metrics: Dict[str, float] = {}
@@ -646,6 +650,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     pass_outputs: Dict[str, Any] = {}
 
     pass_items = list(PASS_PROMPTS.items())
+
     if only_mechanical:
         pass_items = [(name, prompt) for name, prompt in pass_items if name == "Mechanical"]
         if not pass_items:
@@ -658,12 +663,14 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     requested_concurrency = _resolve_pass_concurrency(payload)
     if only_mechanical:
         requested_concurrency = 1
+
     pass_timeout = _resolve_pass_timeout(payload)
 
     concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
     log.info(
         "[passes] req=%s session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
         req_id,
+
         session_id,
         provider,
         model,
@@ -693,7 +700,6 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
     total_start = time.perf_counter()
-
     results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
 
     if only_mechanical:
@@ -771,6 +777,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     rows = merged.get("rows", [])
     merge_problems = merged.get("problems", [])
+
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 

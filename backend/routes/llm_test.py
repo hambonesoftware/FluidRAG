@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify, make_response
 from ..llm.factory import create_llm_client
 from ..utils.strings import s
 
+
 log = logging.getLogger("FluidRAG.api.llm_test")
 
 bp = Blueprint("llm_test", __name__)
