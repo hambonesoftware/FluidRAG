@@ -69,6 +69,18 @@ CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification
 PASS_STAGGER_SECONDS = 5.0
 
 
+PASS_FLAG_TO_NAME = {
+    "only_mechanical": "Mechanical",
+    "only_mech": "Mechanical",
+    "only_electrical": "Electrical",
+    "only_controls": "Controls",
+    "only_control": "Controls",
+    "only_software": "Software",
+    "only_pm": "Project Management",
+    "only_project_management": "Project Management",
+}
+
+
 
 def _snapshot(value: Any, limit: int = 3000) -> str:
     try:
@@ -237,6 +249,92 @@ def _resolve_pass_timeout(payload: Dict[str, Any]) -> float:
     except (TypeError, ValueError):
         return float(DEFAULT_PASS_TIMEOUT_S)
     return max(10.0, value)
+
+
+def _canonical_pass_name(raw: Any) -> Optional[str]:
+    candidate = s(raw)
+    if not candidate:
+        return None
+
+    normalized = " ".join(candidate.replace("_", " ").replace("-", " ").split()).lower()
+    if normalized in {"", "none"}:
+        return None
+
+    for canonical in PASS_PROMPTS:
+        if normalized == canonical.lower():
+            return canonical
+
+    alias_map = {
+        "mech": "Mechanical",
+        "mechanical": "Mechanical",
+        "electrical": "Electrical",
+        "controls": "Controls",
+        "control": "Controls",
+        "software": "Software",
+        "pm": "Project Management",
+        "project management": "Project Management",
+        "project_management": "Project Management",
+        "projectmanagement": "Project Management",
+    }
+
+    return alias_map.get(normalized)
+
+
+def _is_truthy_flag(value: Any) -> bool:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "0", "false", "no", "off", "none", "null"}:
+            return False
+        return True
+    return bool(value)
+
+
+def _resolve_pass_items(payload: Dict[str, Any]) -> Tuple[List[Tuple[str, str]], List[str]]:
+    requested: List[str] = []
+    unknown: List[str] = []
+
+    passes_field = payload.get("passes")
+    if isinstance(passes_field, dict):
+        sources = [name for name, enabled in passes_field.items() if enabled]
+    elif isinstance(passes_field, (list, tuple, set)):
+        sources = list(passes_field)
+    elif isinstance(passes_field, str):
+        sources = [passes_field]
+    else:
+        sources = []
+
+    for source in sources:
+        canonical = _canonical_pass_name(source)
+        if canonical:
+            requested.append(canonical)
+        else:
+            text = s(source)
+            if text:
+                unknown.append(text)
+
+    if not requested:
+        for flag, canonical in PASS_FLAG_TO_NAME.items():
+            try:
+                enabled = payload.get(flag)
+            except AttributeError:
+                enabled = None
+            if _is_truthy_flag(enabled):
+                requested.append(canonical)
+
+    if not requested:
+        names = list(PASS_PROMPTS.keys())
+    else:
+        seen = set()
+        names = []
+        for name in requested:
+            if name in PASS_PROMPTS and name not in seen:
+                names.append(name)
+                seen.add(name)
+            elif name not in PASS_PROMPTS:
+                unknown.append(name)
+
+    items = [(name, PASS_PROMPTS[name]) for name in names if name in PASS_PROMPTS]
+    return items, unknown
 
 
 def _int_from_env(name: str, default: int) -> int:
@@ -553,7 +651,23 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     all_errors: List[Dict[str, Any]] = []
     pass_outputs: Dict[str, Any] = {}
 
-    pass_items = list(PASS_PROMPTS.items())
+    pass_items, unknown_passes = _resolve_pass_items(payload)
+    if unknown_passes:
+        log.warning(
+            "[passes %s] ignoring unknown passes: %s",
+            req_id,
+            ", ".join(sorted({name for name in unknown_passes if name})),
+        )
+    if not pass_items:
+        message = "No valid passes requested"
+        if unknown_passes:
+            message = f"{message}; unknown passes: {', '.join(sorted({name for name in unknown_passes if name}))}"
+        return {
+            "ok": False,
+            "httpStatus": 400,
+            "error": message,
+        }
+
     requested_concurrency = _resolve_pass_concurrency(payload)
     pass_timeout = _resolve_pass_timeout(payload)
 
