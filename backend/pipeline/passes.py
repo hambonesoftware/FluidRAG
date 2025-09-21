@@ -51,7 +51,7 @@ log = logging.getLogger("FluidRAG.passes")
 
 
 CHUNK_GROUP_TOKEN_LIMIT = 12000
-DEFAULT_PASS_CONCURRENCY = 1
+DEFAULT_PASS_CONCURRENCY = 5
 DEFAULT_PASS_TIMEOUT_S = 120
 DEFAULT_PASS_TEMPERATURE = 0.0
 DEFAULT_PASS_MAX_TOKENS = 4096
@@ -61,6 +61,8 @@ DEFAULT_PASS_BACKOFF_FACTOR = 1.7
 DEFAULT_PASS_BACKOFF_MAX_MS = 4500
 
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
+
+PASS_STAGGER_SECONDS = 5.0
 
 
 def _ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
@@ -533,17 +535,19 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     all_errors: List[Dict[str, Any]] = []
 
     pass_items = list(PASS_PROMPTS.items())
-    concurrency_limit = _resolve_pass_concurrency(payload)
+    requested_concurrency = _resolve_pass_concurrency(payload)
     pass_timeout = _resolve_pass_timeout(payload)
 
+    concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
     log.info(
-        "[passes] session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d timeout=%.1fs",
+        "[passes] session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
         session_id,
         provider,
         model,
         len(pass_items),
         len(groups),
         concurrency_limit,
+        requested_concurrency,
         pass_timeout,
     )
 
@@ -565,46 +569,38 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     total_start = time.perf_counter()
 
-    if concurrency_limit <= 1 or len(pass_items) <= 1:
-        for pass_name, system_prompt in pass_items:
-            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await _execute_pass(
+    semaphore = asyncio.Semaphore(concurrency_limit)
 
-                pass_name, system_prompt
+    async def _bounded_execute(index: int, pass_name: str, system_prompt: str):
+        if PASS_STAGGER_SECONDS > 0 and index > 0:
+            delay = PASS_STAGGER_SECONDS * index
+            log.debug(
+                "[passes] delaying pass=%s by %.1fs before submission", pass_name, delay
             )
-            metrics[name] = elapsed_ms
-            rows.extend(pass_rows)
-            csv_segments.extend(pass_csv_segments)
-            llm_debug.extend(debug_records)
-            all_errors.extend(pass_errors)
+            await asyncio.sleep(delay)
+        async with semaphore:
+            return await _execute_pass(pass_name, system_prompt)
 
-    else:
-        semaphore = asyncio.Semaphore(concurrency_limit)
-        async def _bounded_execute(pass_name: str, system_prompt: str):
-            async with semaphore:
-                return await _execute_pass(pass_name, system_prompt)
+    tasks = [
+        asyncio.create_task(_bounded_execute(idx, pass_name, system_prompt))
+        for idx, (pass_name, system_prompt) in enumerate(pass_items)
+    ]
 
-        tasks = [
-            asyncio.create_task(_bounded_execute(pass_name, system_prompt))
-            for pass_name, system_prompt in pass_items
-        ]
+    results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
+    for task in asyncio.as_completed(tasks):
+        name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
+        results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
 
+    for pass_name, _system_prompt in pass_items:
+        if pass_name not in results:
+            continue
+        pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
 
-        results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
-        for task in asyncio.as_completed(tasks):
-            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
-            results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
-
-
-        for pass_name, _system_prompt in pass_items:
-            if pass_name not in results:
-                continue
-            pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
-
-            metrics[pass_name] = elapsed_ms
-            rows.extend(pass_rows)
-            csv_segments.extend(pass_csv_segments)
-            llm_debug.extend(debug_records)
-            all_errors.extend(pass_errors)
+        metrics[pass_name] = elapsed_ms
+        rows.extend(pass_rows)
+        csv_segments.extend(pass_csv_segments)
+        llm_debug.extend(debug_records)
+        all_errors.extend(pass_errors)
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
