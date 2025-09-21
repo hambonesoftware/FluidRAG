@@ -6,6 +6,7 @@ import base64
 import csv
 import io
 import logging
+
 import os
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -15,6 +16,7 @@ from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
 from ..state import get_state
 from ..utils.envsafe import env, s
+
 from .fluid import fluid_refine_chunks
 from .hep_cluster import hep_cluster_chunks
 
@@ -49,6 +51,7 @@ log = logging.getLogger("FluidRAG.passes")
 CHUNK_GROUP_TOKEN_LIMIT = 12000
 DEFAULT_PASS_CONCURRENCY = 1
 DEFAULT_PASS_TIMEOUT_S = 120
+
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
 
 
@@ -186,6 +189,7 @@ def _resolve_pass_concurrency(payload: Dict[str, Any]) -> int:
         payload.get("max_parallel_passes")
         or payload.get("pass_concurrency")
         or env("LLM_PASS_CONCURRENCY")
+
         or DEFAULT_PASS_CONCURRENCY
     )
     try:
@@ -199,6 +203,7 @@ def _resolve_pass_timeout(payload: Dict[str, Any]) -> float:
     source = (
         payload.get("pass_timeout_seconds")
         or env("LLM_PASS_TIMEOUT_SECONDS")
+
         or DEFAULT_PASS_TIMEOUT_S
     )
     try:
@@ -280,6 +285,7 @@ async def _run_pass(
                 }
             )
             log.exception("[passes] pass=%s batch=%d exception", pass_name, batch_index + 1)
+
             break
         else:
             rows, csv_block, _json_block = _parse_pass_response(content, pass_name)
@@ -297,6 +303,7 @@ async def _run_pass(
         for record in debug_records:
             record.setdefault("errors", []).extend(errors)
     return pass_rows, debug_records, csv_segments, errors
+
 
 
 def _encode_rows_to_csv(rows: List[Dict[str, str]]) -> str:
@@ -324,6 +331,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not model:
         model = env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
 
+
     state = get_state(session_id)
     if state is None:
         return {"ok": False, "httpStatus": 404, "error": "Unknown session. Upload the document again."}
@@ -345,6 +353,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "metrics_ms": {"total": 0},
             "httpStatus": 200,
         }
+
 
     groups = _build_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
@@ -373,6 +382,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     async def _execute_pass(pass_name: str, system_prompt: str):
         start = time.perf_counter()
         pass_rows, debug_records, pass_csv_segments, pass_errors = await _run_pass(
+
             pass_name,
             system_prompt,
             groups,
@@ -384,11 +394,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
         return pass_name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors
 
+
     total_start = time.perf_counter()
 
     if concurrency_limit <= 1 or len(pass_items) <= 1:
         for pass_name, system_prompt in pass_items:
             name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await _execute_pass(
+
                 pass_name, system_prompt
             )
             metrics[name] = elapsed_ms
@@ -396,6 +408,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             csv_segments.extend(pass_csv_segments)
             llm_debug.extend(debug_records)
             all_errors.extend(pass_errors)
+
     else:
         semaphore = asyncio.Semaphore(concurrency_limit)
         async def _bounded_execute(pass_name: str, system_prompt: str):
@@ -407,15 +420,18 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             for pass_name, system_prompt in pass_items
         ]
 
+
         results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
         for task in asyncio.as_completed(tasks):
             name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
             results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
 
+
         for pass_name, _system_prompt in pass_items:
             if pass_name not in results:
                 continue
             pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
+
             metrics[pass_name] = elapsed_ms
             rows.extend(pass_rows)
             csv_segments.extend(pass_csv_segments)
@@ -428,6 +444,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     csv_base64 = base64.b64encode(csv_text.encode("utf-8")).decode("ascii") if rows else None
 
     response: Dict[str, Any] = {
+
         "ok": True,
         "rows": rows,
         "csv_base64": csv_base64,
