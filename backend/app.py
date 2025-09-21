@@ -26,6 +26,12 @@ load_dotenv()
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 log = logging.getLogger("FluidRAG")
 
+logging.getLogger("FluidRAG").setLevel(logging.DEBUG)
+logging.getLogger("FluidRAG.api").setLevel(logging.DEBUG)
+logging.getLogger("FluidRAG.llm").setLevel(logging.DEBUG)
+logging.getLogger("httpx").setLevel(logging.INFO)
+logging.getLogger("httpcore").setLevel(logging.DEBUG)
+
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=config.STATIC_FOLDER, static_url_path=config.STATIC_URL_PATH)

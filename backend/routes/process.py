@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+import json
+import logging
+
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.passes import run_all_passes_async
+from ..utils.envsafe import env, s
+
+log = logging.getLogger("FluidRAG.api.process")
 
 bp = Blueprint("process", __name__)
 
@@ -17,6 +23,21 @@ def process_route():
 
     try:
         data = request.get_json(force=True) or {}
+        try:
+            payload_repr = json.dumps(data, ensure_ascii=False)
+        except TypeError:
+            payload_repr = repr(data)
+        log.info("[/api/process] payload=%s", payload_repr)
+        log.info("ENV OPENROUTER_API_KEY set: %s", bool(env("OPENROUTER_API_KEY")))
+        log.info("ENV OPENROUTER_HTTP_REFERER=%r", env("OPENROUTER_HTTP_REFERER") or None)
+        log.info("ENV OPENROUTER_SITE_URL=%r", env("OPENROUTER_SITE_URL") or None)
+        log.info("ENV OPENROUTER_APP_TITLE=%r", env("OPENROUTER_APP_TITLE") or None)
+
+        if "provider" in data:
+            data["provider"] = s(data.get("provider"))
+        if "model" in data:
+            data["model"] = s(data.get("model"))
+
         import asyncio
         loop = asyncio.new_event_loop()
         try:

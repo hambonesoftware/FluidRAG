@@ -9,6 +9,7 @@ from ..pipeline.llm import create_llm_client
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
 from ..parse.header_config import CONFIG
 from ..state import get_state
+from ..utils.envsafe import env, s
 
 bp = Blueprint("headers", __name__)
 
@@ -54,8 +55,8 @@ def determine_headers():
         pages_lines      = layout.get("pages_lines") or [p.splitlines() for p in pages_linear]
         page_line_styles = layout.get("page_line_styles") or [[{} for _ in (p or [])] for p in pages_lines]
 
-        provider = (data.get("provider") or os.getenv("LLM_PROVIDER", "openrouter")).strip()
-        model    = (data.get("model")    or os.getenv("HEADER_MODEL", "x-ai/grok-4-fast:free")).strip()
+        provider = s(data.get("provider")) or env("LLM_PROVIDER", "openrouter") or "openrouter"
+        model = s(data.get("model")) or env("HEADER_MODEL", "x-ai/grok-4-fast:free") or "x-ai/grok-4-fast:free"
         client   = create_llm_client(provider=provider, model=model) if CONFIG.get("llm_enabled", True) else None
 
         # 1) Heuristic candidates by page

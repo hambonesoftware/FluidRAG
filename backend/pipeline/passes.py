@@ -15,6 +15,8 @@ from ..llm.errors import LLMAuthError, LLMError
 from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
 from ..state import get_state
+from ..utils.envsafe import env, s
+
 from .fluid import fluid_refine_chunks
 from .hep_cluster import hep_cluster_chunks
 
@@ -186,7 +188,8 @@ def _resolve_pass_concurrency(payload: Dict[str, Any]) -> int:
     source = (
         payload.get("max_parallel_passes")
         or payload.get("pass_concurrency")
-        or os.getenv("LLM_PASS_CONCURRENCY")
+        or env("LLM_PASS_CONCURRENCY")
+
         or DEFAULT_PASS_CONCURRENCY
     )
     try:
@@ -199,7 +202,8 @@ def _resolve_pass_concurrency(payload: Dict[str, Any]) -> int:
 def _resolve_pass_timeout(payload: Dict[str, Any]) -> float:
     source = (
         payload.get("pass_timeout_seconds")
-        or os.getenv("LLM_PASS_TIMEOUT_SECONDS")
+        or env("LLM_PASS_TIMEOUT_SECONDS")
+
         or DEFAULT_PASS_TIMEOUT_S
     )
     try:
@@ -317,8 +321,16 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not session_id:
         return {"ok": False, "httpStatus": 400, "error": "session_id is required"}
 
-    provider = (payload.get("provider") or os.getenv("LLM_PROVIDER", "openrouter")).strip()
-    model = (payload.get("model") or provider_default_model(provider) or os.getenv("LLM_MODEL", "gpt-4o-mini")).strip()
+    provider = s(payload.get("provider"))
+    if not provider:
+        provider = env("LLM_PROVIDER", "openrouter") or "openrouter"
+
+    model = s(payload.get("model"))
+    if not model:
+        model = s(provider_default_model(provider))
+    if not model:
+        model = env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
+
 
     state = get_state(session_id)
     if state is None:
@@ -395,7 +407,6 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             rows.extend(pass_rows)
             csv_segments.extend(pass_csv_segments)
             llm_debug.extend(debug_records)
-
             all_errors.extend(pass_errors)
 
     else:
@@ -420,11 +431,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             if pass_name not in results:
                 continue
             pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
-=======
-            pass_rows, debug_records, pass_csv_segments, elapsed_ms = results[pass_name]
 
+            metrics[pass_name] = elapsed_ms
+            rows.extend(pass_rows)
+            csv_segments.extend(pass_csv_segments)
+            llm_debug.extend(debug_records)
             all_errors.extend(pass_errors)
-
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
