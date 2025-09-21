@@ -6,7 +6,8 @@ import logging
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.passes import run_all_passes_async
-from ..utils.envsafe import env, s
+from ..utils.envsafe import env
+from ..utils.strings import s
 
 log = logging.getLogger("FluidRAG.api.process")
 

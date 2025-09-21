@@ -5,17 +5,23 @@ import asyncio
 import base64
 import csv
 import io
+import json
 import logging
-
 import os
 import time
+import uuid
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from ..llm.errors import LLMAuthError, LLMError
+import httpx
+
+from ..llm.errors import LLMAuthError
 from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
 from ..state import get_state
-from ..utils.envsafe import env, s
+from ..utils.envsafe import env
+from ..utils.strings import s
+
+from .merge import merge_pass_outputs
 
 from .fluid import fluid_refine_chunks
 from .hep_cluster import hep_cluster_chunks
@@ -49,10 +55,29 @@ log = logging.getLogger("FluidRAG.passes")
 
 
 CHUNK_GROUP_TOKEN_LIMIT = 12000
-DEFAULT_PASS_CONCURRENCY = 1
+DEFAULT_PASS_CONCURRENCY = 5
 DEFAULT_PASS_TIMEOUT_S = 120
+DEFAULT_PASS_TEMPERATURE = 0.0
+DEFAULT_PASS_MAX_TOKENS = 4096
+DEFAULT_PASS_MAX_ATTEMPTS = 4
+DEFAULT_PASS_BACKOFF_INITIAL_MS = 600
+DEFAULT_PASS_BACKOFF_FACTOR = 1.7
+DEFAULT_PASS_BACKOFF_MAX_MS = 4500
 
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
+
+PASS_STAGGER_SECONDS = 5.0
+
+
+def _snapshot(value: Any, limit: int = 3000) -> str:
+    try:
+        text = json.dumps(value, ensure_ascii=False)
+    except Exception:
+        text = repr(value)
+    if len(text) > limit:
+        truncated = len(text) - limit
+        return f"{text[:limit]} … [truncated {truncated} chars]"
+    return text
 
 
 def _ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
@@ -122,12 +147,12 @@ def _build_groups(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 
 def _format_chunk_for_prompt(chunk: Dict[str, Any], idx: int, total: int) -> str:
-    doc = chunk.get("document") or "Document"
-    sec_num = str(chunk.get("section_number") or chunk.get("section_id") or "").strip()
-    sec_name = str(chunk.get("section_name") or chunk.get("section_title") or "").strip()
+    doc = s(chunk.get("document")) or "Document"
+    sec_num = s(chunk.get("section_number") or chunk.get("section_id"))
+    sec_name = s(chunk.get("section_name") or chunk.get("section_title"))
     page_start = chunk.get("page_start") or chunk.get("page") or 1
     page_end = chunk.get("page_end") or page_start
-    body = (chunk.get("text") or "").strip()
+    body = s(chunk.get("text"))
     header_bits = [f"Document: {doc}"]
     if sec_num or sec_name:
         section_label = " ".join(bit for bit in [sec_num, sec_name] if bit).strip()
@@ -141,7 +166,7 @@ def _build_user_prompt(metadata: Dict[str, Any], group: Dict[str, Any], batch_in
     chunk_texts = [
         _format_chunk_for_prompt(chunk, idx, len(group["chunks"]))
         for idx, chunk in enumerate(group["chunks"])
-        if (chunk.get("text") or "").strip()
+        if s(chunk.get("text"))
     ]
     document = metadata.get("document") or "Document"
     lines = [
@@ -177,7 +202,7 @@ def _parse_pass_response(text: str, pass_name: str) -> Tuple[List[Dict[str, str]
         for row in reader:
             if not any(row.values()):
                 continue
-            normalized = {col: row.get(col, "").strip() for col in CSV_COLUMNS}
+            normalized = {col: s(row.get(col)) for col in CSV_COLUMNS}
             if not normalized["Pass"]:
                 normalized["Pass"] = pass_name
             rows.append(normalized)
@@ -213,6 +238,22 @@ def _resolve_pass_timeout(payload: Dict[str, Any]) -> float:
     return max(10.0, value)
 
 
+def _int_from_env(name: str, default: int) -> int:
+    try:
+        value = int(env(name))
+    except (TypeError, ValueError):
+        return default
+    return value
+
+
+def _float_from_env(name: str, default: float) -> float:
+    try:
+        value = float(env(name))
+    except (TypeError, ValueError):
+        return default
+    return value
+
+
 async def _run_pass(
     pass_name: str,
     system_prompt: str,
@@ -226,6 +267,29 @@ async def _run_pass(
     pass_rows: List[Dict[str, str]] = []
     csv_segments: List[str] = []
     errors: List[Dict[str, Any]] = []
+    batch_debug: List[Dict[str, Any]] = []
+
+    req_id = uuid.uuid4().hex[:8]
+    temperature = _float_from_env("LLM_PASS_TEMPERATURE", DEFAULT_PASS_TEMPERATURE)
+    max_tokens = _int_from_env("LLM_PASS_MAX_TOKENS", DEFAULT_PASS_MAX_TOKENS)
+    max_attempts = max(1, _int_from_env("LLM_PASS_MAX_ATTEMPTS", DEFAULT_PASS_MAX_ATTEMPTS))
+    initial_backoff_ms = _int_from_env(
+        "LLM_PASS_BACKOFF_INITIAL_MS",
+        _int_from_env("LLM_BACKOFF_INITIAL_MS", DEFAULT_PASS_BACKOFF_INITIAL_MS),
+    )
+    backoff_factor = _float_from_env(
+        "LLM_PASS_BACKOFF_FACTOR",
+        _float_from_env("LLM_BACKOFF_FACTOR", DEFAULT_PASS_BACKOFF_FACTOR),
+    )
+    backoff_max_ms = _int_from_env(
+        "LLM_PASS_BACKOFF_MAX_MS",
+        _int_from_env("LLM_BACKOFF_MAX_MS", DEFAULT_PASS_BACKOFF_MAX_MS),
+    )
+
+    backoff_initial_s = max(0.1, initial_backoff_ms / 1000.0)
+    backoff_ceiling_s = max(backoff_initial_s, backoff_max_ms / 1000.0)
+
+    fatal_error = False
 
     for batch_index, group in enumerate(groups):
         prompt = _build_user_prompt(metadata, group, batch_index, len(groups))
@@ -237,64 +301,185 @@ async def _run_pass(
             len(group.get("chunks", [])),
             group.get("token_estimate"),
         )
-        try:
-            content = await asyncio.wait_for(
-                client.acomplete(
-                    model=model,
-                    system=system_prompt,
-                    user=prompt,
-                    temperature=0.0,
-                    max_tokens=4096,
-                ),
-                timeout=timeout_s,
-            )
-        except (LLMAuthError, LLMError) as exc:
-            errors.append(
-                {
-                    "batch": batch_index,
-                    "error": str(exc),
-                    "pass": pass_name,
-                    "model": model,
-                    "provider": provider,
-                }
-            )
-            log.error("[passes] pass=%s batch=%d auth/llm error: %s", pass_name, batch_index + 1, exc)
-            break
-        except asyncio.TimeoutError:
-            msg = "LLM batch timed out"
-            errors.append(
-                {
-                    "batch": batch_index,
-                    "error": msg,
-                    "pass": pass_name,
-                    "timeout_s": timeout_s,
-                    "model": model,
-                    "provider": provider,
-                }
-            )
-            log.error("[passes] pass=%s batch=%d timeout", pass_name, batch_index + 1)
-            break
-        except Exception as exc:
-            errors.append(
-                {
-                    "batch": batch_index,
-                    "error": str(exc),
-                    "pass": pass_name,
-                    "model": model,
-                    "provider": provider,
-                }
-            )
-            log.exception("[passes] pass=%s batch=%d exception", pass_name, batch_index + 1)
+        backoff_s = backoff_initial_s
+        attempts_used = 0
+        content: Optional[str] = None
 
+        for attempt in range(1, max_attempts + 1):
+            attempts_used = attempt
+            try:
+                log.info(
+                    "[passes] req=%s pass=%s batch=%d/%d attempt=%d",
+                    req_id,
+                    pass_name,
+                    batch_index + 1,
+                    len(groups),
+                    attempt,
+                )
+                content = await asyncio.wait_for(
+                    client.acomplete(
+                        model=model,
+                        system=system_prompt,
+                        user=prompt,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        extra={"stream": False},
+                    ),
+                    timeout=timeout_s,
+                )
+                break
+            except asyncio.TimeoutError:
+                error_msg = f"timeout after {timeout_s:.1f}s"
+                log.error(
+                    "[passes] req=%s pass=%s batch=%d timeout after %.1fs",
+                    req_id,
+                    pass_name,
+                    batch_index + 1,
+                    timeout_s,
+                )
+                errors.append(
+                    {
+                        "batch": batch_index,
+                        "error": error_msg,
+                        "pass": pass_name,
+                        "timeout_s": timeout_s,
+                        "model": model,
+                        "provider": provider,
+                        "req": req_id,
+                    }
+                )
+                batch_debug.append(
+                    {
+                        "ok": False,
+                        "pass": pass_name,
+                        "batch": batch_index,
+                        "attempts": attempts_used,
+                        "error": error_msg,
+                        "req": req_id,
+                    }
+                )
+                fatal_error = True
+                break
+            except LLMAuthError as exc:
+                msg = str(exc)
+                log.error("[passes] req=%s pass=%s auth error: %s", req_id, pass_name, msg)
+                errors.append(
+                    {
+                        "batch": batch_index,
+                        "error": msg,
+                        "pass": pass_name,
+                        "model": model,
+                        "provider": provider,
+                        "req": req_id,
+                    }
+                )
+                batch_debug.append(
+                    {
+                        "ok": False,
+                        "pass": pass_name,
+                        "batch": batch_index,
+                        "attempts": attempts_used,
+                        "error": msg,
+                        "req": req_id,
+                    }
+                )
+                fatal_error = True
+                break
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code if exc.response else None
+                message = f"HTTP {status}: {exc}"
+                if status == 429 and attempt < max_attempts:
+                    await asyncio.sleep(backoff_s)
+                    backoff_s = min(backoff_s * backoff_factor, backoff_ceiling_s)
+                    continue
+                log.error(
+                    "[passes] req=%s pass=%s batch=%d transport error: %s",
+                    req_id,
+                    pass_name,
+                    batch_index + 1,
+                    message,
+                )
+                errors.append(
+                    {
+                        "batch": batch_index,
+                        "error": message,
+                        "pass": pass_name,
+                        "model": model,
+                        "provider": provider,
+                        "req": req_id,
+                    }
+                )
+                batch_debug.append(
+                    {
+                        "ok": False,
+                        "pass": pass_name,
+                        "batch": batch_index,
+                        "attempts": attempts_used,
+                        "error": message,
+                        "req": req_id,
+                    }
+                )
+                fatal_error = True
+                break
+            except Exception as exc:
+                message = str(exc)
+                retryable = attempt < max_attempts and (
+                    "429" in message or "Too Many Requests" in message
+                )
+                if retryable:
+                    await asyncio.sleep(backoff_s)
+                    backoff_s = min(backoff_s * backoff_factor, backoff_ceiling_s)
+                    continue
+                log.exception(
+                    "[passes] req=%s pass=%s batch=%d exception", req_id, pass_name, batch_index + 1
+                )
+                errors.append(
+                    {
+                        "batch": batch_index,
+                        "error": message,
+                        "pass": pass_name,
+                        "model": model,
+                        "provider": provider,
+                        "req": req_id,
+                    }
+                )
+                batch_debug.append(
+                    {
+                        "ok": False,
+                        "pass": pass_name,
+                        "batch": batch_index,
+                        "attempts": attempts_used,
+                        "error": message,
+                        "req": req_id,
+                    }
+                )
+                fatal_error = True
+                break
+
+        if fatal_error:
             break
-        else:
-            rows, csv_block, _json_block = _parse_pass_response(content, pass_name)
-            if rows:
-                pass_rows.extend(rows)
-            if csv_block:
-                csv_segments.append(csv_block)
+
+        if content is None:
+            continue
+
+        rows, csv_block, _json_block = _parse_pass_response(content, pass_name)
+        if rows:
+            pass_rows.extend(rows)
+        if csv_block:
+            csv_segments.append(csv_block)
+        batch_debug.append(
+            {
+                "ok": True,
+                "pass": pass_name,
+                "batch": batch_index,
+                "attempts": attempts_used,
+                "req": req_id,
+                "chunks": len(group.get("chunks", [])),
+            }
+        )
 
     debug_records = client.drain_debug_records()
+    debug_records.extend(batch_debug)
     for record in debug_records:
         record.setdefault("pass", pass_name)
         record.setdefault("model", model)
@@ -331,6 +516,8 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not model:
         model = env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
 
+    req_id = s(payload.get("req_id")) or uuid.uuid4().hex[:8]
+
 
     state = get_state(session_id)
     if state is None:
@@ -358,24 +545,28 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     groups = _build_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
 
-    rows: List[Dict[str, str]] = []
-    csv_segments: List[str] = []
+    debug_enabled = bool(payload.get("debug") or payload.get("_debug"))
+
     llm_debug: List[Dict[str, Any]] = []
     metrics: Dict[str, float] = {}
     all_errors: List[Dict[str, Any]] = []
+    pass_outputs: Dict[str, Any] = {}
 
     pass_items = list(PASS_PROMPTS.items())
-    concurrency_limit = _resolve_pass_concurrency(payload)
+    requested_concurrency = _resolve_pass_concurrency(payload)
     pass_timeout = _resolve_pass_timeout(payload)
 
+    concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
     log.info(
-        "[passes] session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d timeout=%.1fs",
+        "[passes] req=%s session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
+        req_id,
         session_id,
         provider,
         model,
         len(pass_items),
         len(groups),
         concurrency_limit,
+        requested_concurrency,
         pass_timeout,
     )
 
@@ -397,46 +588,57 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     total_start = time.perf_counter()
 
-    if concurrency_limit <= 1 or len(pass_items) <= 1:
-        for pass_name, system_prompt in pass_items:
-            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await _execute_pass(
+    semaphore = asyncio.Semaphore(concurrency_limit)
 
-                pass_name, system_prompt
+    async def _bounded_execute(index: int, pass_name: str, system_prompt: str):
+        if PASS_STAGGER_SECONDS > 0 and index > 0:
+            delay = PASS_STAGGER_SECONDS * index
+            log.debug(
+                "[passes] delaying pass=%s by %.1fs before submission", pass_name, delay
             )
-            metrics[name] = elapsed_ms
-            rows.extend(pass_rows)
-            csv_segments.extend(pass_csv_segments)
-            llm_debug.extend(debug_records)
-            all_errors.extend(pass_errors)
+            await asyncio.sleep(delay)
+        async with semaphore:
+            return await _execute_pass(pass_name, system_prompt)
 
-    else:
-        semaphore = asyncio.Semaphore(concurrency_limit)
-        async def _bounded_execute(pass_name: str, system_prompt: str):
-            async with semaphore:
-                return await _execute_pass(pass_name, system_prompt)
+    tasks = [
+        asyncio.create_task(_bounded_execute(idx, pass_name, system_prompt))
+        for idx, (pass_name, system_prompt) in enumerate(pass_items)
+    ]
 
-        tasks = [
-            asyncio.create_task(_bounded_execute(pass_name, system_prompt))
-            for pass_name, system_prompt in pass_items
-        ]
+    results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
+    for task in asyncio.as_completed(tasks):
+        name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
+        results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
 
+    for pass_name, _system_prompt in pass_items:
+        if pass_name not in results:
+            continue
+        pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
 
-        results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
-        for task in asyncio.as_completed(tasks):
-            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
-            results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
+        metrics[pass_name] = elapsed_ms
+        llm_debug.extend(debug_records)
+        all_errors.extend(pass_errors)
+        payload_preview = {"items": pass_rows}
+        pass_outputs[pass_name] = payload_preview
+        log.info(
+            "[passes %s] %s payload snapshot: %s",
+            req_id,
+            pass_name,
+            _snapshot(payload_preview),
+        )
 
+    try:
+        merged = merge_pass_outputs(pass_outputs, req_id=req_id)
+    except Exception:
+        log.exception("[passes %s] unhandled exception while constructing rows", req_id)
+        return {
+            "ok": False,
+            "httpStatus": 500,
+            "error": "merge_failed",
+        }
 
-        for pass_name, _system_prompt in pass_items:
-            if pass_name not in results:
-                continue
-            pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
-
-            metrics[pass_name] = elapsed_ms
-            rows.extend(pass_rows)
-            csv_segments.extend(pass_csv_segments)
-            llm_debug.extend(debug_records)
-            all_errors.extend(pass_errors)
+    rows = merged.get("rows", [])
+    merge_problems = merged.get("problems", [])
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
@@ -455,6 +657,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         "chunk_count": len(chunks),
         "httpStatus": 200,
     }
+
+    if debug_enabled:
+        response.setdefault("debug", {})
+        response["debug"]["merge"] = {
+            "problems": merge_problems,
+            "rows_count": len(rows),
+        }
 
     if all_errors:
         first = all_errors[0]
