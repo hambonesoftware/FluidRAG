@@ -21,6 +21,11 @@ k = (os.environ.get("OPENROUTER_API_KEY") or "").strip()
 mask = (k[:12] + "..." + k[-4:]) if k else "(missing)"
 print(f"[dotenv] loaded={loaded} path={dotenv_path!r} OPENROUTER_API_KEY={bool(k)} {mask}")
 
+from backend.utils.envsafe import get_app_origin, env
+
+print("[env] OPENROUTER_HTTP_REFERER=", env("OPENROUTER_HTTP_REFERER"))
+print("[env] Using app origin =", get_app_origin())
+
 
 # Respect PORT from .env (or default 5142)
 PORT = int(os.environ.get("PORT", "5142"))

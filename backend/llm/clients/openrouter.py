@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -71,7 +72,8 @@ class OpenRouterClient(BaseLLMClient):
             messages.append({"role": "system", "content": system or ""})
         messages.append({"role": "user", "content": user})
 
-        # Build payload
+        # Build payload (force non-streaming)
+        stream = False
         payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
         if temperature is not None:
             payload["temperature"] = float(temperature)
@@ -79,12 +81,14 @@ class OpenRouterClient(BaseLLMClient):
             payload["max_tokens"] = int(max_tokens)
         if extra:
             payload.update(extra)
+            payload["stream"] = False
 
         # Headers
         auth_header = f"Bearer {self.api_key}" if self.api_key else ""
         headers = {
             "Authorization": auth_header,
             "Content-Type": "application/json",
+            "Accept": "application/json",
             "HTTP-Referer": self.http_referer,
             "X-Title": self.app_title,
         }
@@ -168,57 +172,96 @@ class OpenRouterClient(BaseLLMClient):
                 verify=certifi.where(),      # pin CA bundle
                 trust_env=False,             # ignore proxy/env unless explicitly configured
             ) as client:
+                log.info("[llm:%s] → POST %s stream=False", cid, OPENROUTER_URL)
                 return await client.post(OPENROUTER_URL, headers=headers, json=payload)
 
         for i in range(1, attempts + 1):
             try:
                 resp = await _do_request()
                 status = resp.status_code
-
-                # Try JSON; if not JSON, keep the raw text in a body wrapper
-                body: Optional[dict] = None
-                try:
-                    body = resp.json()
-                except Exception:
+                raw_bytes = resp.content or b""
+                if not raw_bytes:
                     try:
-                        text = await resp.aread()
-                        body = {"_text": text.decode("utf-8", "replace")}
+                        raw_bytes = await resp.aread()
                     except Exception:
-                        body = None
+                        raw_bytes = b""
 
-                if status == 401:
-                    msg = (
-                        "OpenRouter rejected the request (401 Unauthorized). "
-                        "Confirm that OPENROUTER_API_KEY is valid and that the selected model is allowed."
-                    )
-                    self._auth_error_message = msg
-                    _finish(status, body, None, "auth")
-                    raise OpenRouterAuthError(msg)
+                body_bytes = len(raw_bytes)
+                gzipped = resp.headers.get("Content-Encoding", "").lower() == "gzip"
+                log.info(
+                    "[llm:%s] ← %s body-bytes=%d gzipped?=%s",
+                    cid,
+                    status,
+                    body_bytes,
+                    bool(gzipped),
+                )
 
-                if status in retriable:
-                    # Backoff & retry
-                    wait = (0.4 * (2 ** (i - 1))) + random.uniform(0, 0.25)
-                    _finish(status, body, None, f"retriable_{status}_attempt_{i}")
-                    if i < attempts:
+                text_body = raw_bytes.decode(resp.encoding or "utf-8", "replace") if raw_bytes else ""
+                body: Optional[dict] = None
+                if text_body:
+                    try:
+                        body = json.loads(text_body)
+                    except json.JSONDecodeError:
+                        preview = text_body[:1500]
+                        log.warning("[llm:%s] non-JSON response preview=%r", cid, preview)
+                        body = {"_raw_preview": preview}
+                else:
+                    body = {}
+
+                if status >= 400:
+                    err_label = f"http_{status}"
+                    if status in retriable:
+                        err_label = f"retriable_{status}_attempt_{i}"
+                    _finish(status, body, None, err_label)
+                    if status == 401:
+                        msg = (
+                            "OpenRouter rejected the request (401 Unauthorized). "
+                            "Confirm that OPENROUTER_API_KEY is valid and that the selected model is allowed."
+                        )
+                        self._auth_error_message = msg
+                        raise OpenRouterAuthError(msg)
+
+                    if status in retriable and i < attempts:
+                        wait = (0.4 * (2 ** (i - 1))) + random.uniform(0, 0.25)
                         await asyncio.sleep(wait)
                         continue
-                    # attempts exhausted -> raise for status
-                    resp.raise_for_status()
 
-                resp.raise_for_status()
+                    resp.raise_for_status()
+                    continue
 
                 # success path
+                choice = (body or {}).get("choices", [{}])[0] if isinstance(body, dict) else {}
                 content = (
-                    (body or {}).get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content", "")
-                    or ""
+                    choice.get("message", {}) if isinstance(choice, dict) else {}
+                ).get("content", "")
+                finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
+                usage = body.get("usage") if isinstance(body, dict) else None
+                response_id = body.get("id") if isinstance(body, dict) else None
+                log.info(
+                    "[llm:%s] id=%s model=%s finish_reason=%s usage=%s",
+                    cid,
+                    response_id,
+                    body.get("model") if isinstance(body, dict) else None,
+                    finish_reason,
+                    usage,
                 )
                 _finish(status, body, content, None)
                 return content
 
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code if e.response else 0
+
+                # If we've already recorded the response for this CID, avoid duplicate logging.
+                response_record = record.get("response") or {}
+                if response_record.get("cid") == cid and response_record.get("status") == status:
+                    if status == 401:
+                        raise OpenRouterAuthError("Unauthorized") from e
+                    if status in retriable and i < attempts:
+                        wait = (0.4 * (2 ** (i - 1))) + random.uniform(0, 0.25)
+                        await asyncio.sleep(wait)
+                        continue
+                    raise
+
                 text_body: Optional[str] = None
                 try:
                     raw = await e.response.aread()
