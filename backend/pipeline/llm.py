@@ -6,9 +6,11 @@ import json
 import httpx
 from typing import Any, Dict, List, Optional
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-DEFAULT_PROVIDER   = os.getenv("LLM_PROVIDER", "openrouter")
-DEFAULT_MODEL      = os.getenv("HEADER_MODEL", "x-ai/grok-4-fast:free")
+from ..utils.envsafe import env, s
+
+OPENROUTER_API_KEY = env("OPENROUTER_API_KEY")
+DEFAULT_PROVIDER = env("LLM_PROVIDER", "openrouter") or "openrouter"
+DEFAULT_MODEL = env("HEADER_MODEL", "x-ai/grok-4-fast:free") or "x-ai/grok-4-fast:free"
 
 class ORClient:
     """Minimal async client for OpenRouter's chat completions."""
@@ -59,8 +61,8 @@ class LlamaCppClient:
             return {"text": text}
 
 def _make_client(provider: str, model: str):
-    provider = (provider or DEFAULT_PROVIDER).strip().lower()
-    model    = (model or DEFAULT_MODEL).strip()
+    provider = (s(provider) or DEFAULT_PROVIDER).lower()
+    model = s(model) or DEFAULT_MODEL
     if provider in ("openrouter", "openrouter.ai", "or"):
         return ORClient(model=model)
     if provider in ("llamacpp", "llama.cpp", "llmcpp"):
@@ -85,7 +87,7 @@ def create_llm_client(*args, **kwargs):
     provider = kwargs.get("provider", provider)
     model    = kwargs.get("model", model)
     provider = provider or DEFAULT_PROVIDER
-    model    = model or DEFAULT_MODEL
+    model = model or DEFAULT_MODEL
     return _make_client(provider, model)
 
 # Back-compat alias

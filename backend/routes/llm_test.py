@@ -7,6 +7,7 @@ import asyncio
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.llm import create_llm_client
+from ..utils.envsafe import s
 
 log = logging.getLogger("FluidRAG.api.llm_test")
 
@@ -24,9 +25,9 @@ def llm_test():
 
     try:
         payload = request.get_json(force=True) or {}
-        provider = (payload.get("provider") or "openrouter").strip()
-        model = (payload.get("model") or "x-ai/grok-4-fast:free").strip()
-        message = (payload.get("message") or "ping").strip()
+        provider = s(payload.get("provider")) or "openrouter"
+        model = s(payload.get("model")) or "x-ai/grok-4-fast:free"
+        message = s(payload.get("message")) or "ping"
 
         # Instantiate LLM client (provider currently unused; extend if you add more backends)
         client = create_llm_client(model=model)

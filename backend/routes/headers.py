@@ -1,17 +1,29 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import os, time, asyncio, json
-from math import ceil
+import os, time, asyncio, json, re
 from flask import Blueprint, request, jsonify, make_response
 
-from ..pipeline.preprocess import extract_pages_with_layout
+from ..pipeline.preprocess import extract_pages_with_layout, _sections_from_detected_headers
 from ..pipeline.llm import create_llm_client
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
 from ..parse.header_config import CONFIG
 from ..state import get_state
+from ..utils.envsafe import env, s
 
 bp = Blueprint("headers", __name__)
+
+_SECTION_NUMBER_RE = re.compile(r"\d+")
+
+
+def _section_sort_key(section: dict) -> tuple:
+    page = int(section.get("page_start") or section.get("source_page") or 0)
+    number = str(section.get("section_number") or section.get("id") or "")
+    number_parts = tuple(int(part) for part in _SECTION_NUMBER_RE.findall(number))
+    has_number = 0 if number_parts else 1
+    sequence_index = int(section.get("sequence_index") or 0)
+    line_idx = int(section.get("source_line_idx") or 0)
+    return (page, has_number, number_parts, sequence_index, line_idx)
 
 def _json_ok(data, code=200):
     resp = jsonify(data)
@@ -43,8 +55,8 @@ def determine_headers():
         pages_lines      = layout.get("pages_lines") or [p.splitlines() for p in pages_linear]
         page_line_styles = layout.get("page_line_styles") or [[{} for _ in (p or [])] for p in pages_lines]
 
-        provider = (data.get("provider") or os.getenv("LLM_PROVIDER", "openrouter")).strip()
-        model    = (data.get("model")    or os.getenv("HEADER_MODEL", "x-ai/grok-4-fast:free")).strip()
+        provider = s(data.get("provider")) or env("LLM_PROVIDER", "openrouter") or "openrouter"
+        model = s(data.get("model")) or env("HEADER_MODEL", "x-ai/grok-4-fast:free") or "x-ai/grok-4-fast:free"
         client   = create_llm_client(provider=provider, model=model) if CONFIG.get("llm_enabled", True) else None
 
         # 1) Heuristic candidates by page
@@ -165,20 +177,37 @@ def determine_headers():
             if session_state is not None:
                 session_state.headers = results
 
-        # Legacy "preview" for UI
         preview = []
-        for page_entry in results:
-            for h in page_entry.get("headers", []):
-                preview.append({
-                    "chars": len(h.get("text") or ""),
-                    "section_name": h.get("text") or "",
-                    "section_number": h.get("section_number") or "",
-                    "page_found": page_entry.get("page"),
-                })
-                if len(preview) >= 5:
-                    break
-            if len(preview) >= 5:
-                break
+        detected_sections = _sections_from_detected_headers(pages_lines, results)
+        for section in sorted(detected_sections, key=_section_sort_key):
+            # Skip the preamble helper bucket – callers are interested in explicit headers only.
+            if section.get("id") == "0" and (section.get("title") or "").lower() == "preamble":
+                continue
+
+            content_lines = section.get("content") or []
+            if not content_lines:
+                continue
+
+            text_lines = [line.rstrip("\n") for line in content_lines if isinstance(line, str)]
+            if not text_lines:
+                continue
+
+            header_text = section.get("title") or text_lines[0].strip()
+            body_lines = text_lines[1:]
+            body_text = "\n".join(body_lines).strip("\n")
+            full_text = "\n".join(text_lines).strip("\n")
+
+            preview.append(
+                {
+                    "chars": len(full_text),
+                    "section_name": header_text,
+                    "section_number": section.get("section_number") or section.get("id") or "",
+                    "page_found": section.get("page_start"),
+                    "page_start": section.get("page_start"),
+                    "heading_level": section.get("heading_level"),
+                    "content": body_text,
+                }
+            )
 
         return _json_ok({
             "ok": True,
