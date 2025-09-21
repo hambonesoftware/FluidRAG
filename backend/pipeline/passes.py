@@ -69,6 +69,7 @@ CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification
 PASS_STAGGER_SECONDS = 5.0
 
 
+
 def _snapshot(value: Any, limit: int = 3000) -> str:
     try:
         text = json.dumps(value, ensure_ascii=False)
@@ -558,8 +559,10 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
     log.info(
+
         "[passes] req=%s session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
         req_id,
+
         session_id,
         provider,
         model,
@@ -605,6 +608,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         for idx, (pass_name, system_prompt) in enumerate(pass_items)
     ]
 
+
     results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
     for task in asyncio.as_completed(tasks):
         name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
@@ -639,6 +643,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     rows = merged.get("rows", [])
     merge_problems = merged.get("problems", [])
+
 
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 

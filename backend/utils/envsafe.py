@@ -4,7 +4,9 @@ import os
 from typing import Any, Dict
 from urllib.parse import urlparse, urlunparse
 
+
 from .strings import s
+
 
 DEFAULT_REFERER = "http://localhost:5142"
 DEFAULT_TITLE = "FluidRAG"
@@ -17,6 +19,44 @@ def env(name: str, default: str = "") -> str:
     if isinstance(value, str):
         return value.strip()
     return default
+
+
+def _ensure_origin(candidate: str) -> str:
+    """Normalize ``candidate`` to an origin (scheme://host[:port]) or ``""``."""
+
+    value = s(candidate)
+    if not value:
+        return ""
+
+    parsed = urlparse(value)
+    if parsed.scheme and parsed.netloc:
+        return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+
+    # Allow bare host[:port] – assume http.
+    if parsed.path and not parsed.scheme and not parsed.netloc:
+        host = parsed.path.strip()
+        if host:
+            return f"http://{host}"
+
+    return ""
+
+
+def get_app_origin() -> str:
+    """Resolve the application origin used for Referer headers and logging."""
+
+    candidates = (
+        env("APP_ORIGIN"),
+        env("FRONTEND_ORIGIN"),
+        env("OPENROUTER_HTTP_REFERER"),
+        env("OPENROUTER_SITE_URL"),
+    )
+
+    for candidate in candidates:
+        origin = _ensure_origin(candidate)
+        if origin and "openrouter.ai" not in origin.lower():
+            return origin
+
+    return DEFAULT_REFERER
 
 
 def _ensure_origin(candidate: str) -> str:
