@@ -382,7 +382,14 @@ async function onProcess(){
     updateStatus("processStatus", `Running asynchronous passes via ${providerName}…`);
     log(`Passes start via ${providerName}`);
     withGroup("[Flow] Pass processing → Request payload", ()=>{
-      console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
+      console.log({
+        session_id: state.sessionId,
+        model: state.model,
+        provider: state.provider,
+        only_mechanical: true,
+        debug: true,
+        debug_llm_io: true
+      });
     }, true);
     const res = await processPasses(state.sessionId, state.model, state.provider);
     withGroup(`[Flow] Pass processing → Raw response (${res.httpStatus ?? "?"})`, ()=>{

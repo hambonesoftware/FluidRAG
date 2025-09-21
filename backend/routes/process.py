@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import logging
 
+import uuid
+
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.passes import run_all_passes_async
@@ -33,6 +35,12 @@ def process_route():
         log.info("ENV OPENROUTER_HTTP_REFERER=%r", env("OPENROUTER_HTTP_REFERER") or None)
         log.info("ENV OPENROUTER_SITE_URL=%r", env("OPENROUTER_SITE_URL") or None)
         log.info("ENV OPENROUTER_APP_TITLE=%r", env("OPENROUTER_APP_TITLE") or None)
+
+        req_id = uuid.uuid4().hex[:8]
+        data.setdefault("_req_id", req_id)
+        data.setdefault("_debug", bool(data.get("debug")))
+        data.setdefault("_debug_llm_io", bool(data.get("debug_llm_io")))
+        data.setdefault("_only_mechanical", bool(data.get("only_mechanical")))
 
         if "provider" in data:
             data["provider"] = s(data.get("provider"))

@@ -98,7 +98,14 @@ export async function processPasses(sessionId, model, provider){
   return safeFetch("/api/process", {
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({session_id:sessionId, model, provider})
+    body:JSON.stringify({
+      session_id:sessionId,
+      model,
+      provider,
+      only_mechanical:true,
+      debug:true,
+      debug_llm_io:true
+    })
   });
 }
 
