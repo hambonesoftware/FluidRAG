@@ -28,6 +28,91 @@ from .base import BaseLLMClient
 log = logging.getLogger("FluidRAG.llm.openrouter")
 
 
+async def _consume_openai_stream(resp: httpx.Response) -> Dict[str, Any]:
+    """Aggregate an OpenAI-compatible streaming response into final content."""
+
+    raw_lines = []
+    content_parts: list[str] = []
+    last_event: Optional[dict] = None
+    finish_reason: Optional[str] = None
+    role: Optional[str] = None
+    usage: Optional[dict] = None
+
+    async for line in resp.aiter_lines():
+        if line is None:
+            continue
+        if line:
+            raw_lines.append(line)
+        if not line.startswith("data:"):
+            continue
+
+        data = line[5:].strip()
+        if not data:
+            continue
+        if data == "[DONE]":
+            break
+
+        try:
+            event = json.loads(data)
+        except json.JSONDecodeError:
+            log.debug("[llm:stream] non-JSON event: %r", data[:120])
+            continue
+
+        if not isinstance(event, dict):
+            continue
+
+        last_event = event
+
+        if event.get("error"):
+            # Preserve error payloads exactly as received.
+            break
+
+        choices = event.get("choices") or []
+        if choices:
+            choice0 = choices[0] or {}
+            if isinstance(choice0, dict):
+                finish_reason = choice0.get("finish_reason") or finish_reason
+                delta = choice0.get("delta") or {}
+                if isinstance(delta, dict):
+                    if delta.get("role"):
+                        role = delta.get("role")
+                    chunk = delta.get("content")
+                    if chunk:
+                        content_parts.append(str(chunk))
+                message = choice0.get("message")
+                if isinstance(message, dict) and message.get("content") and not content_parts:
+                    content_parts.append(str(message.get("content")))
+
+        if event.get("usage") and isinstance(event.get("usage"), dict):
+            usage = event.get("usage")
+
+    raw_text = "\n".join(raw_lines)
+    content = "".join(content_parts)
+
+    body: Optional[dict] = last_event if isinstance(last_event, dict) else None
+    if isinstance(body, dict):
+        if content:
+            choices = body.setdefault("choices", [])
+            if not choices:
+                choices.append({})
+            first = choices[0] if isinstance(choices[0], dict) else {}
+            if not isinstance(choices[0], dict):
+                choices[0] = first
+            message = first.setdefault("message", {})
+            if not isinstance(message, dict):
+                message = {}
+                first["message"] = message
+            message.setdefault("content", content)
+            if role and "role" not in message:
+                message["role"] = role
+            if finish_reason and "finish_reason" not in first:
+                first["finish_reason"] = finish_reason
+        if usage and "usage" not in body:
+            body["usage"] = usage
+
+    return {"raw_text": raw_text, "body": body, "content": content}
+
+
 class OpenRouterClient(BaseLLMClient):
     """
     OpenRouter chat client with robust transport + detailed, masked debug logging.
@@ -64,7 +149,7 @@ class OpenRouterClient(BaseLLMClient):
         user: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        stream: bool = False,
+        stream: bool = True,
         extra: Optional[Dict[str, Any]] = None,
     ) -> str:
         # Build messages
@@ -73,16 +158,15 @@ class OpenRouterClient(BaseLLMClient):
             messages.append({"role": "system", "content": system or ""})
         messages.append({"role": "user", "content": user})
 
-        # Build payload (force non-streaming)
-        stream = False
-        payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": stream}
+        payload: Dict[str, Any] = {"model": model, "messages": messages, "stream": bool(stream)}
         if temperature is not None:
             payload["temperature"] = float(temperature)
         if max_tokens is not None:
             payload["max_tokens"] = int(max_tokens)
         if extra:
             payload.update(extra)
-            payload["stream"] = False
+            if "stream" not in extra:
+                payload["stream"] = bool(stream)
 
         # Headers
         auth_header = f"Bearer {self.api_key}" if self.api_key else ""
@@ -112,7 +196,7 @@ class OpenRouterClient(BaseLLMClient):
             "payload_meta": {
                 "model": model,
                 "messages": len(messages),
-                "stream": bool(stream),
+                "stream": bool(payload.get("stream", False)),
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             },
@@ -166,29 +250,57 @@ class OpenRouterClient(BaseLLMClient):
         retriable = {408, 409, 425, 429, 500, 502, 503, 504}
         attempts = 3
 
-        async def _do_request() -> httpx.Response:
+        async def _do_request() -> Dict[str, Any]:
             async with httpx.AsyncClient(
                 timeout=self._timeout,
                 http2=False,                 # more robust on Windows / corp proxies
                 verify=certifi.where(),      # pin CA bundle
                 trust_env=False,             # ignore proxy/env unless explicitly configured
             ) as client:
-                log.info("[llm:%s] → POST %s stream=False", cid, OPENROUTER_URL)
-                return await client.post(OPENROUTER_URL, headers=headers, json=payload)
+                want_stream = bool(payload.get("stream"))
+                log.info("[llm:%s] → POST %s stream=%s", cid, OPENROUTER_URL, want_stream)
+                if want_stream:
+                    async with client.stream(
+                        "POST", OPENROUTER_URL, headers=headers, json=payload
+                    ) as resp:
+                        collected = await _consume_openai_stream(resp)
+                        raw_text = collected.get("raw_text", "")
+                        raw_bytes = raw_text.encode("utf-8")
+                        return {
+                            "status": resp.status_code,
+                            "headers": resp.headers,
+                            "raw_bytes": raw_bytes,
+                            "text": raw_text,
+                            "body": collected.get("body"),
+                            "content": collected.get("content"),
+                        }
 
-        for i in range(1, attempts + 1):
-            try:
-                resp = await _do_request()
-                status = resp.status_code
+                resp = await client.post(OPENROUTER_URL, headers=headers, json=payload)
                 raw_bytes = resp.content or b""
                 if not raw_bytes:
                     try:
                         raw_bytes = await resp.aread()
                     except Exception:
                         raw_bytes = b""
+                text_body = raw_bytes.decode(resp.encoding or "utf-8", "replace") if raw_bytes else ""
+                return {
+                    "status": resp.status_code,
+                    "headers": resp.headers,
+                    "raw_bytes": raw_bytes,
+                    "text": text_body,
+                    "body": None,
+                    "content": None,
+                }
+
+        for i in range(1, attempts + 1):
+            try:
+                resp_data = await _do_request()
+                status = resp_data["status"]
+                raw_bytes = resp_data.get("raw_bytes") or b""
 
                 body_bytes = len(raw_bytes)
-                gzipped = resp.headers.get("Content-Encoding", "").lower() == "gzip"
+                headers_map = resp_data.get("headers") or {}
+                gzipped = (headers_map.get("Content-Encoding", "") or "").lower() == "gzip"
                 log.info(
                     "[llm:%s] ← %s body-bytes=%d gzipped?=%s",
                     cid,
@@ -197,17 +309,20 @@ class OpenRouterClient(BaseLLMClient):
                     bool(gzipped),
                 )
 
-                text_body = raw_bytes.decode(resp.encoding or "utf-8", "replace") if raw_bytes else ""
-                body: Optional[dict] = None
-                if text_body:
-                    try:
-                        body = json.loads(text_body)
-                    except json.JSONDecodeError:
-                        preview = text_body[:1500]
-                        log.warning("[llm:%s] non-JSON response preview=%r", cid, preview)
-                        body = {"_raw_preview": preview}
-                else:
-                    body = {}
+                text_body = resp_data.get("text") or ""
+                body: Optional[dict] = resp_data.get("body")
+                if body is None:
+                    if text_body:
+                        try:
+                            body = json.loads(text_body)
+                        except json.JSONDecodeError:
+                            preview = text_body[:1500]
+                            log.warning("[llm:%s] non-JSON response preview=%r", cid, preview)
+                            body = {"_raw_preview": preview}
+                    else:
+                        body = {}
+                elif not isinstance(body, dict):
+                    body = {"_raw": body}
 
                 if status >= 400:
                     err_label = f"http_{status}"
@@ -232,9 +347,11 @@ class OpenRouterClient(BaseLLMClient):
 
                 # success path
                 choice = (body or {}).get("choices", [{}])[0] if isinstance(body, dict) else {}
-                content = (
-                    choice.get("message", {}) if isinstance(choice, dict) else {}
-                ).get("content", "")
+                content = resp_data.get("content")
+                if content is None:
+                    content = (
+                        choice.get("message", {}) if isinstance(choice, dict) else {}
+                    ).get("content", "")
                 finish_reason = choice.get("finish_reason") if isinstance(choice, dict) else None
                 usage = body.get("usage") if isinstance(body, dict) else None
                 response_id = body.get("id") if isinstance(body, dict) else None
@@ -329,43 +446,57 @@ async def call_openrouter_chat(
 
     timeout = httpx.Timeout(connect=20.0, read=360.0, write=60.0, pool=60.0)
     async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, headers=headers, json=payload)
+        want_stream = bool(payload.get("stream", True))
+        if want_stream:
+            async with client.stream("POST", url, headers=headers, json=payload) as response:
+                collected = await _consume_openai_stream(response)
+                text = collected.get("raw_text", "")
+                data = collected.get("body")
+                if not isinstance(data, dict):
+                    data = {} if data is None else {"_raw": data}
+                status = response.status_code
+        else:
+            response = await client.post(url, headers=headers, json=payload)
+            text = response.text
+            status = response.status_code
+            try:
+                data = response.json()
+            except Exception as exc:  # pragma: no cover - diagnostic path
+                snippet = text.lstrip()[:300]
+                log.error(
+                    "[llm:%s] JSON parse failed: %r\nFirst-non-ws: %r",
+                    rid,
+                    exc,
+                    snippet,
+                )
+                return {
+                    "ok": False,
+                    "http": status,
+                    "error": "llm_non_json",
+                    "raw": text,
+                }
 
-    text = response.text
     if debug_llm_io:
         log.info(
             "[llm:%s] <<< INBOUND OpenRouter raw response (status=%s):\n%s",
             rid,
-            response.status_code,
+            status,
             text,
         )
 
-    result: Dict[str, Any] = {"ok": True, "http": response.status_code}
-    if response.status_code >= 400:
+    result: Dict[str, Any] = {"ok": True, "http": status}
+    if status >= 400:
         result["ok"] = False
-
-    try:
-        data = response.json()
-    except Exception as exc:  # pragma: no cover - diagnostic path
-        snippet = text.lstrip()[:300]
-        log.error(
-            "[llm:%s] JSON parse failed: %r\nFirst-non-ws: %r",
-            rid,
-            exc,
-            snippet,
-        )
-        result.update({"error": "llm_non_json", "raw": text})
-        return result
+        result.setdefault("error", f"HTTP {status}")
 
     meta = {
-        "id": data.get("id"),
-        "model": data.get("model"),
-        "usage": data.get("usage"),
-        "finish_reason": (data.get("choices") or [{}])[0].get("finish_reason"),
+        "id": (data or {}).get("id") if isinstance(data, dict) else None,
+        "model": (data or {}).get("model") if isinstance(data, dict) else None,
+        "usage": (data or {}).get("usage") if isinstance(data, dict) else None,
+        "finish_reason": ((data or {}).get("choices") or [{}])[0].get("finish_reason")
+        if isinstance(data, dict)
+        else None,
     }
-
-    if not result["ok"] and "error" not in result:
-        result["error"] = f"HTTP {response.status_code}"
 
     log.info("[llm:%s] meta=%s", rid, json.dumps(meta, ensure_ascii=False))
 
