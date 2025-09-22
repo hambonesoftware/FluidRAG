@@ -19,6 +19,7 @@ from ..llm.clients.openrouter import call_openrouter_chat
 
 from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
+from ..persistence import get_pass_cache, save_pass_cache, get_preprocess_cache
 from ..state import get_state
 from ..utils.envsafe import env
 from ..utils.strings import s
@@ -91,6 +92,18 @@ PASS_FLAG_TO_NAME = {
 }
 
 
+PASS_FLAG_TO_NAME = {
+    "only_mechanical": "Mechanical",
+    "only_mech": "Mechanical",
+    "only_electrical": "Electrical",
+    "only_controls": "Controls",
+    "only_control": "Controls",
+    "only_software": "Software",
+    "only_pm": "Project Management",
+    "only_project_management": "Project Management",
+}
+
+
 
 def _snapshot(value: Any, limit: int = 3000) -> str:
     try:
@@ -111,19 +124,25 @@ def _ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
     if state.pre_chunks is not None and state.pre_chunks:
         chunks = [dict(chunk) for chunk in state.pre_chunks]
     else:
-        pdf_path = state.file_path
-        if not pdf_path or not os.path.exists(pdf_path):
-            uploads_dir = os.getenv("UPLOAD_FOLDER", "uploads")
-            pdf_path = os.path.join(uploads_dir, f"{session_id}.pdf")
-        sidecar_dir = os.path.join("sidecars", session_id)
-        chunks = [
-            dict(chunk)
-            for chunk in section_bounded_chunks_from_pdf(
-                pdf_path,
-                sidecar_dir=sidecar_dir,
-                session_id=session_id,
-            )
-        ]
+        cached_pre = get_preprocess_cache(getattr(state, "file_hash", None))
+        if cached_pre and cached_pre.get("chunks"):
+            cached_chunks = [dict(chunk) for chunk in cached_pre.get("chunks", [])]
+            state.pre_chunks = cached_chunks
+            chunks = cached_chunks
+        else:
+            pdf_path = state.file_path
+            if not pdf_path or not os.path.exists(pdf_path):
+                uploads_dir = os.getenv("UPLOAD_FOLDER", "uploads")
+                pdf_path = os.path.join(uploads_dir, f"{session_id}.pdf")
+            sidecar_dir = os.path.join("sidecars", session_id)
+            chunks = [
+                dict(chunk)
+                for chunk in section_bounded_chunks_from_pdf(
+                    pdf_path,
+                    sidecar_dir=sidecar_dir,
+                    session_id=session_id,
+                )
+            ]
 
     document_name = state.filename or "Document"
     for chunk in chunks:
@@ -186,15 +205,30 @@ def _format_chunk_for_prompt(chunk: Dict[str, Any], idx: int, total: int) -> str
 
 
 def _build_user_prompt(metadata: Dict[str, Any], group: Dict[str, Any], batch_index: int, batch_total: int) -> str:
+    if isinstance(group, dict):
+        raw_chunks = group.get("chunks") or []
+        if isinstance(raw_chunks, list):
+            chunks_list = raw_chunks
+        else:
+            try:
+                chunks_list = list(raw_chunks)
+            except TypeError:
+                chunks_list = []
+        token_estimate = group.get("token_estimate", 0)
+    else:
+        log.warning("[passes] unexpected chunk group type: %s", type(group).__name__)
+        chunks_list = []
+        token_estimate = 0
+
     chunk_texts = [
-        _format_chunk_for_prompt(chunk, idx, len(group["chunks"]))
-        for idx, chunk in enumerate(group["chunks"])
-        if s(chunk.get("text"))
+        _format_chunk_for_prompt(chunk, idx, len(chunks_list))
+        for idx, chunk in enumerate(chunks_list)
+        if isinstance(chunk, dict) and s(chunk.get("text"))
     ]
     document = metadata.get("document") or "Document"
     lines = [
         f"DOCUMENT_METADATA:\n- Document: {document}\n- Session: {metadata.get('session_id', '')}",
-        f"BATCH_INFO: batch {batch_index + 1} of {batch_total}; approx {group.get('token_estimate', 0)} tokens",
+        f"BATCH_INFO: batch {batch_index + 1} of {batch_total}; approx {token_estimate} tokens",
         "DOCUMENT_TEXT:",
         "\n\n".join(chunk_texts) if chunk_texts else "(no text)",
         "Return results exactly as instructed in the system prompt. Do not omit CSV or JSON sections.",
@@ -748,6 +782,9 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     pass_outputs: Dict[str, Any] = {}
 
 
+    file_hash = getattr(state, "file_hash", None)
+
+
     pass_items, unknown_passes = _resolve_pass_items(payload)
     if unknown_passes:
         log.warning(
@@ -765,8 +802,9 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "error": message,
         }
 
-    pass_items = list(PASS_PROMPTS.items())
 
+    pass_items = list(PASS_PROMPTS.items())
+    only_mechanical=True
     if only_mechanical:
         pass_items = [(name, prompt) for name, prompt in pass_items if name == "Mechanical"]
         if not pass_items:
@@ -777,21 +815,77 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             }
 
 
+
     requested_concurrency = _resolve_pass_concurrency(payload)
     if only_mechanical:
         requested_concurrency = 1
 
     pass_timeout = _resolve_pass_timeout(payload)
 
+    cached_pass_entries = get_pass_cache(file_hash) if file_hash else {}
+    runnable_passes: List[Tuple[str, str]] = []
+    cache_hits: List[str] = []
+    cache_misses: List[str] = []
+
+    for pass_name, system_prompt in pass_items:
+        cached_entry = (
+            cached_pass_entries.get(pass_name) if isinstance(cached_pass_entries, dict) else None
+        )
+        payload_preview = None
+        stored_at = None
+        if isinstance(cached_entry, dict):
+            payload_preview = cached_entry.get("payload")
+            stored_at = cached_entry.get("stored_at")
+        if isinstance(payload_preview, dict) and isinstance(payload_preview.get("items"), list):
+            cloned_items = [
+                dict(item)
+                for item in payload_preview.get("items", [])
+                if isinstance(item, dict)
+            ]
+            preview = {"items": cloned_items}
+            pass_outputs[pass_name] = preview
+            metrics[pass_name] = 0.0
+            cache_hits.append(pass_name)
+            debug_entry: Dict[str, Any] = {
+                "ok": True,
+                "pass": pass_name,
+                "batch": None,
+                "attempts": 0,
+                "req": req_id,
+                "source": "cache",
+                "model": model,
+                "provider": provider,
+            }
+            if stored_at:
+                debug_entry["cached_at"] = stored_at
+            llm_debug.append(debug_entry)
+            log.info(
+                "[passes %s] %s payload snapshot (cache): %s",
+                req_id,
+                pass_name,
+                _snapshot(preview),
+            )
+        else:
+            runnable_passes.append((pass_name, system_prompt))
+            cache_misses.append(pass_name)
+
     concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
     log.info(
         "[passes] req=%s session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
         req_id,
 
+
+    pending_count = len(runnable_passes)
+    concurrency_limit = max(1, min(requested_concurrency, pending_count if pending_count else 1))
+    log.info(
+        "[passes] req=%s session=%s provider=%s model=%s passes=%d (execute=%d cached=%d) groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
+        req_id,
         session_id,
         provider,
         model,
         len(pass_items),
+        pending_count,
+        len(cache_hits),
         len(groups),
         concurrency_limit,
         requested_concurrency,
@@ -846,6 +940,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     else:
         semaphore = asyncio.Semaphore(concurrency_limit)
 
+
+    tasks = [
+        asyncio.create_task(_bounded_execute(idx, pass_name, system_prompt))
+        for idx, (pass_name, system_prompt) in enumerate(runnable_passes)
+    ]
+
         async def _bounded_execute(index: int, pass_name: str, system_prompt: str):
             if PASS_STAGGER_SECONDS > 0 and index > 0:
                 delay = PASS_STAGGER_SECONDS * index
@@ -855,6 +955,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
                 await asyncio.sleep(delay)
             async with semaphore:
                 return await _execute_pass(pass_name, system_prompt)
+
 
         tasks = [
             asyncio.create_task(_bounded_execute(idx, pass_name, system_prompt))
@@ -866,21 +967,25 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
 
     for pass_name, _system_prompt in pass_items:
-        if pass_name not in results:
-            continue
-        pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
+        if pass_name in results:
+            pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
 
-        metrics[pass_name] = elapsed_ms
-        llm_debug.extend(debug_records)
-        all_errors.extend(pass_errors)
-        payload_preview = {"items": pass_rows}
-        pass_outputs[pass_name] = payload_preview
-        log.info(
-            "[passes %s] %s payload snapshot: %s",
-            req_id,
-            pass_name,
-            _snapshot(payload_preview),
-        )
+            metrics[pass_name] = elapsed_ms
+            llm_debug.extend(debug_records)
+            all_errors.extend(pass_errors)
+            payload_preview = {"items": pass_rows}
+            pass_outputs[pass_name] = payload_preview
+            log.info(
+                "[passes %s] %s payload snapshot: %s",
+                req_id,
+                pass_name,
+                _snapshot(payload_preview),
+            )
+            if not pass_errors:
+                save_pass_cache(file_hash, getattr(state, "filename", None), pass_name, payload_preview)
+        elif pass_name in pass_outputs:
+            # Already satisfied via cache; metrics populated earlier.
+            continue
 
     try:
         merged = merge_pass_outputs(pass_outputs, req_id=req_id)
@@ -912,6 +1017,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         "chunk_groups": len(groups),
         "chunk_count": len(chunks),
         "httpStatus": 200,
+    }
+
+    response["cache"] = {
+        "hits": cache_hits,
+        "misses": cache_misses,
+        "file_hash": file_hash,
+        "stored_passes": sorted(pass_outputs.keys()),
     }
 
     if debug_enabled:

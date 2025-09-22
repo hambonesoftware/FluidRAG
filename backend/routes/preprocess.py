@@ -4,6 +4,7 @@ from flask import Blueprint, request, jsonify, make_response
 import os
 
 from ..pipeline import preprocess as pp
+from ..persistence import get_preprocess_cache, save_preprocess_cache
 from ..state import get_state
 
 bp = Blueprint("preprocess", __name__)
@@ -27,6 +28,30 @@ def preprocess_route():
         if not pdf_path and session_id:
             pdf_path = os.path.join("uploads", f"{session_id}.pdf")
         sidecar_dir = os.path.join("sidecars", session_id) if session_id else None
+
+        state = get_state(session_id) if session_id else None
+        file_hash = getattr(state, "file_hash", None) if state else None
+
+        cached = get_preprocess_cache(file_hash)
+        if cached:
+            cached_chunks = [dict(chunk) for chunk in cached.get("chunks", [])]
+            if state is not None:
+                state.pre_chunks = cached_chunks
+            response_payload = dict(cached.get("response") or {})
+            response_payload.update(
+                {
+                    "ok": True,
+                    "httpStatus": 200,
+                    "pre_chunks": len(cached_chunks),
+                    "cache": {"hit": True, "section": "preprocess"},
+                    "from_cache": True,
+                }
+            )
+            response_payload.setdefault("pages", response_payload.get("pages") or 0)
+            response_payload.setdefault("chunks", response_payload.get("chunks") or len(cached_chunks))
+            response = jsonify(response_payload)
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            return response, 200
 
         # Try legacy loader first, else new extractor
         load_pages = getattr(pp, "load_document_to_text_pages", None)
@@ -104,10 +129,8 @@ def preprocess_route():
             key=lambda item: (item.get("page_start", 1), item.get("section_number", "")),
         )[:5]
 
-        if session_id:
-            state = get_state(session_id)
-            if state is not None:
-                state.pre_chunks = chunks
+        if state is not None:
+            state.pre_chunks = chunks
 
         resp = {
             "ok": True,
@@ -116,9 +139,16 @@ def preprocess_route():
             "chunks": len(chunks),
             "pre_chunks": len(chunks),
             "preview": preview_list,
+            "cache": {"hit": False, "section": "preprocess"},
         }
         response = jsonify(resp)
         response.headers["Access-Control-Allow-Origin"] = "*"
+
+        store_resp = dict(resp)
+        store_resp.pop("cache", None)
+        store_resp.pop("from_cache", None)
+        save_preprocess_cache(file_hash, getattr(state, "filename", None), store_resp, chunks)
+
         return response, 200
 
     except Exception as e:

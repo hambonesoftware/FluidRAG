@@ -13,6 +13,7 @@ import httpx
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.preprocess import extract_pages_with_layout, _sections_from_detected_headers
+from ..persistence import get_headers_cache, save_headers_cache
 from ..llm.errors import LLMAuthError
 from ..llm.factory import create_llm_client, provider_default_model
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
@@ -61,6 +62,25 @@ def determine_headers():
             uploads_dir = os.getenv("UPLOAD_FOLDER", "uploads")
             pdf_path = os.path.join(uploads_dir, f"{session_id}.pdf")
         sidecar_dir = os.path.join("sidecars", session_id) if session_id else None
+
+        session_state = get_state(session_id) if session_id else None
+        file_hash = getattr(session_state, "file_hash", None) if session_state else None
+
+        cached = get_headers_cache(file_hash)
+        if cached:
+            results = list(cached.get("results") or [])
+            if session_state is not None:
+                session_state.headers = results
+            response_payload = dict(cached.get("response") or {})
+            response_payload.update(
+                {
+                    "ok": True,
+                    "httpStatus": 200,
+                    "cache": {"hit": True, "section": "headers"},
+                    "from_cache": True,
+                }
+            )
+            return _json_ok(response_payload)
 
         layout = extract_pages_with_layout(pdf_path, sidecar_dir=sidecar_dir)
         pages_linear     = layout.get("pages_linear") or []
@@ -267,10 +287,8 @@ def determine_headers():
             sections_count += len(headers)
             results.append({"page": pi+1, "headers": headers})
 
-        if session_id:
-            session_state = get_state(session_id)
-            if session_state is not None:
-                session_state.headers = results
+        if session_state is not None:
+            session_state.headers = results
 
         preview = []
         detected_sections = _sections_from_detected_headers(pages_lines, results)
@@ -304,11 +322,12 @@ def determine_headers():
                 }
             )
 
-        return _json_ok({
+        response_payload = {
             "ok": True,
             "httpStatus": 200,
             "sections": sections_count,
             "preview": preview,
+            "cache": {"hit": False, "section": "headers"},
             "debug": {
                 "candidates": debug_candidates,  # first pages only to keep payload light
                 "adjudicated_pages": sorted(list(adjudicated.keys())),
@@ -318,6 +337,13 @@ def determine_headers():
                 "provider": provider,
                 "model": model,
             }
-        })
+        }
+
+        store_response = dict(response_payload)
+        store_response.pop("cache", None)
+        store_response.pop("from_cache", None)
+        save_headers_cache(file_hash, getattr(session_state, "filename", None), results, store_response)
+
+        return _json_ok(response_payload)
     except Exception as e:
         return _json_ok({"ok": False, "httpStatus": 500, "error": str(e)}, 500)
