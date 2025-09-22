@@ -5,10 +5,12 @@ import os
 import shutil
 import tempfile
 import logging
+import hashlib
 from flask import Blueprint, request, jsonify, make_response
 from werkzeug.utils import secure_filename
 
 from .. import config
+from ..persistence import load_document_cache
 from ..state import PipelineState, PIPELINE_STATES, new_session_id
 
 log = logging.getLogger("FluidRAG.api.upload")
@@ -53,9 +55,25 @@ def upload_file():
         tmp_path = os.path.join(tmpdir, filename)
         f.save(tmp_path)
 
+        def _sha256(path: str) -> str:
+            h = hashlib.sha256()
+            with open(path, "rb") as fh:
+                for chunk in iter(lambda: fh.read(8192), b""):
+                    if not chunk:
+                        break
+                    h.update(chunk)
+            return h.hexdigest()
+
+        file_hash = _sha256(tmp_path)
+
         # --- Allocate a session id and store PipelineState (as your original code does) ---
         session_id = new_session_id()
-        PIPELINE_STATES[session_id] = PipelineState(tmpdir=tmpdir, filename=filename, file_path=tmp_path)
+        PIPELINE_STATES[session_id] = PipelineState(
+            tmpdir=tmpdir,
+            filename=filename,
+            file_path=tmp_path,
+            file_hash=file_hash,
+        )
         log.debug("[upload] session=%s path=%s", session_id, tmp_path)
 
         # --- Normalize a stable path for downstream endpoints (/api/preprocess, headers, etc.) ---
@@ -73,6 +91,8 @@ def upload_file():
             norm_path = tmp_path
 
         # --- Response shape expected by the UI (uses 'session') ---
+        cache_payload = load_document_cache(file_hash)
+        cached_passes = sorted((cache_payload.get("passes") or {}).keys()) if isinstance(cache_payload, dict) else []
         payload = {
             "ok": True,
             "httpStatus": 200,
@@ -80,6 +100,12 @@ def upload_file():
             "session_id": session_id,       # keep for backward compatibility
             "filename": filename,
             "path": norm_path,              # deterministic path for subsequent calls
+            "file_hash": file_hash,
+            "cache": {
+                "preprocess": bool(cache_payload.get("preprocess")) if isinstance(cache_payload, dict) else False,
+                "headers": bool(cache_payload.get("headers")) if isinstance(cache_payload, dict) else False,
+                "passes": cached_passes,
+            },
         }
         resp = jsonify(payload)
         resp.headers["Access-Control-Allow-Origin"] = "*"

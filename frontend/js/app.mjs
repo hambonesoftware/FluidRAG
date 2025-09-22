@@ -10,13 +10,14 @@ const state = {
   sessionId: null,
   provider: null,
   model: null,
+  fileHash: null,
   hasPre: false,
   hasLocalHeaders: false,
   hasHeaders: false,
   localHeaders: [],
   rows: [],
-  localHeaders: [],
-  providers: {}
+  providers: {},
+  cacheInfo: {preprocess:false, headers:false, passes:[]}
 
 };
 
@@ -166,11 +167,13 @@ function updateModel(){
 }
 
 function resetAfterUpload(){
+  state.fileHash = null;
   state.hasPre = false;
   state.hasLocalHeaders = false;
   state.hasHeaders = false;
   state.localHeaders = [];
   state.rows = [];
+  state.cacheInfo = {preprocess:false, headers:false, passes:[]};
 
   const tableWrap = el("tableWrap");
   if(tableWrap) renderTable(tableWrap, []);
@@ -214,8 +217,53 @@ async function onUpload(){
     }
     state.sessionId = res.session_id;
     resetAfterUpload();
+    state.fileHash = res.file_hash || null;
+    state.cacheInfo = {
+      preprocess: Boolean(res.cache?.preprocess),
+      headers: Boolean(res.cache?.headers),
+      passes: Array.isArray(res.cache?.passes) ? res.cache.passes : []
+    };
     updateStatus("uploadStatus", `Uploaded ${res.filename}. Session ${state.sessionId.slice(0,8)}…`, "success");
     log(`Upload ok. session=${state.sessionId}`);
+
+    const cacheBits = [];
+    if(state.cacheInfo.preprocess) cacheBits.push("preprocess");
+    if(state.cacheInfo.headers) cacheBits.push("headers");
+    if(state.cacheInfo.passes.length) cacheBits.push(`passes(${state.cacheInfo.passes.join(", ")})`);
+    if(cacheBits.length){
+      log(`[Cache] Available: ${cacheBits.join(", ")}`);
+    }
+
+    const canAutoLoad = Boolean(state.provider && state.model);
+    if(state.cacheInfo.preprocess){
+      if(canAutoLoad){
+        updateStatus("preprocessStatus", "Loading cached pre-chunks…");
+        await onPreprocess();
+      }else{
+        updateStatus("preprocessStatus", "Pre-chunking cached — select provider/model to load.", "success");
+      }
+    }
+
+    if(state.cacheInfo.headers){
+      if(canAutoLoad && state.hasPre){
+        await onHeaders();
+      }else if(canAutoLoad && !state.cacheInfo.preprocess){
+        const headerStatus = el("headersStatus");
+        if(headerStatus) setStatus(headerStatus, "Headers cached — run preprocess, then header detection.", "success");
+      }else{
+        const headerStatus = el("headersStatus");
+        if(headerStatus) setStatus(headerStatus, "Headers cached — select provider/model to load.", "success");
+      }
+    }
+
+    if(state.cacheInfo.passes.length){
+      const processNode = el("processStatus");
+      if(processNode){
+        const cachedList = state.cacheInfo.passes.join(", ") || "cached";
+        setStatus(processNode, `Pass results cached for: ${cachedList}.`, "success");
+      }
+    }
+
     console.log("State after upload", {...state});
   }finally{
     end();
@@ -281,8 +329,14 @@ async function onPreprocess(){
       return;
     }
     state.hasPre = true;
-    updateStatus("preprocessStatus", `Pages=${res.pages}, pre-chunks=${res.pre_chunks}`, "success");
-    log(`Preprocess complete pages=${res.pages} chunks=${res.pre_chunks}`);
+    state.cacheInfo.preprocess = true;
+    const cacheTag = res.cache?.hit ? " [cached]" : "";
+    updateStatus("preprocessStatus", `Pages=${res.pages}, pre-chunks=${res.pre_chunks}${cacheTag}`, "success");
+    if(res.cache?.hit){
+      log("Preprocess complete via cache");
+    }else{
+      log(`Preprocess complete pages=${res.pages} chunks=${res.pre_chunks}`);
+    }
     console.log("State after preprocess", {...state});
   }finally{
     end();
@@ -356,13 +410,20 @@ async function onHeaders(){
       return;
     }
     state.hasHeaders = true;
+    state.cacheInfo.headers = true;
     const sections = Number(res.sections) || 0;
 
-    if(statusNode) setStatus(statusNode, `Sections detected: ${sections}`, "success");
+    const headerTag = res.cache?.hit ? " [cached]" : "";
+
+    if(statusNode) setStatus(statusNode, `Sections detected: ${sections}${headerTag}`, "success");
     const previewTarget = el("headersPreview");
     renderHeaderPreview(previewTarget, res.preview || []);
 
-    log(`Headers detected sections=${res.sections}`);
+    if(res.cache?.hit){
+      log("Headers loaded from cache");
+    }else{
+      log(`Headers detected sections=${res.sections}`);
+    }
     console.log("State after header detection", {...state});
   }finally{
     end();
@@ -398,7 +459,14 @@ async function onProcess(){
       return;
     }
     state.rows = res.rows || [];
-    updateStatus("processStatus", `Rows=${state.rows.length} • total=${res.metrics_ms?.total ?? "?"} ms`, "success");
+    const cacheMeta = res.cache || {};
+    const passHits = Array.isArray(cacheMeta.hits) ? cacheMeta.hits : [];
+    const passMisses = Array.isArray(cacheMeta.misses) ? cacheMeta.misses : [];
+    const passTag = passHits.length
+      ? (passMisses.length ? ` [cached: ${passHits.join(", ")}]` : " [cached]")
+      : "";
+    updateStatus("processStatus", `Rows=${state.rows.length} • total=${res.metrics_ms?.total ?? "?"} ms${passTag}`, "success");
+    state.cacheInfo.passes = Array.isArray(cacheMeta.stored_passes) ? cacheMeta.stored_passes : passHits;
     renderTable(el("tableWrap"), state.rows);
     if(res.csv_base64){
       const blob = b64ToBlob(res.csv_base64, "text/csv");
@@ -412,7 +480,11 @@ async function onProcess(){
       wrap.appendChild(link);
       wrap.classList.remove("hidden");
     }
-    log("Process complete");
+    if(passHits.length){
+      log(`Process complete (cache hits: ${passHits.join(", ")})`);
+    }else{
+      log("Process complete");
+    }
     console.log("State after process", {...state});
   }finally{
     end();
