@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Tuple
 
 from backend.llm.factory import provider_default_model
 from backend.persistence import get_pass_cache, save_pass_cache
-from backend.prompts import PASS_PROMPTS
 from backend.state import get_state
 from backend.utils.envsafe import env
 from backend.utils.strings import s
@@ -113,20 +112,18 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "error": message,
         }
 
-    pass_items = list(PASS_PROMPTS.items())
-    only_mechanical = True
-    if only_mechanical:
-        pass_items = [(name, prompt) for name, prompt in pass_items if name == "Mechanical"]
-        if not pass_items:
-            return {
-                "ok": False,
-                "httpStatus": 400,
-                "error": "Mechanical pass prompt not configured",
-            }
+    if pass_items and any(name == "Mechanical" for name, _prompt in pass_items):
+        first_mechanical = next(
+            (item for item in pass_items if item[0] == "Mechanical"),
+            None,
+        )
+        if first_mechanical is not None:
+            remaining = [item for item in pass_items if item[0] != "Mechanical"]
+            pass_items = [first_mechanical, *remaining]
+
+    pass_offsets = {name: idx for idx, (name, _prompt) in enumerate(pass_items)}
 
     requested_concurrency = resolve_pass_concurrency(payload)
-    if only_mechanical:
-        requested_concurrency = 1
 
     pass_timeout = resolve_pass_timeout(payload)
 
@@ -213,8 +210,16 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     total_start = time.perf_counter()
     results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
 
-    if only_mechanical:
-        for pass_name, system_prompt in pass_items:
+    if pending_count <= 1:
+        for index, (pass_name, system_prompt) in enumerate(runnable_passes):
+            position = pass_offsets.get(pass_name, index)
+            if PASS_STAGGER_SECONDS > 0 and position > 0:
+                delay = PASS_STAGGER_SECONDS * position
+                log.debug(
+                    "[passes] delaying pass=%s by %.1fs before submission", pass_name, delay
+                )
+                await asyncio.sleep(delay)
+
             start = time.perf_counter()
             pass_rows, debug_records, pass_csv_segments, pass_errors = await execute_pass(
                 pass_name,
@@ -241,8 +246,9 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         semaphore = asyncio.Semaphore(concurrency_limit)
 
         async def _bounded_execute(index: int, pass_name: str, system_prompt: str):
-            if PASS_STAGGER_SECONDS > 0 and index > 0:
-                delay = PASS_STAGGER_SECONDS * index
+            position = pass_offsets.get(pass_name, index)
+            if PASS_STAGGER_SECONDS > 0 and position > 0:
+                delay = PASS_STAGGER_SECONDS * position
                 log.debug(
                     "[passes] delaying pass=%s by %.1fs before submission", pass_name, delay
                 )
@@ -257,7 +263,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         for task in asyncio.as_completed(tasks):
             name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
-            results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
+            results[name] = (
+                pass_rows,
+                debug_records,
+                pass_csv_segments,
+                elapsed_ms,
+                pass_errors,
+            )
 
     for pass_name, _system_prompt in pass_items:
         if pass_name in results:
