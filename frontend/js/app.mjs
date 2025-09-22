@@ -14,7 +14,8 @@ import {
   onPreprocess,
   onHeaders,
   onLocalHeaders,
-  onProcess
+  onProcess,
+  onProcessRerunAll
 } from "./flows.mjs";
 
 async function boot() {
@@ -64,6 +65,8 @@ async function boot() {
   if (headersBtn) headersBtn.addEventListener("click", onHeaders);
   const processBtn = el("processBtn");
   if (processBtn) processBtn.addEventListener("click", onProcess);
+  const rerunBtn = el("processRerunBtn");
+  if (rerunBtn) rerunBtn.addEventListener("click", onProcessRerunAll);
 
   log("Boot complete");
 }

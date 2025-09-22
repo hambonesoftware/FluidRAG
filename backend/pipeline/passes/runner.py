@@ -17,7 +17,12 @@ from backend.utils.strings import s
 from ..merge import merge_pass_outputs
 
 from .chunking import build_groups, ensure_chunks
-from .config import resolve_pass_concurrency, resolve_pass_items, resolve_pass_timeout
+from .config import (
+    is_truthy_flag,
+    resolve_pass_concurrency,
+    resolve_pass_items,
+    resolve_pass_timeout,
+)
 from .constants import PASS_STAGGER_SECONDS
 from .executor import execute_pass
 from .responses import encode_rows_to_csv
@@ -112,6 +117,8 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "error": message,
         }
 
+    force_refresh = is_truthy_flag(payload.get("force_refresh"))
+
     if pass_items and any(name == "Mechanical" for name, _prompt in pass_items):
         first_mechanical = next(
             (item for item in pass_items if item[0] == "Mechanical"),
@@ -138,16 +145,22 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         )
         payload_preview = None
         stored_at = None
+        cached_items: List[Dict[str, Any]] = []
         if isinstance(cached_entry, dict):
             payload_preview = cached_entry.get("payload")
             stored_at = cached_entry.get("stored_at")
         if isinstance(payload_preview, dict) and isinstance(payload_preview.get("items"), list):
-            cloned_items = [
+            cached_items = [
                 dict(item)
                 for item in payload_preview.get("items", [])
                 if isinstance(item, dict)
             ]
-            preview = {"items": cloned_items}
+
+        has_cached_rows = bool(cached_items)
+        use_cache = has_cached_rows and not force_refresh
+
+        if use_cache:
+            preview = {"items": cached_items}
             pass_outputs[pass_name] = preview
             metrics[pass_name] = 0.0
             cache_hits.append(pass_name)
@@ -173,6 +186,14 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             runnable_passes.append((pass_name, system_prompt))
             cache_misses.append(pass_name)
+            if has_cached_rows and force_refresh:
+                log.info(
+                    "[passes %s] %s cache bypassed due to force_refresh", req_id, pass_name
+                )
+            elif isinstance(payload_preview, dict) and not has_cached_rows:
+                log.info(
+                    "[passes %s] %s cache entry ignored (no cached rows)", req_id, pass_name
+                )
 
     pending_count = len(runnable_passes)
     concurrency_limit = max(1, min(requested_concurrency, pending_count if pending_count else 1))
@@ -286,8 +307,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
                 pass_name,
                 _snapshot(payload_preview),
             )
-            if not pass_errors:
-                save_pass_cache(file_hash, getattr(state, "filename", None), pass_name, payload_preview)
+            if not pass_errors and pass_rows:
+                save_pass_cache(
+                    file_hash,
+                    getattr(state, "filename", None),
+                    pass_name,
+                    payload_preview,
+                )
         elif pass_name in pass_outputs:
             continue
 

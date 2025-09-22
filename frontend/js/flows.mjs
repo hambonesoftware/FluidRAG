@@ -338,7 +338,7 @@ export async function onHeaders() {
   }
 }
 
-export async function onProcess() {
+export async function onProcess(options = {}) {
   if (!requireSession()) return;
   if (!state.hasHeaders) {
     alert("Detect headers before running the passes.");
@@ -354,22 +354,33 @@ export async function onProcess() {
     return;
   }
   const providerName = providerLabel();
+  const forceRefresh = Boolean(options?.forceRefresh);
+  const requestedPasses = Array.isArray(options?.passes) && options.passes.length
+    ? options.passes
+    : undefined;
   const end = openGroup("[Flow] Pass processing", false);
   try {
     console.log("State before process", { ...state });
-    updateStatus("processStatus", `Running asynchronous passes via ${providerName}…`);
-    log(`Passes start via ${providerName}`);
+    const actionLabel = forceRefresh ? "Re-running" : "Running";
+    updateStatus("processStatus", `${actionLabel} asynchronous passes via ${providerName}…`);
+    log(forceRefresh ? `Passes rerun via ${providerName}` : `Passes start via ${providerName}`);
+    const requestPreview = {
+      session_id: state.sessionId,
+      model: state.model,
+      provider: state.provider,
+      only_mechanical: true,
+      debug: true,
+      debug_llm_io: true
+    };
+    if (forceRefresh) requestPreview.force_refresh = true;
+    if (requestedPasses) requestPreview.passes = requestedPasses;
     withGroup("[Flow] Pass processing → Request payload", () => {
-      console.log({
-        session_id: state.sessionId,
-        model: state.model,
-        provider: state.provider,
-        only_mechanical: true,
-        debug: true,
-        debug_llm_io: true
-      });
+      console.log(requestPreview);
     }, true);
-    const res = await processPasses(state.sessionId, state.model, state.provider);
+    const res = await processPasses(state.sessionId, state.model, state.provider, {
+      forceRefresh,
+      passes: requestedPasses
+    });
     withGroup(`[Flow] Pass processing → Raw response (${res.httpStatus ?? "?"})`, () => {
       console.log(res);
     }, true);
@@ -386,9 +397,10 @@ export async function onProcess() {
     const cacheMeta = res.cache || {};
     const passHits = Array.isArray(cacheMeta.hits) ? cacheMeta.hits : [];
     const passMisses = Array.isArray(cacheMeta.misses) ? cacheMeta.misses : [];
-    const passTag = passHits.length
-      ? (passMisses.length ? ` [cached: ${passHits.join(", ")}]` : " [cached]")
-      : "";
+    const passTagBits = [];
+    if (passHits.length) passTagBits.push(`cached: ${passHits.join(", ")}`);
+    if (passMisses.length) passTagBits.push(`LLM: ${passMisses.join(", ")}`);
+    const passTag = passTagBits.length ? ` [${passTagBits.join(" • ")}]` : "";
     updateStatus(
       "processStatus",
       `Rows=${state.rows.length} • total=${res.metrics_ms?.total ?? "?"} ms${passTag}`,
@@ -412,8 +424,8 @@ export async function onProcess() {
         wrap.classList.remove("hidden");
       }
     }
-    if (passHits.length) {
-      log(`Process complete (cache hits: ${passHits.join(", ")})`);
+    if (passTagBits.length) {
+      log(`Process complete (${passTagBits.join(" | ")})`);
     } else {
       log("Process complete");
     }
@@ -421,6 +433,10 @@ export async function onProcess() {
   } finally {
     end();
   }
+}
+
+export function onProcessRerunAll() {
+  return onProcess({ forceRefresh: true });
 }
 
 function b64ToBlob(b64, mime) {
