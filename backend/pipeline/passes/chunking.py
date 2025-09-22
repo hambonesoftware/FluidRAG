@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Iterable, List, Optional
 
-
 from backend.persistence import get_preprocess_cache
 from backend.state import get_state
 from backend.utils.strings import s

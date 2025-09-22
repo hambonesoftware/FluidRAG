@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-
 from backend.prompts import PASS_PROMPTS
 from backend.utils.envsafe import env
 from backend.utils.strings import s
