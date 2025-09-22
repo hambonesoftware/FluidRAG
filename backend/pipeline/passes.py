@@ -15,6 +15,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import httpx
 
 from ..llm.errors import LLMAuthError
+from ..llm.clients.openrouter import call_openrouter_chat
+
 from ..llm.factory import create_llm_client, provider_default_model
 from ..prompts import PASS_PROMPTS
 from ..persistence import get_pass_cache, save_pass_cache, get_preprocess_cache
@@ -68,6 +70,26 @@ DEFAULT_PASS_BACKOFF_MAX_MS = 4500
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
 
 PASS_STAGGER_SECONDS = 5.0
+
+ALL_PASSES = [
+    "Mechanical",
+    "Electrical",
+    "Controls",
+    "Software",
+    "Project Management",
+]
+
+
+PASS_FLAG_TO_NAME = {
+    "only_mechanical": "Mechanical",
+    "only_mech": "Mechanical",
+    "only_electrical": "Electrical",
+    "only_controls": "Controls",
+    "only_control": "Controls",
+    "only_software": "Software",
+    "only_pm": "Project Management",
+    "only_project_management": "Project Management",
+}
 
 
 PASS_FLAG_TO_NAME = {
@@ -383,6 +405,9 @@ async def _run_pass(
     model: str,
     metadata: Dict[str, Any],
     timeout_s: float,
+    *,
+    req_id: str,
+    debug_llm_io: bool,
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], List[Dict[str, Any]]]:
     client = create_llm_client(provider)
     pass_rows: List[Dict[str, str]] = []
@@ -390,7 +415,9 @@ async def _run_pass(
     errors: List[Dict[str, Any]] = []
     batch_debug: List[Dict[str, Any]] = []
 
-    req_id = uuid.uuid4().hex[:8]
+    base_req_id = s(req_id) or uuid.uuid4().hex[:8]
+    req_id = base_req_id
+
     temperature = _float_from_env("LLM_PASS_TEMPERATURE", DEFAULT_PASS_TEMPERATURE)
     max_tokens = _int_from_env("LLM_PASS_MAX_TOKENS", DEFAULT_PASS_MAX_TOKENS)
     max_attempts = max(1, _int_from_env("LLM_PASS_MAX_ATTEMPTS", DEFAULT_PASS_MAX_ATTEMPTS))
@@ -425,9 +452,26 @@ async def _run_pass(
         backoff_s = backoff_initial_s
         attempts_used = 0
         content: Optional[str] = None
+        response_meta: Optional[Dict[str, Any]] = None
+
+        messages: List[Dict[str, Any]] = []
+        if system_prompt is not None:
+            messages.append({"role": "system", "content": system_prompt or ""})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        }
+        if temperature is not None:
+            payload["temperature"] = float(temperature)
+        if max_tokens is not None:
+            payload["max_tokens"] = int(max_tokens)
 
         for attempt in range(1, max_attempts + 1):
             attempts_used = attempt
+
             try:
                 log.info(
                     "[passes] req=%s pass=%s batch=%d/%d attempt=%d",
@@ -437,17 +481,73 @@ async def _run_pass(
                     len(groups),
                     attempt,
                 )
-                content = await asyncio.wait_for(
-                    client.acomplete(
-                        model=model,
-                        system=system_prompt,
-                        user=prompt,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        extra={"stream": False},
-                    ),
-                    timeout=timeout_s,
-                )
+
+                if provider == "openrouter" and debug_llm_io:
+                    call_req_id = f"{req_id}:{pass_name}:{batch_index + 1}:{attempt}"
+                    call_result = await asyncio.wait_for(
+                        call_openrouter_chat(dict(payload), req_id=call_req_id, debug_llm_io=True),
+                        timeout=timeout_s,
+                    )
+                    if not call_result.get("ok", False):
+                        status = call_result.get("http")
+                        message = call_result.get("error") or "llm_call_failed"
+                        if status == 429 and attempt < max_attempts:
+                            await asyncio.sleep(backoff_s)
+                            backoff_s = min(backoff_s * backoff_factor, backoff_ceiling_s)
+                            continue
+                        log.error(
+                            "[passes] req=%s pass=%s batch=%d/%d attempt=%d error=%s http=%s",
+                            req_id,
+                            pass_name,
+                            batch_index + 1,
+                            len(groups),
+                            attempt,
+                            message,
+                            status,
+                        )
+                        errors.append(
+                            {
+                                "batch": batch_index,
+                                "error": message,
+                                "pass": pass_name,
+                                "model": model,
+                                "provider": provider,
+                                "req": req_id,
+                                "http": status,
+                            }
+                        )
+                        batch_debug.append(
+                            {
+                                "ok": False,
+                                "pass": pass_name,
+                                "batch": batch_index,
+                                "attempts": attempts_used,
+                                "error": message,
+                                "req": req_id,
+                                "http": status,
+                            }
+                        )
+                        fatal_error = True
+                        break
+                    data = call_result.get("data") or {}
+                    response_meta = call_result.get("meta")
+                    choices = data.get("choices") or []
+                    if choices:
+                        content = choices[0].get("message", {}).get("content")
+                    else:
+                        content = ""
+                else:
+                    content = await asyncio.wait_for(
+                        client.acomplete(
+                            model=model,
+                            system=system_prompt,
+                            user=prompt,
+                            temperature=temperature,
+                            max_tokens=max_tokens,
+                            extra={"stream": False},
+                        ),
+                        timeout=timeout_s,
+
                 break
             except asyncio.TimeoutError:
                 error_msg = f"timeout after {timeout_s:.1f}s"
@@ -588,16 +688,17 @@ async def _run_pass(
             pass_rows.extend(rows)
         if csv_block:
             csv_segments.append(csv_block)
-        batch_debug.append(
-            {
-                "ok": True,
-                "pass": pass_name,
-                "batch": batch_index,
-                "attempts": attempts_used,
-                "req": req_id,
-                "chunks": len(group.get("chunks", [])),
-            }
-        )
+        success_record = {
+            "ok": True,
+            "pass": pass_name,
+            "batch": batch_index,
+            "attempts": attempts_used,
+            "req": req_id,
+            "chunks": len(group.get("chunks", [])),
+        }
+        if response_meta is not None:
+            success_record["meta"] = response_meta
+
 
     debug_records = client.drain_debug_records()
     debug_records.extend(batch_debug)
@@ -637,7 +738,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not model:
         model = env("LLM_MODEL", "gpt-4o-mini") or "gpt-4o-mini"
 
-    req_id = s(payload.get("req_id")) or uuid.uuid4().hex[:8]
+    req_id = (
+        s(payload.get("_req_id"))
+        or s(payload.get("req_id"))
+        or uuid.uuid4().hex[:8]
+    )
+
 
 
     state = get_state(session_id)
@@ -666,14 +772,18 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     groups = _build_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
 
-    debug_enabled = bool(payload.get("debug") or payload.get("_debug"))
+
+    debug_llm_io = bool(payload.get("_debug_llm_io") or payload.get("debug_llm_io"))
+
 
     llm_debug: List[Dict[str, Any]] = []
     metrics: Dict[str, float] = {}
     all_errors: List[Dict[str, Any]] = []
     pass_outputs: Dict[str, Any] = {}
 
+
     file_hash = getattr(state, "file_hash", None)
+
 
     pass_items, unknown_passes = _resolve_pass_items(payload)
     if unknown_passes:
@@ -692,7 +802,24 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "error": message,
         }
 
+
+    pass_items = list(PASS_PROMPTS.items())
+    only_mechanical=True
+    if only_mechanical:
+        pass_items = [(name, prompt) for name, prompt in pass_items if name == "Mechanical"]
+        if not pass_items:
+            return {
+                "ok": False,
+                "httpStatus": 400,
+                "error": "Mechanical pass prompt not configured",
+            }
+
+
+
     requested_concurrency = _resolve_pass_concurrency(payload)
+    if only_mechanical:
+        requested_concurrency = 1
+
     pass_timeout = _resolve_pass_timeout(payload)
 
     cached_pass_entries = get_pass_cache(file_hash) if file_hash else {}
@@ -742,6 +869,12 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             runnable_passes.append((pass_name, system_prompt))
             cache_misses.append(pass_name)
 
+    concurrency_limit = max(1, min(requested_concurrency, len(pass_items)))
+    log.info(
+        "[passes] req=%s session=%s provider=%s model=%s passes=%d groups=%d concurrency=%d (requested=%d) timeout=%.1fs",
+        req_id,
+
+
     pending_count = len(runnable_passes)
     concurrency_limit = max(1, min(requested_concurrency, pending_count if pending_count else 1))
     log.info(
@@ -770,35 +903,68 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             model,
             metadata,
             pass_timeout,
+            req_id=req_id,
+            debug_llm_io=debug_llm_io,
         )
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
         return pass_name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors
 
 
     total_start = time.perf_counter()
+    results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
 
-    semaphore = asyncio.Semaphore(concurrency_limit)
-
-    async def _bounded_execute(index: int, pass_name: str, system_prompt: str):
-        if PASS_STAGGER_SECONDS > 0 and index > 0:
-            delay = PASS_STAGGER_SECONDS * index
-            log.debug(
-                "[passes] delaying pass=%s by %.1fs before submission", pass_name, delay
+    if only_mechanical:
+        for pass_name, system_prompt in pass_items:
+            start = time.perf_counter()
+            pass_rows, debug_records, pass_csv_segments, pass_errors = await _run_pass(
+                pass_name,
+                system_prompt,
+                groups,
+                provider,
+                model,
+                metadata,
+                pass_timeout,
+                req_id=req_id,
+                debug_llm_io=debug_llm_io,
             )
-            await asyncio.sleep(delay)
-        async with semaphore:
-            return await _execute_pass(pass_name, system_prompt)
+            elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
+            results[pass_name] = (
+                pass_rows,
+                debug_records,
+                pass_csv_segments,
+                elapsed_ms,
+                pass_errors,
+            )
+            if pass_errors:
+                break
+    else:
+        semaphore = asyncio.Semaphore(concurrency_limit)
+
 
     tasks = [
         asyncio.create_task(_bounded_execute(idx, pass_name, system_prompt))
         for idx, (pass_name, system_prompt) in enumerate(runnable_passes)
     ]
 
+        async def _bounded_execute(index: int, pass_name: str, system_prompt: str):
+            if PASS_STAGGER_SECONDS > 0 and index > 0:
+                delay = PASS_STAGGER_SECONDS * index
+                log.debug(
+                    "[passes] delaying pass=%s by %.1fs before submission", pass_name, delay
+                )
+                await asyncio.sleep(delay)
+            async with semaphore:
+                return await _execute_pass(pass_name, system_prompt)
 
-    results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
-    for task in asyncio.as_completed(tasks):
-        name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
-        results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
+
+        tasks = [
+            asyncio.create_task(_bounded_execute(idx, pass_name, system_prompt))
+            for idx, (pass_name, system_prompt) in enumerate(pass_items)
+        ]
+
+        for task in asyncio.as_completed(tasks):
+            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
+            results[name] = (pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors)
 
     for pass_name, _system_prompt in pass_items:
         if pass_name in results:
