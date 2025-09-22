@@ -226,7 +226,7 @@ def determine_headers():
                             chosen.append(int(it.get("line_idx")))
                         except Exception:
                             continue
-                    if pg >= 1 and chosen:
+                    if pg >= 1:
                         adjudicated[pg - 1] = chosen
 
             transport_debug = client.drain_debug_records()
@@ -240,7 +240,7 @@ def determine_headers():
         for pi, cands in enumerate(all_page_cands):
             chosen_idx = adjudicated.get(pi)
             headers = []
-            if chosen_idx:
+            if chosen_idx is not None:
                 # keep original order on page
                 for ci in cands:
                     if ci["line_idx"] in chosen_idx:
