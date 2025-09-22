@@ -4,9 +4,11 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Iterable, List, Optional
 
-from ..persistence import get_preprocess_cache
-from ..state import get_state
-from ..utils.strings import s
+
+from backend.persistence import get_preprocess_cache
+from backend.state import get_state
+from backend.utils.strings import s
+
 from ..fluid import fluid_refine_chunks  # type: ignore[import]
 from ..hep_cluster import hep_cluster_chunks  # type: ignore[import]
 from .constants import CHUNK_GROUP_TOKEN_LIMIT

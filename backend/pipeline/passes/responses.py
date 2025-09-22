@@ -5,7 +5,8 @@ import csv
 import io
 from typing import Dict, List, Optional, Tuple
 
-from ..utils.strings import s
+from backend.utils.strings import s
+
 from .constants import CSV_COLUMNS
 
 

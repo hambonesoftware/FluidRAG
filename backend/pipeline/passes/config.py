@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ..prompts import PASS_PROMPTS
-from ..utils.envsafe import env
-from ..utils.strings import s
+
+from backend.prompts import PASS_PROMPTS
+from backend.utils.envsafe import env
+from backend.utils.strings import s
+
 from .constants import (
     DEFAULT_PASS_BACKOFF_FACTOR,
     DEFAULT_PASS_BACKOFF_INITIAL_MS,

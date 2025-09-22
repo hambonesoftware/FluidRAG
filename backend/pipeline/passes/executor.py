@@ -8,10 +8,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
-from ..llm.clients.openrouter import call_openrouter_chat
-from ..llm.errors import LLMAuthError
-from ..llm.factory import create_llm_client
-from ..utils.strings import s
+
+from backend.llm.clients.openrouter import call_openrouter_chat
+from backend.llm.errors import LLMAuthError
+from backend.llm.factory import create_llm_client
+from backend.utils.strings import s
+
 from .chunking import build_user_prompt
 from .config import resolve_retry_config
 from .responses import parse_pass_response
