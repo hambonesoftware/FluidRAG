@@ -1,526 +1,38 @@
-import { getModels, uploadDocument, preprocessDocument, determineHeaders, determineLocalHeaders, processPasses, testLLM } from "./api.mjs";
+import { getModels } from "./api.mjs";
+import { renderTable } from "./ui.mjs";
+import {
+  state,
+  el,
+  refreshModelOptions,
+  updateProvider,
+  updateModel
+} from "./state.mjs";
+import { log } from "./logging.mjs";
+import {
+  onUpload,
+  handleTestLLM,
+  onPreprocess,
+  onHeaders,
+  onLocalHeaders,
+  onProcess
+} from "./flows.mjs";
 
-import { renderTable, renderHeaderPreview, renderLocalHeaders } from "./ui.mjs";
-
-
-
-const el = (id)=>document.getElementById(id);
-const state = {
-
-  sessionId: null,
-  provider: null,
-  model: null,
-  fileHash: null,
-  hasPre: false,
-  hasLocalHeaders: false,
-  hasHeaders: false,
-  localHeaders: [],
-  rows: [],
-  providers: {},
-  cacheInfo: {preprocess:false, headers:false, passes:[]}
-
-};
-
-const log = (msg)=>{
-  const pre = el("log");
-  if(!pre){
-    console.warn("[UI] Missing log element", {msg});
-    return;
-  }
-  const line = `[UI] ${new Date().toLocaleTimeString()} ${msg}`;
-  console.log(line);
-  pre.textContent += line + "\n";
-  pre.scrollTop = pre.scrollHeight;
-};
-
-
-function openGroup(label, collapsed=false){
-  if(collapsed) console.groupCollapsed(label);
-  else console.group(label);
-  return ()=>console.groupEnd();
-}
-
-function withGroup(label, fn, collapsed=false){
-  const end = openGroup(label, collapsed);
-  try{
-    fn();
-  }finally{
-    end();
-  }
-}
-
-function setStatus(node, message, tone){
-  node.textContent = message;
-  node.classList.remove("success","warn");
-  if(tone === "success") node.classList.add("success");
-  else if(tone === "warn") node.classList.add("warn");
-}
-
-function updateStatus(id, message, tone){
-  const node = el(id);
-  if(!node){
-    console.warn("[UI] Missing status element", {id, message});
-    return;
-  }
-  setStatus(node, message, tone);
-}
-
-
-function providerLabel(providerId = state.provider){
-  if(!providerId) return "provider";
-  const info = state.providers?.[providerId];
-  return info?.label || providerId;
-}
-
-function providerAuthHint(){
-  if(state.provider === "openrouter") return "set OPENROUTER_API_KEY";
-  if(state.provider === "llamacpp") return "ensure llama.cpp endpoint credentials are valid";
-  return "verify LLM credentials";
-}
-
-function refreshModelOptions(preferredModel = null){
-  const modelSel = el("model");
-  modelSel.innerHTML = "";
-  const providerId = state.provider;
-  const info = state.providers?.[providerId];
-  if(!info){
-    state.model = null;
-    console.warn("[State] Missing provider info; unable to populate models", {providerId});
-    return;
-  }
-  const models = Array.isArray(info.models) ? info.models : [];
-  models.forEach((m)=>{
-    const opt = document.createElement("option");
-    opt.value = m;
-    opt.textContent = m;
-    modelSel.appendChild(opt);
-  });
-  let selected = null;
-  if(preferredModel && models.includes(preferredModel)){
-    selected = preferredModel;
-  }else if(info.default_model && models.includes(info.default_model)){
-    selected = info.default_model;
-  }else if(models.length > 0){
-    selected = models[0];
-  }
-  if(selected){
-    modelSel.value = selected;
-    state.model = selected;
-  }else{
-    state.model = null;
-  }
-
-  console.debug("[State] Model options updated", {provider: providerId, model: state.model});
-}
-
-function updateProvider(){
-  const providerSel = el("provider");
-  const newProvider = providerSel.value;
-  if(!newProvider) return;
-  if(!state.providers?.[newProvider]){
-    console.warn("[State] Unknown provider selected", {newProvider});
-    return;
-  }
-  state.provider = newProvider;
-  console.debug("[State] Provider updated", {provider: state.provider});
-  refreshModelOptions();
-  updateModel();
-}
-
-function dumpLLMDebug(debug){
-  if(!Array.isArray(debug) || debug.length === 0){
-    console.debug("[LLM] No debug entries to display");
-    return;
-  }
-  debug.forEach((entry, idx)=>{
-    const label = entry?.model || `LLM ${idx+1}`;
-    withGroup(`[LLM Debug] Entry ${idx+1}: ${label}`, ()=>{
-      withGroup("Request", ()=>{
-        if(entry?.request?.curl){
-          console.log(entry.request.curl);
-        }
-        console.log(entry?.request || {});
-      }, true);
-      withGroup("Response", ()=>{
-        console.log(entry?.response || {});
-      }, true);
-      if(entry?.error){
-        console.warn("Error", entry.error);
-      }
-    }, true);
-  });
-}
-
-function requireSession(){
-  if(!state.sessionId){
-    console.warn("[Guard] Session required but missing", {state});
-    alert("Upload a document first.");
-    return false;
-  }
-  return true;
-}
-
-function updateModel(){
-  const modelSel = el("model");
-  state.model = modelSel.value || null;
-  console.debug("[State] Model updated", {provider: state.provider, model: state.model});
-}
-
-function resetAfterUpload(){
-  state.fileHash = null;
-  state.hasPre = false;
-  state.hasLocalHeaders = false;
-  state.hasHeaders = false;
-  state.localHeaders = [];
-  state.rows = [];
-  state.cacheInfo = {preprocess:false, headers:false, passes:[]};
-
-  const tableWrap = el("tableWrap");
-  if(tableWrap) renderTable(tableWrap, []);
-  const downloadWrap = el("downloadWrap");
-  if(downloadWrap) downloadWrap.classList.add("hidden");
-  const headersPreview = el("headersPreview");
-  if(headersPreview) headersPreview.innerHTML = "";
-
-  const preStatus = el("preprocessStatus");
-  if(preStatus) setStatus(preStatus, "Pre-chunking pending…");
-  const headerStatus = el("headersStatus");
-  if(headerStatus) setStatus(headerStatus, "Header detection pending…");
-  const processStatus = el("processStatus");
-  if(processStatus) setStatus(processStatus, "Processing not started.");
-
-}
-
-async function onUpload(){
-  updateModel();
-  const end = openGroup("[Flow] Upload", false);
-  try{
-    const file = el("file").files[0];
-    if(!file){
-      console.warn("[Flow] Upload aborted: no file selected");
-      alert("Choose a .pdf, .docx, or .txt file first.");
-      return;
-    }
-    console.log("Selected file", {name:file.name, size:file.size, type:file.type});
-    console.log("State before upload", {...state});
-    updateStatus("uploadStatus", `Uploading ${file.name}…`);
-    log(`Uploading ${file.name}`);
-    const res = await uploadDocument(file);
-    withGroup("[Flow] Upload → API response", ()=>{
-      console.log(res);
-    }, true);
-    if(!res.ok){
-      const msg = res.error || "Upload failed";
-      updateStatus("uploadStatus", `Upload error: ${msg}`, "warn");
-      log(`Upload error: ${msg}`);
-      return;
-    }
-    state.sessionId = res.session_id;
-    resetAfterUpload();
-    state.fileHash = res.file_hash || null;
-    state.cacheInfo = {
-      preprocess: Boolean(res.cache?.preprocess),
-      headers: Boolean(res.cache?.headers),
-      passes: Array.isArray(res.cache?.passes) ? res.cache.passes : []
-    };
-    updateStatus("uploadStatus", `Uploaded ${res.filename}. Session ${state.sessionId.slice(0,8)}…`, "success");
-    log(`Upload ok. session=${state.sessionId}`);
-
-    const cacheBits = [];
-    if(state.cacheInfo.preprocess) cacheBits.push("preprocess");
-    if(state.cacheInfo.headers) cacheBits.push("headers");
-    if(state.cacheInfo.passes.length) cacheBits.push(`passes(${state.cacheInfo.passes.join(", ")})`);
-    if(cacheBits.length){
-      log(`[Cache] Available: ${cacheBits.join(", ")}`);
-    }
-
-    const canAutoLoad = Boolean(state.provider && state.model);
-    if(state.cacheInfo.preprocess){
-      if(canAutoLoad){
-        updateStatus("preprocessStatus", "Loading cached pre-chunks…");
-        await onPreprocess();
-      }else{
-        updateStatus("preprocessStatus", "Pre-chunking cached — select provider/model to load.", "success");
-      }
-    }
-
-    if(state.cacheInfo.headers){
-      if(canAutoLoad && state.hasPre){
-        await onHeaders();
-      }else if(canAutoLoad && !state.cacheInfo.preprocess){
-        const headerStatus = el("headersStatus");
-        if(headerStatus) setStatus(headerStatus, "Headers cached — run preprocess, then header detection.", "success");
-      }else{
-        const headerStatus = el("headersStatus");
-        if(headerStatus) setStatus(headerStatus, "Headers cached — select provider/model to load.", "success");
-      }
-    }
-
-    if(state.cacheInfo.passes.length){
-      const processNode = el("processStatus");
-      if(processNode){
-        const cachedList = state.cacheInfo.passes.join(", ") || "cached";
-        setStatus(processNode, `Pass results cached for: ${cachedList}.`, "success");
-      }
-    }
-
-    console.log("State after upload", {...state});
-  }finally{
-    end();
-  }
-}
-
-async function handleTestLLM(){
-  updateModel();
-  if(!state.provider){ alert("Select an LLM provider first."); return; }
-  if(!state.model){
-    alert("Select a model first.");
-    return;
-  }
-  const providerName = providerLabel();
-  const end = openGroup("[Flow] Test LLM", false);
-  try{
-    console.log("State before test", {...state});
-    log(`Testing ${providerName} connectivity via ${state.model}`);
-    withGroup("[Flow] Test LLM → Request payload", ()=>{
-      console.log({model: state.model, provider: state.provider});
-    }, true);
-    const res = await testLLM(state.model, state.provider);
-    withGroup(`[Flow] Test LLM → Raw response (${res.httpStatus ?? "?"})`, ()=>{
-      console.log(res);
-    }, true);
-    dumpLLMDebug(res.llm_debug);
-    if(!res.ok){
-      let msg = res.error || "LLM test failed";
-      if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
-      if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
-      updateStatus("uploadStatus", msg, "warn");
-      log(`LLM test error: ${msg}`);
-      return;
-    }
-    updateStatus("uploadStatus", `LLM connectivity confirmed (${providerName}): ${res.response?.status || "ok"}`, "success");
-    log(`LLM test succeeded via ${providerName}`);
-  }finally{
-    end();
-  }
-}
-
-async function onPreprocess(){
-  if(!requireSession()) return;
-  updateModel();
-  if(!state.provider){ alert("Select an LLM provider first."); return; }
-  if(!state.model){ alert("Select a model first."); return; }
-  const end = openGroup("[Flow] Preprocess", false);
-  try{
-    console.log("State before preprocess", {...state});
-    updateStatus("preprocessStatus", "Running standard chunking…");
-    log("Preprocess start");
-    withGroup("[Flow] Preprocess → Request payload", ()=>{
-      console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
-    }, true);
-    const res = await preprocessDocument(state.sessionId, state.model, state.provider);
-    withGroup(`[Flow] Preprocess → Raw response (${res.httpStatus ?? "?"})`, ()=>{
-      console.log(res);
-    }, true);
-    if(!res.ok){
-      const msg = res.error || "Preprocess failed";
-      updateStatus("preprocessStatus", msg, "warn");
-      log(`Preprocess error: ${msg}`);
-      return;
-    }
-    state.hasPre = true;
-    state.cacheInfo.preprocess = true;
-    const cacheTag = res.cache?.hit ? " [cached]" : "";
-    updateStatus("preprocessStatus", `Pages=${res.pages}, pre-chunks=${res.pre_chunks}${cacheTag}`, "success");
-    if(res.cache?.hit){
-      log("Preprocess complete via cache");
-    }else{
-      log(`Preprocess complete pages=${res.pages} chunks=${res.pre_chunks}`);
-    }
-    console.log("State after preprocess", {...state});
-  }finally{
-    end();
-  }
-}
-
-async function onLocalHeaders(){
-  if(!requireSession()) return;
-  const end = openGroup("[Flow] Local header detection", false);
-  try{
-    const statusNode = el("headersStatus");
-    if(statusNode) setStatus(statusNode, "Detecting headers via local heuristics…");
-    log("Local header detection start");
-    withGroup("[Flow] Local headers → Request payload", ()=>{
-      console.log({session_id: state.sessionId});
-    }, true);
-    const res = await determineLocalHeaders(state.sessionId);
-    withGroup(`[Flow] Local headers → Raw response (${res.httpStatus ?? "?"})`, ()=>{
-      console.log(res);
-    }, true);
-    if(!res.ok){
-      const msg = res.error || "Local header detection failed";
-      if(statusNode) setStatus(statusNode, msg, "warn");
-      log(`Local headers error: ${msg}`);
-      return;
-    }
-    state.localHeaders = Array.isArray(res.headers) ? res.headers : [];
-    const count = state.localHeaders.length;
-    log(`Local headers detected count=${count}`);
-    if(statusNode) setStatus(statusNode, `Local heuristics detected ${count} candidate${count === 1 ? "" : "s"}.`);
-    const previewTarget = el("headersLocalPreview");
-    renderLocalHeaders(previewTarget, state.localHeaders);
-  }finally{
-    end();
-  }
-}
-
-async function onHeaders(){
-  if(!requireSession()) return;
-  if(!state.hasPre){ alert("Run preprocess before header detection."); return; }
-  updateModel();
-  if(!state.provider){ alert("Select an LLM provider first."); return; }
-  if(!state.model){ alert("Select a model first."); return; }
-  const providerName = providerLabel();
-  const end = openGroup("[Flow] Header detection", false);
-  try{
-    console.log("State before header detection", {...state});
-
-    const statusNode = el("headersStatus");
-    if(statusNode){
-      setStatus(statusNode, `Contacting ${providerName}…`);
-    }
-
-    withGroup("[Flow] Header detection → Request payload", ()=>{
-      console.log({session_id: state.sessionId, model: state.model, provider: state.provider});
-    }, true);
-    log(`Header detection start via ${providerName}`);
-    const res = await determineHeaders(state.sessionId, state.model, state.provider);
-    withGroup(`[Flow] Header detection → Raw response (${res.httpStatus ?? "?"})`, ()=>{
-      console.log(res);
-    }, true);
-    dumpLLMDebug(res.llm_debug);
-    if(!res.ok){
-      let msg = res.error || "Header detection failed";
-      if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
-      if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
-
-      if(statusNode) setStatus(statusNode, msg, "warn");
-      log(`Headers error: ${msg}`);
-
-      return;
-    }
-    state.hasHeaders = true;
-    state.cacheInfo.headers = true;
-    const sections = Number(res.sections) || 0;
-
-    const headerTag = res.cache?.hit ? " [cached]" : "";
-
-    if(statusNode) setStatus(statusNode, `Sections detected: ${sections}${headerTag}`, "success");
-    const previewTarget = el("headersPreview");
-    renderHeaderPreview(previewTarget, res.preview || []);
-
-    if(res.cache?.hit){
-      log("Headers loaded from cache");
-    }else{
-      log(`Headers detected sections=${res.sections}`);
-    }
-    console.log("State after header detection", {...state});
-  }finally{
-    end();
-  }
-}
-
-async function onProcess(){
-  if(!requireSession()) return;
-  if(!state.hasHeaders){ alert("Detect headers before running the passes."); return; }
-  updateModel();
-  if(!state.provider){ alert("Select an LLM provider first."); return; }
-  if(!state.model){ alert("Select a model first."); return; }
-  const providerName = providerLabel();
-  const end = openGroup("[Flow] Pass processing", false);
-  try{
-    console.log("State before process", {...state});
-    updateStatus("processStatus", `Running asynchronous passes via ${providerName}…`);
-    log(`Passes start via ${providerName}`);
-    withGroup("[Flow] Pass processing → Request payload", ()=>{
-      console.log({
-        session_id: state.sessionId,
-        model: state.model,
-        provider: state.provider,
-        only_mechanical: true,
-        debug: true,
-        debug_llm_io: true
-      });
-    }, true);
-    const res = await processPasses(state.sessionId, state.model, state.provider);
-    withGroup(`[Flow] Pass processing → Raw response (${res.httpStatus ?? "?"})`, ()=>{
-      console.log(res);
-    }, true);
-    dumpLLMDebug(res.llm_debug);
-    if(!res.ok){
-      let msg = res.error || "Process failed";
-      if(res.needs_api_key) msg += ` — ${providerAuthHint()}`;
-      if(res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
-      updateStatus("processStatus", msg, "warn");
-      log(`Process error: ${msg}`);
-      return;
-    }
-    state.rows = res.rows || [];
-    const cacheMeta = res.cache || {};
-    const passHits = Array.isArray(cacheMeta.hits) ? cacheMeta.hits : [];
-    const passMisses = Array.isArray(cacheMeta.misses) ? cacheMeta.misses : [];
-    const passTag = passHits.length
-      ? (passMisses.length ? ` [cached: ${passHits.join(", ")}]` : " [cached]")
-      : "";
-    updateStatus("processStatus", `Rows=${state.rows.length} • total=${res.metrics_ms?.total ?? "?"} ms${passTag}`, "success");
-    state.cacheInfo.passes = Array.isArray(cacheMeta.stored_passes) ? cacheMeta.stored_passes : passHits;
-    renderTable(el("tableWrap"), state.rows);
-    if(res.csv_base64){
-      const blob = b64ToBlob(res.csv_base64, "text/csv");
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = res.filename || "FluidRAG_results.csv";
-      link.textContent = "Download CSV";
-      const wrap = el("downloadWrap");
-      wrap.innerHTML = "";
-      wrap.appendChild(link);
-      wrap.classList.remove("hidden");
-    }
-    if(passHits.length){
-      log(`Process complete (cache hits: ${passHits.join(", ")})`);
-    }else{
-      log("Process complete");
-    }
-    console.log("State after process", {...state});
-  }finally{
-    end();
-  }
-
-}
-
-function b64ToBlob(b64, mime){
-  const b = atob(b64);
-  const arr = new Uint8Array(b.length);
-  for(let i=0;i<b.length;i++) arr[i] = b.charCodeAt(i);
-  return new Blob([arr], {type: mime});
-}
-
-async function boot(){
+async function boot() {
   log("Boot start");
   const tableWrap = el("tableWrap");
-  if(tableWrap) renderTable(tableWrap, []);
+  if (tableWrap) renderTable(tableWrap, []);
   const providerSel = el("provider");
   const modelSel = el("model");
-  if(!providerSel || !modelSel){
+  if (!providerSel || !modelSel) {
     console.error("[UI] Missing provider/model select elements");
     return;
   }
+
   const models = await getModels();
-  if(models.ok && models.providers){
+  if (models.ok && models.providers) {
     state.providers = models.providers;
     const entries = Object.entries(state.providers);
-    entries.forEach(([id, info])=>{
+    entries.forEach(([id, info]) => {
       const opt = document.createElement("option");
       opt.value = id;
       opt.textContent = info?.label || id;
@@ -529,27 +41,29 @@ async function boot(){
     const defaultProvider = (models.default_provider && state.providers[models.default_provider])
       ? models.default_provider
       : (entries.length ? entries[0][0] : null);
-    if(defaultProvider){
+    if (defaultProvider) {
       state.provider = defaultProvider;
       providerSel.value = defaultProvider;
       refreshModelOptions(state.providers[defaultProvider]?.default_model);
       updateModel();
     }
   }
+
   providerSel.addEventListener("change", updateProvider);
   modelSel.addEventListener("change", updateModel);
+
   const uploadBtn = el("uploadBtn");
-  if(uploadBtn) uploadBtn.addEventListener("click", onUpload);
+  if (uploadBtn) uploadBtn.addEventListener("click", onUpload);
   const testBtn = el("testBtn");
-  if(testBtn) testBtn.addEventListener("click", handleTestLLM);
-
-
+  if (testBtn) testBtn.addEventListener("click", handleTestLLM);
   const preprocessBtn = el("preprocessBtn");
-  if(preprocessBtn) preprocessBtn.addEventListener("click", onPreprocess);
+  if (preprocessBtn) preprocessBtn.addEventListener("click", onPreprocess);
+  const localHeadersBtn = el("localHeadersBtn");
+  if (localHeadersBtn) localHeadersBtn.addEventListener("click", onLocalHeaders);
   const headersBtn = el("headersBtn");
-  if(headersBtn) headersBtn.addEventListener("click", onHeaders);
+  if (headersBtn) headersBtn.addEventListener("click", onHeaders);
   const processBtn = el("processBtn");
-  if(processBtn) processBtn.addEventListener("click", onProcess);
+  if (processBtn) processBtn.addEventListener("click", onProcess);
 
   log("Boot complete");
 }
