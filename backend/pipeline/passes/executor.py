@@ -80,7 +80,7 @@ async def execute_pass(
         payload = {
             "model": model,
             "messages": messages,
-            "stream": False,
+            "stream": True,
         }
         if temperature is not None:
             payload["temperature"] = float(temperature)
@@ -162,7 +162,7 @@ async def execute_pass(
                             user=prompt,
                             temperature=temperature,
                             max_tokens=max_tokens,
-                            extra={"stream": False},
+                            extra={"stream": True},
                         ),
                         timeout=timeout_s,
                     )

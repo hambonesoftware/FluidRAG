@@ -160,7 +160,7 @@ def determine_headers():
                                 user=payload_text,
                                 temperature=temperature,
                                 max_tokens=120_000,
-                                extra={"stream": False},
+                                extra={"stream": True},
                             ),
                             timeout=timeout_s,
                         )

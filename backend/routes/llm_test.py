@@ -46,7 +46,7 @@ def llm_test():
                         user=message,
                         temperature=0.0,
                         max_tokens=128,
-                        extra={"stream": False},
+                        extra={"stream": True},
                     ),
                     timeout=45.0,
                 )
