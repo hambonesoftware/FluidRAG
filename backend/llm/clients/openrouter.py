@@ -22,6 +22,7 @@ from ..utils import (
     DEFAULT_APP_TITLE,
     DEFAULT_REFERER,
 )
+from ...utils.envsafe import openrouter_headers
 from .base import BaseLLMClient
 
 log = logging.getLogger("FluidRAG.llm.openrouter")
@@ -304,3 +305,71 @@ class OpenRouterClient(BaseLLMClient):
         # Should never hit here because we either returned or raised
         _finish(0, None, None, "unexpected_fallthrough")
         raise RuntimeError("OpenRouterClient: unexpected fallthrough in retry loop")
+
+
+async def call_openrouter_chat(
+    payload: Dict[str, Any], *, req_id: str, debug_llm_io: bool
+) -> Dict[str, Any]:
+    """Execute a chat completion with optional full payload/response logging."""
+
+    rid = (req_id or "-").strip() or "-"
+    headers = openrouter_headers()
+    url = OPENROUTER_URL
+
+    if debug_llm_io:
+        try:
+            safe_payload = json.loads(json.dumps(payload, ensure_ascii=False))
+        except Exception:
+            safe_payload = payload
+        log.info(
+            "[llm:%s] >>> OUTBOUND OpenRouter payload:\n%s",
+            rid,
+            json.dumps(safe_payload, ensure_ascii=False, indent=2),
+        )
+
+    timeout = httpx.Timeout(connect=20.0, read=360.0, write=60.0, pool=60.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(url, headers=headers, json=payload)
+
+    text = response.text
+    if debug_llm_io:
+        log.info(
+            "[llm:%s] <<< INBOUND OpenRouter raw response (status=%s):\n%s",
+            rid,
+            response.status_code,
+            text,
+        )
+
+    result: Dict[str, Any] = {"ok": True, "http": response.status_code}
+    if response.status_code >= 400:
+        result["ok"] = False
+
+    try:
+        data = response.json()
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        snippet = text.lstrip()[:300]
+        log.error(
+            "[llm:%s] JSON parse failed: %r\nFirst-non-ws: %r",
+            rid,
+            exc,
+            snippet,
+        )
+        result.update({"error": "llm_non_json", "raw": text})
+        return result
+
+    meta = {
+        "id": data.get("id"),
+        "model": data.get("model"),
+        "usage": data.get("usage"),
+        "finish_reason": (data.get("choices") or [{}])[0].get("finish_reason"),
+    }
+
+    if not result["ok"] and "error" not in result:
+        result["error"] = f"HTTP {response.status_code}"
+
+    log.info("[llm:%s] meta=%s", rid, json.dumps(meta, ensure_ascii=False))
+
+    result["data"] = data
+    result["meta"] = meta
+    result["raw"] = text
+    return result
