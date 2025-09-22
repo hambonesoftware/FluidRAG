@@ -55,7 +55,17 @@ async function safeFetch(url, options){
     return data;
   }catch(err){
     console.error(`[API] ${url} error`, err);
-    return {ok:false, error:String(err)};
+    const message = (() => {
+      if(err instanceof TypeError){
+        const text = String(err?.message || err);
+        if(text.toLowerCase().includes("failed to fetch")){
+          return "Network error: unable to reach the FluidRAG backend. Confirm the server is running and accessible.";
+        }
+        return text;
+      }
+      return String(err);
+    })();
+    return {ok:false, error:message, httpStatus:0, networkError:true};
   }
 }
 
@@ -94,18 +104,25 @@ export async function determineLocalHeaders(sessionId){
   });
 }
 
-export async function processPasses(sessionId, model, provider){
+export async function processPasses(sessionId, model, provider, options={}){
+  const payload = {
+    session_id:sessionId,
+    model,
+    provider,
+    only_mechanical:true,
+    debug:true,
+    debug_llm_io:true
+  };
+  if(options && options.forceRefresh){
+    payload.force_refresh = true;
+  }
+  if(options && options.passes){
+    payload.passes = options.passes;
+  }
   return safeFetch("/api/process", {
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      session_id:sessionId,
-      model,
-      provider,
-      only_mechanical:true,
-      debug:true,
-      debug_llm_io:true
-    })
+    body:JSON.stringify(payload)
   });
 }
 

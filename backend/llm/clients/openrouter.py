@@ -28,22 +28,42 @@ from .base import BaseLLMClient
 log = logging.getLogger("FluidRAG.llm.openrouter")
 
 
-async def _consume_openai_stream(resp: httpx.Response) -> Dict[str, Any]:
+async def _consume_openai_stream(
+    resp: httpx.Response, *, idle_timeout: float = 120.0
+) -> Dict[str, Any]:
     """Aggregate an OpenAI-compatible streaming response into final content."""
 
-    raw_lines = []
+    resp.raise_for_status()
+
+    raw_lines: list[str] = []
     content_parts: list[str] = []
     last_event: Optional[dict] = None
     finish_reason: Optional[str] = None
     role: Optional[str] = None
     usage: Optional[dict] = None
 
-    async for line in resp.aiter_lines():
+    stream_iter = resp.aiter_lines()
+
+    while True:
+        try:
+            line = await asyncio.wait_for(stream_iter.__anext__(), timeout=idle_timeout)
+        except StopAsyncIteration:
+            break
+        except asyncio.TimeoutError:
+            raise TimeoutError("No stream data received within idle timeout") from None
+
         if line is None:
             continue
+
         if line:
             raw_lines.append(line)
+
+        if not line or line.startswith(":"):
+            # keep-alive / heartbeat comment
+            continue
+
         if not line.startswith("data:"):
+            log.debug("[llm:stream] non-data line: %r", line[:160])
             continue
 
         data = line[5:].strip()
@@ -55,7 +75,7 @@ async def _consume_openai_stream(resp: httpx.Response) -> Dict[str, Any]:
         try:
             event = json.loads(data)
         except json.JSONDecodeError:
-            log.debug("[llm:stream] non-JSON event: %r", data[:120])
+            log.debug("[llm:stream] non-JSON event: %r", data[:160])
             continue
 
         if not isinstance(event, dict):
