@@ -132,6 +132,19 @@ def get_headers_cache(file_hash: Optional[str]) -> Optional[Dict[str, Any]]:
     return None
 
 
+def clear_headers_cache(file_hash: Optional[str]) -> None:
+    if not file_hash:
+        return
+    payload = _load_payload(file_hash)
+    if not isinstance(payload, dict):
+        return
+    if "headers" not in payload:
+        return
+    payload.pop("headers", None)
+    filename = payload.get("filename")
+    _write_payload(file_hash, payload, filename)
+
+
 def save_pass_cache(
     file_hash: Optional[str],
     filename: Optional[str],

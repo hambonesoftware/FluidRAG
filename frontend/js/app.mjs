@@ -13,6 +13,7 @@ import {
   handleTestLLM,
   onPreprocess,
   onHeaders,
+  onHeadersRerun,
   onLocalHeaders,
   onProcess,
   onProcessRerunAll
@@ -63,6 +64,8 @@ async function boot() {
   if (localHeadersBtn) localHeadersBtn.addEventListener("click", onLocalHeaders);
   const headersBtn = el("headersBtn");
   if (headersBtn) headersBtn.addEventListener("click", onHeaders);
+  const headersRerunBtn = el("headersRerunBtn");
+  if (headersRerunBtn) headersRerunBtn.addEventListener("click", onHeadersRerun);
   const processBtn = el("processBtn");
   if (processBtn) processBtn.addEventListener("click", onProcess);
   const rerunBtn = el("processRerunBtn");

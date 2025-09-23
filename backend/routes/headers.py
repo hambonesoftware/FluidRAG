@@ -13,7 +13,7 @@ import httpx
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.preprocess import extract_pages_with_layout, _sections_from_detected_headers
-from ..persistence import get_headers_cache, save_headers_cache
+from ..persistence import clear_headers_cache, get_headers_cache, save_headers_cache
 from ..llm.errors import LLMAuthError
 from ..llm.factory import create_llm_client, provider_default_model
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
@@ -27,6 +27,15 @@ bp = Blueprint("headers", __name__)
 _SECTION_NUMBER_RE = re.compile(r"\d+")
 
 log = logging.getLogger("FluidRAG.routes.headers")
+
+
+def _is_truthy_flag(value: Any) -> bool:
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"", "0", "false", "no", "off", "none", "null"}:
+            return False
+        return True
+    return bool(value)
 
 
 def _section_sort_key(section: dict) -> tuple:
@@ -66,8 +75,10 @@ def determine_headers():
         session_state = get_state(session_id) if session_id else None
         file_hash = getattr(session_state, "file_hash", None) if session_state else None
 
+        force_refresh = _is_truthy_flag(data.get("force_refresh"))
+
         cached = get_headers_cache(file_hash)
-        if cached:
+        if cached and not force_refresh:
             results = list(cached.get("results") or [])
             if session_state is not None:
                 session_state.headers = results
@@ -76,11 +87,19 @@ def determine_headers():
                 {
                     "ok": True,
                     "httpStatus": 200,
-                    "cache": {"hit": True, "section": "headers"},
+                    "cache": {"hit": True, "section": "headers", "bypassed": False},
                     "from_cache": True,
                 }
             )
             return _json_ok(response_payload)
+
+        if cached and force_refresh:
+            log.info(
+                "[headers] cache bypass requested for session=%s hash=%s", session_id, file_hash
+            )
+            clear_headers_cache(file_hash)
+            if session_state is not None:
+                session_state.headers = []
 
         layout = extract_pages_with_layout(pdf_path, sidecar_dir=sidecar_dir)
         pages_linear     = layout.get("pages_linear") or []
@@ -327,7 +346,11 @@ def determine_headers():
             "httpStatus": 200,
             "sections": sections_count,
             "preview": preview,
-            "cache": {"hit": False, "section": "headers"},
+            "cache": {
+                "hit": False,
+                "section": "headers",
+                "bypassed": bool(cached and force_refresh),
+            },
             "debug": {
                 "candidates": debug_candidates,  # first pages only to keep payload light
                 "adjudicated_pages": sorted(list(adjudicated.keys())),

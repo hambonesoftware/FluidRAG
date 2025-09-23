@@ -53,6 +53,7 @@
       <div class="actions">
 
         <button id="headersBtn">Detect headers (LLM)</button>
+        <button id="headersRerunBtn" class="ghost">Re-run header detection (ignore cache)</button>
       </div>
       <div id="headersStatus" class="status">Header detection pending…</div>
       <div class="grid-headers">
@@ -69,6 +70,9 @@
       <div class="actions">
         <button id="processBtn">Run Mechanical · Electrical · Controls · Software · PM</button>
         <button id="processRerunBtn" class="ghost">Re-run all passes (ignore cache)</button>
+      </div>
+      <div id="passesProgressWrap" class="progress-wrap hidden" aria-hidden="true">
+        <div id="passesProgressFill" class="progress-fill"></div>
       </div>
       <div id="processStatus" class="status">Processing not started.</div>
       <div id="tableWrap" class="table-wrap"></div>

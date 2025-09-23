@@ -88,11 +88,15 @@ export async function preprocessDocument(sessionId, model, provider){
   });
 }
 
-export async function determineHeaders(sessionId, model, provider){
+export async function determineHeaders(sessionId, model, provider, options={}){
+  const payload = {session_id:sessionId, model, provider};
+  if(options && options.forceRefresh){
+    payload.force_refresh = true;
+  }
   return safeFetch("/api/determine-headers", {
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({session_id:sessionId, model, provider})
+    body:JSON.stringify(payload)
   });
 }
 
