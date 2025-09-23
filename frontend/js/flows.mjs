@@ -273,7 +273,7 @@ export async function onLocalHeaders() {
   }
 }
 
-export async function onHeaders() {
+export async function onHeaders(options = {}) {
   if (!requireSession()) return;
   if (!state.hasPre) {
     alert("Run preprocess before header detection.");
@@ -288,6 +288,7 @@ export async function onHeaders() {
     alert("Select a model first.");
     return;
   }
+  const forceRefresh = Boolean(options?.forceRefresh);
   const providerName = providerLabel();
   const end = openGroup("[Flow] Header detection", false);
   try {
@@ -295,14 +296,15 @@ export async function onHeaders() {
 
     const statusNode = el("headersStatus");
     if (statusNode) {
-      setStatus(statusNode, `Contacting ${providerName}…`);
+      const actionLabel = forceRefresh ? "Re-contacting" : "Contacting";
+      setStatus(statusNode, `${actionLabel} ${providerName}…`);
     }
 
     withGroup("[Flow] Header detection → Request payload", () => {
-      console.log({ session_id: state.sessionId, model: state.model, provider: state.provider });
+      console.log({ session_id: state.sessionId, model: state.model, provider: state.provider, force_refresh: forceRefresh || undefined });
     }, true);
-    log(`Header detection start via ${providerName}`);
-    const res = await determineHeaders(state.sessionId, state.model, state.provider);
+    log(forceRefresh ? `Header detection rerun via ${providerName}` : `Header detection start via ${providerName}`);
+    const res = await determineHeaders(state.sessionId, state.model, state.provider, { forceRefresh });
     withGroup(`[Flow] Header detection → Raw response (${res.httpStatus ?? "?"})`, () => {
       console.log(res);
     }, true);
@@ -321,7 +323,7 @@ export async function onHeaders() {
     state.cacheInfo.headers = true;
     const sections = Number(res.sections) || 0;
 
-    const headerTag = res.cache?.hit ? " [cached]" : "";
+    const headerTag = res.cache?.hit ? " [cached]" : forceRefresh ? " [refreshed]" : "";
 
     if (statusNode) setStatus(statusNode, `Sections detected: ${sections}${headerTag}`, "success");
     const previewTarget = el("headersPreview");
@@ -329,6 +331,8 @@ export async function onHeaders() {
 
     if (res.cache?.hit) {
       log("Headers loaded from cache");
+    } else if (forceRefresh) {
+      log(`Headers regenerated sections=${res.sections}`);
     } else {
       log(`Headers detected sections=${res.sections}`);
     }
@@ -336,6 +340,10 @@ export async function onHeaders() {
   } finally {
     end();
   }
+}
+
+export function onHeadersRerun() {
+  return onHeaders({ forceRefresh: true });
 }
 
 export async function onProcess(options = {}) {
