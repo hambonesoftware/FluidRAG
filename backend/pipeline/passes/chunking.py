@@ -1,16 +1,109 @@
 """Chunk preparation helpers for the pass pipeline."""
 from __future__ import annotations
 
+import json
+import logging
 import os
-from typing import Any, Dict, Iterable, List, Optional
+from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from backend.persistence import get_preprocess_cache
+from backend.prompts import PASS_PROMPTS
 from backend.state import get_state
 from backend.utils.strings import s
 
 from ..fluid import fluid_refine_chunks  # type: ignore[import]
 from ..hep_cluster import hep_cluster_chunks  # type: ignore[import]
 from .constants import CHUNK_GROUP_TOKEN_LIMIT
+
+log = logging.getLogger("FluidRAG.chunking")
+
+
+def _normalize_for_json(value: Any) -> Any:
+    """Best-effort conversion of chunk fields for JSON serialization."""
+
+    if isinstance(value, dict):
+        return {str(key): _normalize_for_json(val) for key, val in value.items()}
+    if isinstance(value, list):
+        return [_normalize_for_json(item) for item in value]
+    if isinstance(value, tuple) or isinstance(value, set):
+        return [_normalize_for_json(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:  # pragma: no cover - defensive
+            pass
+    try:
+        return float(value)
+    except Exception:  # pragma: no cover - defensive
+        pass
+    try:
+        return str(value)
+    except Exception:  # pragma: no cover - defensive
+        return repr(value)
+
+
+def _collect_headers(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Summarize unique headers from the supplied chunks."""
+
+    headers: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for chunk in chunks:
+        section_number = s(chunk.get("section_number"))
+        section_name = s(chunk.get("section_name"))
+        key = (section_number, section_name)
+        existing = headers.get(key)
+        page_start = chunk.get("page_start") or chunk.get("page") or 1
+        page_end = chunk.get("page_end") or chunk.get("page") or page_start
+        if existing is None:
+            headers[key] = {
+                "section_number": section_number,
+                "section_name": section_name,
+                "document": s(chunk.get("document")) or "Document",
+                "page_start": page_start,
+                "page_end": page_end,
+            }
+        else:
+            existing["page_start"] = min(existing.get("page_start", page_start), page_start)
+            existing["page_end"] = max(existing.get("page_end", page_end), page_end)
+    return list(headers.values())
+
+
+def _write_stage_debug(
+    session_id: str,
+    stage: str,
+    chunks: List[Dict[str, Any]],
+    *,
+    output_dir: Optional[str] = None,
+) -> None:
+    """Persist a snapshot of chunks for debugging comparisons."""
+
+    if output_dir is None:
+        output_dir = os.path.join("sidecars", session_id, "chunk_debug")
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[chunking] failed to ensure debug directory %s", output_dir)
+        return
+
+    slug = "_".join(stage.lower().split()) or stage.lower()
+    path = os.path.join(output_dir, f"{slug}_chunks.json")
+    payload = {
+        "session_id": session_id,
+        "stage": stage,
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "passes": sorted(PASS_PROMPTS.keys()),
+        "chunk_count": len(chunks),
+        "headers": _collect_headers(chunks),
+        "chunks": [_normalize_for_json(dict(chunk)) for chunk in chunks],
+    }
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+        log.info("[chunking] wrote %s stage chunk snapshot to %s", stage, path)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[chunking] failed to write chunk snapshot for stage %s", stage)
 
 try:  # pragma: no cover - compatibility shim
     from ..preprocess import (  # type: ignore[import]
@@ -43,6 +136,12 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
     if state is None:
         raise ValueError("Unknown session; upload and preprocess the document first.")
 
+    sidecar_dir = os.path.join("sidecars", session_id)
+    try:
+        os.makedirs(sidecar_dir, exist_ok=True)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[chunking] failed to ensure sidecar directory %s", sidecar_dir)
+
     if state.pre_chunks is not None and state.pre_chunks:
         chunks = [dict(chunk) for chunk in state.pre_chunks]
     else:
@@ -56,7 +155,6 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
             if not pdf_path or not os.path.exists(pdf_path):
                 uploads_dir = os.getenv("UPLOAD_FOLDER", "uploads")
                 pdf_path = os.path.join(uploads_dir, f"{session_id}.pdf")
-            sidecar_dir = os.path.join("sidecars", session_id)
             chunks = [
                 dict(chunk)
                 for chunk in section_bounded_chunks_from_pdf(
@@ -79,8 +177,13 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         chunk.setdefault("text", chunk.get("text", ""))
         chunk.setdefault("meta", {})
 
+    _write_stage_debug(session_id, "standard", chunks, output_dir=os.path.join(sidecar_dir, "chunk_debug"))
+
     refined = fluid_refine_chunks(chunks)
+    _write_stage_debug(session_id, "fluid", refined, output_dir=os.path.join(sidecar_dir, "chunk_debug"))
+
     enriched = hep_cluster_chunks(refined)
+    _write_stage_debug(session_id, "hep", enriched, output_dir=os.path.join(sidecar_dir, "chunk_debug"))
     state.refined_chunks = refined
     state.clustered_chunks = enriched
     return enriched
