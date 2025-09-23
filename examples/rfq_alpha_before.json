@@ -1,0 +1,12 @@
+[
+  {
+    "id": "alpha-fluid-1",
+    "section_number": "1",
+    "text": "1) Introduction\nIntro overview line.\n2) Scope\nScope detail line 1\nScope detail line 2\n3) Requirements\nThe supplier shall provide conveyors."
+  },
+  {
+    "id": "alpha-fluid-2",
+    "section_number": "B",
+    "text": "Appendix B \u2014 Pricing Table\nLine  Item  Description  Qty  Unit  Unit Price  Extended\n1  Conveyor  2  ea  100  200\n2  Guard  1  ea  50  50\n- Provide\nsupport structure\n- Provide\ncontrols cabinet"
+  }
+]

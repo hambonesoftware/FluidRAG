@@ -1,0 +1,12 @@
+[
+  {
+    "id": "charlie-fluid-1",
+    "section_number": "6",
+    "text": "6) Controls Overview\nThis describes PLC hardware and EOAT integration.\n7) Software Deliverables\nProvide backups and source code packages."
+  },
+  {
+    "id": "charlie-fluid-2",
+    "section_number": "D",
+    "text": "Appendix D Compliance Table\nSection  Requirement  Compliant  Notes\n1  Safety Circuits  Yes  Provide summary\n2  Software Versioning  Partial  See appendix"
+  }
+]

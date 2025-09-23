@@ -1,0 +1,16 @@
+[
+  {
+    "id": "alpha-std-1",
+    "text": "1) Introduction\nIntro overview line.\n2) Scope\nScope detail line 1\nScope detail line 2",
+    "section_number": "1",
+    "page_start": 1,
+    "page_end": 1
+  },
+  {
+    "id": "alpha-std-2",
+    "text": "3) Requirements\nThe supplier shall provide conveyors.\n•\nAppendix B — Pricing Table\nLine  Item  Description  Qty  Unit  Unit Price  Extended\n1  Conveyor  2  ea  100  200\n2  Guard  1  ea  50  50\n- Provide\nsupport structure\n- Provide\ncontrols cabinet",
+    "section_number": "3",
+    "page_start": 2,
+    "page_end": 2
+  }
+]

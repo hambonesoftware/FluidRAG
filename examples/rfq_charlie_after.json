@@ -1,0 +1,22 @@
+[
+  {
+    "id": "charlie-hep-1::0",
+    "section_number": "6",
+    "text": "6) Controls Overview\nThis describes PLC hardware and EOAT integration."
+  },
+  {
+    "id": "charlie-hep-1::1",
+    "section_number": "7",
+    "text": "7) Software Deliverables\nProvide backups and source code packages."
+  },
+  {
+    "id": "charlie-hep-2::tbl::f85f",
+    "section_number": "D",
+    "text": "Section  Requirement  Compliant  Notes\n1  Safety Circuits  Yes  Provide summary"
+  },
+  {
+    "id": "charlie-hep-2::tbl::996e",
+    "section_number": "D",
+    "text": "Section  Requirement  Compliant  Notes\n2  Software Versioning  Partial  See appendix"
+  }
+]

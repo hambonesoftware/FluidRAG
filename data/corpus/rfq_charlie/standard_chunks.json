@@ -1,0 +1,9 @@
+[
+  {
+    "id": "charlie-std-1",
+    "text": "6) Controls Overview\nThis describes PLC hardware and EOAT integration.\n7) Software Deliverables\nProvide backups and source code packages.\nAppendix D Compliance Table\nSection  Requirement  Compliant  Notes\n1  Safety Circuits  Yes  Provide summary\n2  Software Versioning  Partial  See appendix",
+    "section_number": "6",
+    "page_start": 5,
+    "page_end": 5
+  }
+]

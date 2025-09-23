@@ -8,4 +8,6 @@ __pycache__/
 *.bin
 .DS_Store
 /.vscode/
-data/
+data/*
+!data/corpus/
+!data/corpus/**
