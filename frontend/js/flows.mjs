@@ -368,7 +368,7 @@ export async function onProcess(options = {}) {
       session_id: state.sessionId,
       model: state.model,
       provider: state.provider,
-      only_mechanical: true,
+      only_mechanical: false,
       debug: true,
       debug_llm_io: true
     };

@@ -21,6 +21,8 @@ DEFAULT_PASS_BACKOFF_MAX_MS = 4500
 
 CSV_COLUMNS = ["Document", "(Sub)Section #", "(Sub)Section Name", "Specification", "Pass"]
 
+# Delay between pass submissions (seconds). Five seconds keeps LLM load manageable while
+# allowing all passes to overlap in flight.
 PASS_STAGGER_SECONDS = 5.0
 
 PASS_FLAG_TO_NAME = {
