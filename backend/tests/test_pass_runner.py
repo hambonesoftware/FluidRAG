@@ -31,6 +31,7 @@ def configure_runner(monkeypatch):
     monkeypatch.setattr(runner, "resolve_pass_timeout", lambda payload: 30.0)
     monkeypatch.setattr(runner, "provider_default_model", lambda provider: "model-x")
     monkeypatch.setattr(runner, "env", lambda name, default=None: default)
+    monkeypatch.setattr(runner, "PASS_STAGGER_SECONDS", 0)
     monkeypatch.setattr(
         runner,
         "merge_pass_outputs",

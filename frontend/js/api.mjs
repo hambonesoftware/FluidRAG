@@ -109,7 +109,7 @@ export async function processPasses(sessionId, model, provider, options={}){
     session_id:sessionId,
     model,
     provider,
-    only_mechanical:true,
+    only_mechanical:false,
     debug:true,
     debug_llm_io:true
   };

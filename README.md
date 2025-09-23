@@ -39,8 +39,8 @@ python run.py  # starts Flask and opens the frontend
    Run hybrid heading detection (regex + LLM confirmation) in ≤120k-token batches to produce section/subsection spans. The API returns an outline preview and full LLM debug logs for DevTools inspection.
 4. **Fluid → HEP refinement**  
    Refine the section chunks toward ~1–2k tokens with Fluid and attach entropy/cluster metadata via HEP to inform downstream weighting.
-5. **Async passes & merge**  
-   Rank chunks per pass using entropy and keyword heuristics, enforce a 120k-token request budget, and dispatch asynchronous LLM calls. Exact specifications are deduplicated across passes, rendered in-app, and offered as `FluidRAG_results.csv` for download.
+5. **Async passes & merge**
+   Rank chunks per pass using entropy and keyword heuristics, enforce a 120k-token request budget, and dispatch asynchronous LLM calls staggered five seconds apart to protect the upstream model while keeping all passes in flight. Exact specifications are deduplicated across passes, rendered in-app, and offered as `FluidRAG_results.csv` for download.
 
 ## Configuration notes
 
