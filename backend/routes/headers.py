@@ -13,7 +13,7 @@ import httpx
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.preprocess import extract_pages_with_layout, _sections_from_detected_headers
-from ..persistence import get_headers_cache, save_headers_cache
+from ..persistence import clear_headers_cache, get_headers_cache, save_headers_cache
 from ..llm.errors import LLMAuthError
 from ..llm.factory import create_llm_client, provider_default_model
 from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
@@ -97,6 +97,11 @@ def determine_headers():
             log.info(
                 "[headers] cache bypass requested for session=%s hash=%s", session_id, file_hash
             )
+
+            clear_headers_cache(file_hash)
+            if session_state is not None:
+                session_state.headers = []
+
 
         layout = extract_pages_with_layout(pdf_path, sidecar_dir=sidecar_dir)
         pages_linear     = layout.get("pages_linear") or []

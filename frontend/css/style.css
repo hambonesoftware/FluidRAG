@@ -83,6 +83,22 @@ button.ghost{
 button.ghost:hover{background:#dbe5ff;box-shadow:none;}
 
 .actions{display:flex;gap:12px;flex-wrap:wrap;}
+.progress-wrap{
+  width:100%;
+  height:8px;
+  background:rgba(37,99,235,0.12);
+  border-radius:999px;
+  overflow:hidden;
+  margin-top:10px;
+  position:relative;
+}
+.progress-fill{
+  position:absolute;
+  inset:0;
+  width:0%;
+  background:linear-gradient(90deg,rgba(37,99,235,0.9),rgba(59,130,246,0.95));
+  transition:width 0.2s linear;
+}
 .grid-headers{display:grid;gap:16px;margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));}
 .grid-headers h3{margin:0 0 6px;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;}
 .preview-column{display:flex;flex-direction:column;}

@@ -19,6 +19,74 @@ import {
 import { log, openGroup, withGroup } from "./logging.mjs";
 import { setStatus, updateStatus } from "./status.mjs";
 
+const PASS_PROGRESS_MAX_MS = 6 * 60 * 1000;
+let passProgressTimer = null;
+let passProgressStartAt = 0;
+let passProgressHandled = true;
+
+function clearPassProgressTimer() {
+  if (passProgressTimer) {
+    clearInterval(passProgressTimer);
+    passProgressTimer = null;
+  }
+}
+
+function showPassProgressWrap() {
+  const wrap = el("passesProgressWrap");
+  if (wrap) wrap.classList.remove("hidden");
+}
+
+function hidePassProgressWrap() {
+  const wrap = el("passesProgressWrap");
+  if (wrap) wrap.classList.add("hidden");
+}
+
+function setPassProgressFraction(fraction) {
+  const fill = el("passesProgressFill");
+  if (!fill) return;
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(fraction) ? fraction : 0));
+  fill.style.width = `${clamped * 100}%`;
+}
+
+function startPassProgressBar() {
+  passProgressHandled = false;
+  clearPassProgressTimer();
+  passProgressStartAt = Date.now();
+  showPassProgressWrap();
+  setPassProgressFraction(0);
+  passProgressTimer = setInterval(() => {
+    const elapsed = Date.now() - passProgressStartAt;
+    const ratio = Math.min(elapsed / PASS_PROGRESS_MAX_MS, 1);
+    setPassProgressFraction(ratio);
+    if (ratio >= 1) {
+      clearPassProgressTimer();
+    }
+  }, 200);
+}
+
+function completePassProgressBar() {
+  passProgressHandled = true;
+  clearPassProgressTimer();
+  showPassProgressWrap();
+  setPassProgressFraction(1);
+}
+
+function failPassProgressBar() {
+  passProgressHandled = true;
+  clearPassProgressTimer();
+  setPassProgressFraction(0);
+  hidePassProgressWrap();
+}
+
+function ensurePassProgressStopped() {
+  if (passProgressTimer) {
+    clearPassProgressTimer();
+  }
+  if (!passProgressHandled) {
+    failPassProgressBar();
+  }
+}
+
 export function resetAfterUpload() {
   resetCacheState();
 
@@ -35,6 +103,7 @@ export function resetAfterUpload() {
   if (headerStatus) setStatus(headerStatus, "Header detection pending…");
   const processStatus = el("processStatus");
   if (processStatus) setStatus(processStatus, "Processing not started.");
+  failPassProgressBar();
 }
 
 export function dumpLLMDebug(debug) {
@@ -294,6 +363,15 @@ export async function onHeaders(options = {}) {
   try {
     console.log("State before header detection", { ...state });
 
+    if (forceRefresh) {
+      state.hasHeaders = false;
+      state.cacheInfo.headers = false;
+      const previewTarget = el("headersPreview");
+      if (previewTarget) renderHeaderPreview(previewTarget, []);
+      const downloadWrap = el("downloadWrap");
+      if (downloadWrap) downloadWrap.classList.add("hidden");
+    }
+
     const statusNode = el("headersStatus");
     if (statusNode) {
       const actionLabel = forceRefresh ? "Re-contacting" : "Contacting";
@@ -372,6 +450,7 @@ export async function onProcess(options = {}) {
     const actionLabel = forceRefresh ? "Re-running" : "Running";
     updateStatus("processStatus", `${actionLabel} asynchronous passes via ${providerName}…`);
     log(forceRefresh ? `Passes rerun via ${providerName}` : `Passes start via ${providerName}`);
+    startPassProgressBar();
     const requestPreview = {
       session_id: state.sessionId,
       model: state.model,
@@ -394,6 +473,7 @@ export async function onProcess(options = {}) {
     }, true);
     dumpLLMDebug(res.llm_debug);
     if (!res.ok) {
+      failPassProgressBar();
       let msg = res.error || "Process failed";
       if (res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if (res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
@@ -437,8 +517,10 @@ export async function onProcess(options = {}) {
     } else {
       log("Process complete");
     }
+    completePassProgressBar();
     console.log("State after process", { ...state });
   } finally {
+    ensurePassProgressStopped();
     end();
   }
 }
