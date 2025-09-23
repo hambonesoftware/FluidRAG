@@ -34,6 +34,11 @@ def configure_runner(monkeypatch):
     monkeypatch.setattr(runner, "PASS_STAGGER_SECONDS", 0)
     monkeypatch.setattr(
         runner,
+        "export_pass_stage_snapshots",
+        lambda session_id, pass_names, include_header=True: None,
+    )
+    monkeypatch.setattr(
+        runner,
         "merge_pass_outputs",
         lambda outputs, req_id=None: {
             "rows": [

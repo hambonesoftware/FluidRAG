@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+from datetime import UTC, datetime
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
 
 from backend.persistence import get_preprocess_cache
 from backend.prompts import PASS_PROMPTS
@@ -69,41 +71,81 @@ def _collect_headers(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             existing["page_end"] = max(existing.get("page_end", page_end), page_end)
     return list(headers.values())
 
+def _normalize_stage_payload(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Normalize chunk snapshots for JSON export."""
 
-def _write_stage_debug(
+    normalized_chunks = [_normalize_for_json(dict(chunk)) for chunk in chunks]
+    return {
+        "chunk_count": len(normalized_chunks),
+        "headers": _collect_headers(chunks),
+        "chunks": normalized_chunks,
+    }
+
+
+def export_pass_stage_snapshots(
     session_id: str,
-    stage: str,
-    chunks: List[Dict[str, Any]],
+    pass_names: Sequence[str],
+    include_header: bool = False,
     *,
     output_dir: Optional[str] = None,
 ) -> None:
-    """Persist a snapshot of chunks for debugging comparisons."""
+    """Write combined stage snapshots for each requested pass."""
 
-    if output_dir is None:
-        output_dir = os.path.join("sidecars", session_id, "chunk_debug")
-    try:
-        os.makedirs(output_dir, exist_ok=True)
-    except Exception:  # pragma: no cover - defensive
-        log.exception("[chunking] failed to ensure debug directory %s", output_dir)
+    state = get_state(session_id)
+    if state is None:
+        log.warning("[chunking] export requested for unknown session %s", session_id)
         return
 
-    slug = "_".join(stage.lower().split()) or stage.lower()
-    path = os.path.join(output_dir, f"{slug}_chunks.json")
-    payload = {
-        "session_id": session_id,
-        "stage": stage,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
-        "passes": sorted(PASS_PROMPTS.keys()),
-        "chunk_count": len(chunks),
-        "headers": _collect_headers(chunks),
-        "chunks": [_normalize_for_json(dict(chunk)) for chunk in chunks],
-    }
+    stage_snapshots = getattr(state, "chunk_stage_snapshots", None)
+    if not stage_snapshots:
+        log.info("[chunking] no stage snapshots available for session %s", session_id)
+        return
+
+    targets = list(dict.fromkeys(pass_names))
+    if include_header:
+        targets = ["Header", *targets]
+
+    if not targets:
+        return
+
+    base_dir = output_dir or os.path.join("backend", "stages")
     try:
-        with open(path, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh, ensure_ascii=False, indent=2)
-        log.info("[chunking] wrote %s stage chunk snapshot to %s", stage, path)
+        os.makedirs(base_dir, exist_ok=True)
     except Exception:  # pragma: no cover - defensive
-        log.exception("[chunking] failed to write chunk snapshot for stage %s", stage)
+        log.exception("[chunking] failed to ensure stage export directory %s", base_dir)
+        return
+
+    now = datetime.now(UTC)
+    timestamp = now.strftime("%Y%m%dT%H%M%SZ")
+    generated_at = now.isoformat().replace("+00:00", "Z")
+    normalized_stages = {
+        stage: _normalize_stage_payload(list(chunks))
+        for stage, chunks in stage_snapshots.items()
+    }
+
+    for pass_name in targets:
+        safe_name = "_".join(pass_name.split()) or "pass"
+        path = os.path.join(base_dir, f"{safe_name}_{timestamp}.json")
+        payload = {
+            "session_id": session_id,
+            "pass": pass_name,
+            "generated_at": generated_at,
+            "passes": sorted(PASS_PROMPTS.keys()),
+            "stages": normalized_stages,
+        }
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False, indent=2)
+            log.info(
+                "[chunking] wrote pass stage snapshot for %s to %s",
+                pass_name,
+                path,
+            )
+        except Exception:  # pragma: no cover - defensive
+            log.exception(
+                "[chunking] failed to write pass stage snapshot for %s", pass_name
+            )
+
 
 try:  # pragma: no cover - compatibility shim
     from ..preprocess import (  # type: ignore[import]
@@ -164,6 +206,8 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
                 )
             ]
 
+    raw_snapshot = [dict(chunk) for chunk in chunks]
+
     document_name = state.filename or "Document"
     for chunk in chunks:
         chunk.setdefault("document", document_name)
@@ -177,15 +221,23 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         chunk.setdefault("text", chunk.get("text", ""))
         chunk.setdefault("meta", {})
 
-    _write_stage_debug(session_id, "standard", chunks, output_dir=os.path.join(sidecar_dir, "chunk_debug"))
+
+    standard_snapshot = [dict(chunk) for chunk in chunks]
 
     refined = fluid_refine_chunks(chunks)
-    _write_stage_debug(session_id, "fluid", refined, output_dir=os.path.join(sidecar_dir, "chunk_debug"))
+    fluid_snapshot = [dict(chunk) for chunk in refined]
 
     enriched = hep_cluster_chunks(refined)
-    _write_stage_debug(session_id, "hep", enriched, output_dir=os.path.join(sidecar_dir, "chunk_debug"))
+    hep_snapshot = [dict(chunk) for chunk in enriched]
+
     state.refined_chunks = refined
     state.clustered_chunks = enriched
+    state.chunk_stage_snapshots = {
+        "raw_chunking": raw_snapshot,
+        "standard_chunks": standard_snapshot,
+        "fluid_chunks": fluid_snapshot,
+        "hep_chunks": hep_snapshot,
+    }
     return enriched
 
 

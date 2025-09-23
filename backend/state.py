@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 @dataclass
 class PipelineState:
@@ -12,6 +12,7 @@ class PipelineState:
     section_chunks: Optional[List[Dict[str, Any]]] = None
     refined_chunks: Optional[List[Dict[str, Any]]] = None
     clustered_chunks: Optional[List[Dict[str, Any]]] = None
+    chunk_stage_snapshots: Optional[Dict[str, List[Dict[str, Any]]]] = None
     model: Optional[str] = None
     provider: Optional[str] = None
     headers: Optional[List[Dict[str, Any]]] = None
