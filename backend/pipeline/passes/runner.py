@@ -16,14 +16,14 @@ from backend.utils.envsafe import env
 from backend.utils.strings import s
 from ..merge import merge_pass_outputs
 
-from .chunking import build_groups, ensure_chunks
+from .chunking import build_groups, ensure_chunks, export_pass_stage_snapshots
 from .config import (
     is_truthy_flag,
     resolve_pass_concurrency,
     resolve_pass_items,
     resolve_pass_timeout,
 )
-from .constants import PASS_STAGGER_SECONDS
+from .constants import ALL_PASSES, PASS_STAGGER_SECONDS
 from .executor import execute_pass
 from .responses import encode_rows_to_csv
 
@@ -74,6 +74,11 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         chunks = ensure_chunks(session_id)
     except Exception as exc:  # pragma: no cover - defensive
         return {"ok": False, "httpStatus": 500, "error": f"Failed to prepare chunks: {exc}"}
+
+    try:
+        export_pass_stage_snapshots(session_id, ALL_PASSES, include_header=True)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[passes %s] failed to export pass stage snapshots", req_id)
 
     if not chunks:
         return {
