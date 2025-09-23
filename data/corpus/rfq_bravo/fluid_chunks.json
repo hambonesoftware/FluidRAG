@@ -1,0 +1,18 @@
+[
+  {
+    "id": "bravo-fluid-1",
+    "text": "4) Mechanical Design\nPage 12\nThis section describes the mechanical design.\n5) Electrical Requirements\nThe panel must include NFPA 79 compliance.",
+    "section_number": "4",
+    "meta": {},
+    "page_start": 3,
+    "page_end": 4
+  },
+  {
+    "id": "bravo-fluid-2",
+    "text": "Appendix C Schedule Table\nMilestone  Target Weeks After PO  Notes\nFAT  12  Provide dates\nSAT  18  On site\nA1. Spare Parts List\nItem  Description  Qty\n1  Fuse  10\n2  Relay  5",
+    "section_number": "C",
+    "meta": {},
+    "page_start": 3,
+    "page_end": 4
+  }
+]

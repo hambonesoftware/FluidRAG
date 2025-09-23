@@ -1,0 +1,16 @@
+[
+  {
+    "id": "bravo-std-1",
+    "text": "4) Mechanical Design\nPage 12\nThis section describes the mechanical design.\ni\nAppendix C Schedule Table\nMilestone  Target Weeks After PO  Notes\nFAT  12  Provide dates\nSAT  18  On site",
+    "section_number": "4",
+    "page_start": 3,
+    "page_end": 3
+  },
+  {
+    "id": "bravo-std-2",
+    "text": "5) Electrical Requirements\nThe panel must include NFPA 79 compliance.\nA1. Spare Parts List\nItem  Description  Qty\n1  Fuse  10\n2  Relay  5",
+    "section_number": "5",
+    "page_start": 4,
+    "page_end": 4
+  }
+]

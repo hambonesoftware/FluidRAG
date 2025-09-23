@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "hard_heading_breaks": true,
+    "page_footer_scrub": true,
+    "list_stitching": true,
+    "appendix_microchunking": true,
+    "soft_split_on_view": true
+  },
+  "views": {
+    "mechanical": {
+      "must_sections": ["3", "4"],
+      "section_allowlist": ["1", "2", "3", "4", "B", "C"],
+      "keywords": ["conveyor", "mechanical", "guard", "structure"],
+      "hep_z_min": -2.0,
+      "length_budget_tokens": 2200
+    },
+    "controls": {
+      "must_sections": ["6", "7"],
+      "section_allowlist": ["6", "7", "8", "D"],
+      "keywords": ["PLC", "safety", "software", "backup"],
+      "hep_z_min": -1.0,
+      "length_budget_tokens": 1700
+    },
+    "software": {
+      "must_sections": ["7"],
+      "section_allowlist": ["7", "D"],
+      "keywords": ["source code", "UDT", "AOI", "calibration", "backup", "restore", "offline"],
+      "hep_z_min": -0.5,
+      "length_budget_tokens": 1500
+    },
+    "pm": {
+      "must_sections": ["B", "C"],
+      "section_allowlist": ["B", "C", "D"],
+      "keywords": ["schedule", "pricing", "milestone", "payment", "FAT", "SAT"],
+      "hep_z_min": -2.0,
+      "length_budget_tokens": 2200
+    }
+  }
+}
