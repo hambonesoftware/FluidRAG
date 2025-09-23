@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+
 from datetime import UTC, datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
 
 from backend.persistence import get_preprocess_cache
 from backend.prompts import PASS_PROMPTS
@@ -68,7 +70,6 @@ def _collect_headers(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             existing["page_start"] = min(existing.get("page_start", page_start), page_start)
             existing["page_end"] = max(existing.get("page_end", page_end), page_end)
     return list(headers.values())
-
 
 def _normalize_stage_payload(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Normalize chunk snapshots for JSON export."""
@@ -145,6 +146,7 @@ def export_pass_stage_snapshots(
                 "[chunking] failed to write pass stage snapshot for %s", pass_name
             )
 
+
 try:  # pragma: no cover - compatibility shim
     from ..preprocess import (  # type: ignore[import]
         approximate_tokens,
@@ -219,6 +221,7 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         chunk.setdefault("text", chunk.get("text", ""))
         chunk.setdefault("meta", {})
 
+
     standard_snapshot = [dict(chunk) for chunk in chunks]
 
     refined = fluid_refine_chunks(chunks)
@@ -226,6 +229,7 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
 
     enriched = hep_cluster_chunks(refined)
     hep_snapshot = [dict(chunk) for chunk in enriched]
+
     state.refined_chunks = refined
     state.clustered_chunks = enriched
     state.chunk_stage_snapshots = {
