@@ -27,9 +27,18 @@ class Chunk:
     bm25: Optional[float] = None
     regex_hits: int = 0
     meta: Dict[str, Any] = field(default_factory=dict)
+    stage_tag: str = "STANDARD"
+    break_score: float = 0.0
+    header_candidate: bool = False
+    resolution: str = "micro"
+    retrieval_scores: Dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.meta = dict(self.meta or {})
+        self.stage_tag = str(self.stage_tag or "STANDARD").upper()
+        self.resolution = str(self.resolution or "micro").lower()
+        if self.retrieval_scores is None:
+            self.retrieval_scores = {}
 
 
 @dataclass
