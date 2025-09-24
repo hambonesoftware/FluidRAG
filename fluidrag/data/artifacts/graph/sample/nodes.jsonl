@@ -1,0 +1,7 @@
+{"node_id": "sample:s001:req", "node_type": "Requirement", "attributes": {"chunk": "sample:s001"}}
+{"node_id": "standard:NFPA 79", "node_type": "Standard", "attributes": {"label": "NFPA 79"}}
+{"node_id": "standard:UL 508A", "node_type": "Standard", "attributes": {"label": "UL 508A"}}
+{"node_id": "quantity:508A", "node_type": "Quantity", "attributes": {"value": "508A"}}
+{"node_id": "quantity:65kA", "node_type": "Quantity", "attributes": {"value": "65kA"}}
+{"node_id": "entity:scope\nthe", "node_type": "Entity", "attributes": {"label": "Scope\nThe"}}
+{"node_id": "entity:power\nprovide", "node_type": "Entity", "attributes": {"label": "Power\nProvide"}}

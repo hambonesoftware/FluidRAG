@@ -1,0 +1,5 @@
+1. Scope
+The supplier shall provide control panels compliant with NFPA 79 and UL 508A.
+
+2. Power
+Provide short circuit current rating of 65 kA at 480 VAC.

@@ -29,6 +29,30 @@ python run.py  # starts Flask and opens the frontend
 > Without `OPENROUTER_API_KEY`, network calls fall back to mocked responses so you can exercise the UI end-to-end.
 
 
+## FluidRAG refactor CLI
+
+The refactored Standard-centric pipeline is available under `fluidrag/src/cli.py` and can be exercised with the following commands:
+
+```bash
+# Generate standard chunks for a document
+python -m fluidrag.src.cli chunk --doc fluidrag/data/input/sample_rfq.txt --doc_id sample
+
+# Score the chunks and persist entropy/fluid/HEP metrics
+python -m fluidrag.src.cli score --doc_id sample
+
+# Build the Standards graph
+python -m fluidrag.src.cli graph --doc_id sample
+
+# Run retrieval in the HEP view
+python -m fluidrag.src.cli search --doc_id sample --q "SCCR 65 kA labeling per UL 508A" --view hep
+
+# Produce the QA report
+python -m fluidrag.src.cli qa --doc_id sample
+```
+
+Artifacts are written under `fluidrag/data/artifacts/` and include chunk JSONL files, graph nodes/edges, and QA reports.
+
+
 ## Guided workflow
 
 1. **Upload & model selection**  

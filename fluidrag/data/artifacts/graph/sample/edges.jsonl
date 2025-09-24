@@ -1,0 +1,7 @@
+{"source": "sample:s001:req", "target": "standard:NFPA 79", "relation": "requirement_refers_to"}
+{"source": "sample:s001:req", "target": "standard:UL 508A", "relation": "requirement_refers_to"}
+{"source": "sample:s001:req", "target": "quantity:508A", "relation": "requirement_constrains"}
+{"source": "sample:s001:req", "target": "quantity:65kA", "relation": "requirement_constrains"}
+{"source": "sample:s001:req", "target": "entity:scope\nthe", "relation": "requirement_mentions"}
+{"source": "sample:s001:req", "target": "entity:power\nprovide", "relation": "requirement_mentions"}
+{"source": "community:2", "target": "sample:s001:req", "relation": "community_membership"}
