@@ -1,0 +1,142 @@
+passes:
+
+  Mechanical:
+    segmentation:
+      weights: {wH: .22, wD: .28, wC: .10, wR: .22, wN: .12, wL: .06}
+      heading_regex_boosts: ["^\\d+\\)", "^\\d+\\.", "^A\\d+\\.", "^(Appendix|Table|Figure)"]
+      token_boosts: ["ISO 2768","ASME Y14.5","GD&T","Ra","Rz","±","H7/g6","mm","in","thickness","weld","AWS","material","ASTM","AISI"]
+      normalize_within: ["Mechanical & Layout","Materials","Fabrication","Coatings"]
+      min_gap: 2
+      threshold: {mode: "zscore", lambda: 1.2}
+    fluid_merge:
+      strategy: "layout"
+      sim_threshold: 0.78
+      keep_tables: true
+      must_share_any: ["dimensions","tolerance","material","finish","weld"]
+    hep_scoring:
+      weights: {entropy_delta: .25, nums_units: .35, standards: .20, modal_shall: .10, table_proximity: .10}
+      unit_patterns: ["mm","in","µm","N·m","kN","HRC","HBW"]
+      standard_ids: ["ASME Y14.5","ISO 2768","ISO 1302","AWS D1.1"]
+      topN_per_section: 3
+    graphrag:
+      entities: ["dimension","tolerance","material","finish","weld","standard","fastener","fit"]
+      relations: ["constrains","references","requires","composed_of"]
+      radius: 1
+      max_comms: 3
+    retrieval:
+      cascade: [sparse, dense_hyde, colbert, cross]
+      boosts_sparse: ["ISO 2768","Y14.5","Ra","±","fit","H7/g6","AWS D1.1"]
+      hyde_hints: "Extract mechanical requirements: dimensions, tolerances, materials, finishes, GD&T, weld specs. Prefer SHALL/MUST."
+      colbert_token_boosts: ["Ra","±","⌀","H7","g6","flatness","perpendicularity","weld","A36","304"]
+
+  Electrical:
+    segmentation:
+      weights: {wH: .20, wD: .30, wC: .12, wR: .22, wN: .10, wL: .06}
+      heading_regex_boosts: ["(Electrical|Power|SCCR|UL 508A|NFPA 79)"]
+      token_boosts: ["480 VAC","120 VAC","SCCR","kA","AIC","UL 508A","NFPA 79","IEC 60204-1","ground","bond","NEMA","IP"]
+      normalize_within: ["Controls, Safety & HMI","Compliance & Standards","Site & Utilities"]
+      min_gap: 2
+      threshold: {mode: "zscore", lambda: 1.1}
+    fluid_merge:
+      strategy: "standards"
+      sim_threshold: 0.75
+      must_share_any: ["SCCR","UL 508A","NFPA 79","ground","bond","panel"]
+    hep_scoring:
+      weights: {entropy_delta: .18, nums_units: .42, standards: .22, modal_shall: .10, table_proximity: .08}
+      unit_patterns: ["V","VAC","VDC","A","kA","kAIC","Hz","AWG","mm²","°C"]
+      standard_ids: ["UL 508A","NFPA 79","NEC 250","IEC 60204-1","UL 489","UL 248"]
+      topN_per_section: 3
+    graphrag:
+      entities: ["voltage","current","SCCR","breaker","fuse","panel","enclosure","ground","bond","standard"]
+      relations: ["requires","rated_at","protected_by","conforms_to"]
+      radius: 1
+      max_comms: 3
+    retrieval:
+      cascade: [sparse, dense_hyde, colbert, cross]
+      boosts_sparse: ["SCCR","UL 508A","NFPA 79","65 kA","480 VAC","NEMA 12","IP66","grounding","bonding"]
+      hyde_hints: "Find electrical ratings, SCCR, voltages, breakers/fuses, grounding/bonding, enclosure NEMA/IP. Prefer SHALL/MUST."
+      colbert_token_boosts: ["SCCR","kA","kAIC","VAC","UL","NFPA","NEMA","IP","ground","bond"]
+
+  Controls:
+    segmentation:
+      weights: {wH: .24, wD: .26, wC: .12, wR: .20, wN: .10, wL: .08}
+      heading_regex_boosts: ["(PLC|Safety|Interlock|HMI|SCADA|Network|I/O|Alarm)"]
+      token_boosts: ["GuardLogix","ControlLogix","IEC 61131-3","ladder","ST","SFC","PL d","SIL 2","CIP Safety","Profisafe","scan time","ms","alarm"]
+      normalize_within: ["Controls, Safety & HMI","FAT/SAT","Training & Handover"]
+      min_gap: 2
+      threshold: {mode: "zscore", lambda: 1.15}
+    fluid_merge:
+      strategy: "behavior"
+      sim_threshold: 0.77
+      must_share_any: ["safety","interlock","HMI","I/O","network","alarm"]
+    hep_scoring:
+      weights: {entropy_delta: .22, nums_units: .28, standards: .22, modal_shall: .16, table_proximity: .12}
+      unit_patterns: ["ms","s","Hz","tags","%","PL","SIL"]
+      standard_ids: ["IEC 61131-3","ISO 13849-1","IEC 62061","IEC 61508","IEC 62443","ISA-101"]
+      topN_per_section: 3
+    graphrag:
+      entities: ["PLC","safety function","interlock","I/O","HMI","alarm","network","protocol","standard"]
+      relations: ["implements","monitors","communicates_over","requires"]
+      radius: 1
+      max_comms: 3
+    retrieval:
+      cascade: [sparse, dense_hyde, colbert]
+      boosts_sparse: ["IEC 61131-3","PL d","SIL 2","scan time","alarm priority","CIP Safety","Profisafe","OPC UA"]
+      hyde_hints: "Extract PLC/HMI/safety control logic, PL/SIL levels, interlocks, alarms, networks. Prefer SHALL/MUST and timings."
+      colbert_token_boosts: ["scan","ms","PL","SIL","alarm","ack","OPC","CIP","Profisafe"]
+
+  Software:
+    segmentation:
+      weights: {wH: .22, wD: .24, wC: .10, wR: .22, wN: .12, wL: .10}
+      heading_regex_boosts: ["(Software|HMI|SCADA|Historian|Database|Cybersecurity|Backup|License)"]
+      token_boosts: ["IEC 62443","ISA-95","ISA-101","Windows","LTSC","Linux","OPC UA","MQTT","backup","restore","version","patch","NTP","PTP"]
+      normalize_within: ["Software Deliverables","Training & Handover","FAT/SAT","Compliance & Standards"]
+      min_gap: 2
+      threshold: {mode: "zscore", lambda: 1.1}
+    fluid_merge:
+      strategy: "platform"
+      sim_threshold: 0.76
+      must_share_any: ["HMI","SCADA","historian","backup","license","version","OS"]
+    hep_scoring:
+      weights: {entropy_delta: .20, nums_units: .26, standards: .22, modal_shall: .16, table_proximity: .16}
+      unit_patterns: ["ms","s","min","h","days","GB","tags","ver","LTSC","build"]
+      standard_ids: ["IEC 62443","ISA-95","ISA-101","ISO/IEC 27001","GAMP 5"]
+      topN_per_section: 3
+    graphrag:
+      entities: ["HMI","SCADA","historian","database","interface","API","protocol","user role","backup","patch","standard"]
+      relations: ["integrates_with","requires","secured_by","exports_to"]
+      radius: 1
+      max_comms: 3
+    retrieval:
+      cascade: [sparse, dense_hyde, colbert, cross]
+      boosts_sparse: ["IEC 62443","ISA-95","ISA-101","OPC UA","MQTT","backup","retention","LTSC","patch"]
+      hyde_hints: "Find software/HMI/SCADA/historian, interfaces (OPC UA/MQTT), backups, versions, cybersecurity controls. Prefer SHALL/MUST."
+      colbert_token_boosts: ["OPC","MQTT","NTP","PTP","backup","retention","role","audit","patch"]
+
+  Project Management:
+    segmentation:
+      weights: {wH: .18, wD: .24, wC: .06, wR: .30, wN: .16, wL: .06}
+      heading_regex_boosts: ["(Schedule|Milestones|FAT|SAT|Training|Warranty|Commercial|Terms|Submission|Evaluation)"]
+      token_boosts: ["FAT","SAT","week","Week","milestone","payment","30%","10%","warranty","support","training","LD","bond","DDP"]
+      normalize_within: ["Project Management & Schedule","Warranty & Support","Commercial Terms","Submission & Evaluation"]
+      min_gap: 2
+      threshold: {mode: "zscore", lambda: 1.0}
+    fluid_merge:
+      strategy: "execution"
+      sim_threshold: 0.74
+      must_share_any: ["milestone","warranty","training","payment","LD","submission"]
+    hep_scoring:
+      weights: {entropy_delta: .14, nums_units: .30, standards: .10, modal_shall: .18, table_proximity: .28}
+      unit_patterns: ["weeks","days","hours","%","$"]
+      standard_ids: ["ISO 9001","ISO 45001"]
+      topN_per_section: 4
+    graphrag:
+      entities: ["milestone","date","duration","payment","warranty","deliverable","role","review"]
+      relations: ["precedes","depends_on","tied_to","requires"]
+      radius: 1
+      max_comms: 4
+    retrieval:
+      cascade: [sparse, dense_hyde, colbert]
+      boosts_sparse: ["FAT","SAT","Week 14","Week 18","payment","30%","10%","warranty 12-month","DDP"]
+      hyde_hints: "Extract schedule dates, milestones, training, warranty, payment terms, deliverables; prefer SHALL/MUST and numerics."
+      colbert_token_boosts: ["week","%","FAT","SAT","warranty","payment","DDP"]

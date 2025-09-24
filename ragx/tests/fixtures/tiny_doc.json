@@ -1,0 +1,11 @@
+{
+  "doc_id": "tiny",
+  "chunks": [
+    {"text": "1. Mechanical Requirements", "meta": {"page": 1, "is_heading": true, "number": "1.", "section_id": "H1"}},
+    {"text": "All frames shall use ASTM A36 steel with thickness 10 mm. ISO 2768-m applies.", "meta": {"page": 1}},
+    {"text": "2. Electrical Power", "meta": {"page": 2, "is_heading": true, "number": "2.", "section_id": "H2"}},
+    {"text": "Panel SCCR shall be 65 kA at 480 VAC per UL 508A.", "meta": {"page": 2}},
+    {"text": "Schedule and Warranty", "meta": {"page": 3, "is_heading": true, "number": "3", "section_id": "H3"}},
+    {"text": "FAT Week 14; SAT Week 18; warranty 12 months.", "meta": {"page": 3}}
+  ]
+}
