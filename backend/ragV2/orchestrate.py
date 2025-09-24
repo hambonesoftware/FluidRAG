@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Dict, Iterable, List, Optional
 
 from backend.compat import to_legacy_llm_message
@@ -15,9 +16,11 @@ from .entropy import (
 )
 from .fusion import fuse_scores, intersect_or_tightest_band
 from .graph import GraphIndex
+from .graph_summaries import build_graph_summaries
 from .pack import pack_context
 from .retrieval import Retriever
 from .rerank import Reranker
+from .sentence_window import attach_meso_parent, auto_merge_sentences, sentence_window_hits
 from .types import Chunk, EvidenceBand, EvidenceScore, ExtractionJSON
 
 log = logging.getLogger("FluidRAG.rag_v2")
@@ -33,6 +36,46 @@ def _order_chunks(chunks: Iterable[Chunk]) -> List[Chunk]:
             chunk.chunk_id,
         ),
     )
+
+
+_GLOBAL_RE = re.compile(r"\b(?:compare|versus|vs\.?|difference|alignment)\b", re.I)
+_STD_RE = re.compile(r"\b(?:NFPA|IEC|ISO|UL|OSHA|EN)\s?\d+[A-Z0-9]*\b")
+_NUMERIC_RE = re.compile(r"[-+]?(?:\d+\.\d+|\d+)")
+
+
+def _is_global_query(question: str) -> bool:
+    std_matches = _STD_RE.findall(question or "")
+    has_multi_std = len({match.upper() for match in std_matches}) >= 2
+    return bool(_GLOBAL_RE.search(question or "") or has_multi_std)
+
+
+def _detect_stage_conflicts(chunks: Iterable[Chunk]) -> List[Dict[str, object]]:
+    records: Dict[tuple, Dict[str, List[str]]] = {}
+    conflicts: List[Dict[str, object]] = []
+    for chunk in chunks:
+        numbers = _NUMERIC_RE.findall(chunk.text or "")
+        if not numbers:
+            continue
+        key = (chunk.doc_id, chunk.section_no or chunk.section_title or "")
+        bucket = records.setdefault(key, {})
+        bucket.setdefault(chunk.stage_tag, []).extend(numbers)
+    for key, stages in records.items():
+        if len(stages) <= 1:
+            continue
+        normalized = {stage: sorted(set(values)) for stage, values in stages.items()}
+        values = list(normalized.values())
+        if len({tuple(v) for v in values}) <= 1:
+            continue
+        doc_id, section = key
+        conflicts.append(
+            {
+                "doc_id": doc_id,
+                "section": section,
+                "values": normalized,
+                "note": "specific-governs",
+            }
+        )
+    return conflicts
 
 
 def _seed_band(
@@ -75,6 +118,22 @@ def macro_pass(
     pool = retriever.search(question, domain, edition_filters or {})
     pool = reranker.rerank(question, pool)
 
+    graph_summaries: List[Dict[str, object]] = []
+    if CFG.enable_graph_summaries and _is_global_query(question):
+        try:
+            summaries = build_graph_summaries(pool, top_k=CFG.topK_for_synthesis)
+            graph_summaries = [summary.to_payload() for summary in summaries]
+        except Exception:  # pragma: no cover - defensive
+            log.exception("[rag_v2] failed to compute graph summaries")
+
+    sentence_windows: List[Dict[str, object]] = []
+    if CFG.enable_sentence_window:
+        hits = []
+        for chunk in pool[: CFG.k_sentence]:
+            hits.extend(sentence_window_hits(chunk))
+        merged = auto_merge_sentences(hits)
+        sentence_windows = attach_meso_parent(merged, pool)
+
     standard_agent = StandardAgent()
     std_scores = standard_agent.score(question, pool)
     for chunk in pool:
@@ -113,7 +172,9 @@ def macro_pass(
         )
 
     chunk_map = {chunk.chunk_id: chunk for chunk in ordered}
-    context = pack_context(band, chunk_map)
+    context = pack_context(band, chunk_map, graph_summaries=graph_summaries)
+    if sentence_windows:
+        context.setdefault("SentenceWindows", sentence_windows)
     message = to_legacy_llm_message(context, question)
 
     extraction = _default_extraction()
@@ -130,5 +191,12 @@ def macro_pass(
         "context": context,
         "llm_message": message,
     }
+    if graph_summaries:
+        extraction.provenance["graph_summaries"] = graph_summaries
+    if sentence_windows:
+        extraction.provenance["sentence_windows"] = sentence_windows
+    conflicts = _detect_stage_conflicts(pool)
+    if conflicts:
+        extraction.provenance["conflicts"] = conflicts
     extraction.confidence = max(score.final for score in fused.values()) if fused else 0.0
     return extraction
