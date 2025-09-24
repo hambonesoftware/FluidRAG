@@ -1,0 +1,31 @@
+segmentation:
+  break_threshold: 0.6
+  min_gap_chunks: 2
+
+scores:
+  weights:
+    break: {wH: 0.25, wD: 0.30, wC: 0.15, wR: 0.20, wN: 0.07, wL: 0.03}
+    fluid: {len: 0.25, list: 0.20, ref: 0.20, conn: 0.20, std: 0.10, numeric_only: -0.05}
+    hep:   {num: 0.30, must: 0.25, acc: 0.20, risk: 0.15, ent: 0.05, boiler: -0.05}
+  thresholds:
+    fluid: 0.60
+    hep:   0.60
+
+retrieval:
+  sparse: {type: bm25, topk: 200, qe: {acronyms: true, spelling: true, hyphen: true}}
+  dense:  {type: encoder_tech_legal, topk: 200, hyde: {enabled: true, n: 2, trigger_sparse_topk_lt: 10}}
+  cascade:
+    merge_topk: 200
+    colbert: {enabled: true, re_rank_topk: 50}
+    cross_encoder: {enabled: false, re_rank_topk: 20}
+  features:
+    unit_numeric_boost: 0.2
+    normative_boost: {value: 0.2, tokens: ["shall","must","required"]}
+    clause_regex_boost: 0.6
+
+context:
+  micro_window: {sentences_min: 2, sentences_max: 4, overlap: 0.5}
+  attach_meso_parent: true
+
+graph:
+  summaries: {enabled: true, k: 2, trigger_multi_standard: true}

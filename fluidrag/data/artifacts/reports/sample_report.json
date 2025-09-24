@@ -1,0 +1,8 @@
+{
+  "doc_id": "sample",
+  "chunk_count": 1,
+  "avg_length": 28.0,
+  "signals_complete_percent": 100.0,
+  "fluid_above_threshold_percent": 0.0,
+  "hep_above_threshold_percent": 100.0
+}
