@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple, Optional
 import re
+import os
+import csv
+import json
 
 try:
     from rapidfuzz.fuzz import ratio as fuzz_ratio
@@ -9,7 +12,7 @@ except Exception:
     import difflib
     def fuzz_ratio(a, b): return int(100 * difflib.SequenceMatcher(None, a or "", b or "").ratio())
 
-from .header_detector import is_header_line, score_header_candidate
+from .header_detector import score_header_candidate, score_header_candidate_debug
 from .header_levels import map_font_sizes_to_levels, infer_heading_level
 from .header_config import CONFIG
 
@@ -108,3 +111,117 @@ def build_adjudication_prompt(page_text: str, candidates: List[dict], context_ch
         "CANDIDATE_LINES:\n" + "\n".join(lines) + "\n\n" +
         "PAGE_TEXT_SNIPPETS:\n" + "\n".join(ctxs)
     )
+
+
+def _ensure_dir(path: str) -> None:
+    if path:
+        os.makedirs(path, exist_ok=True)
+
+
+def _dump_page_debug(
+    doc_id: str,
+    page_idx: int,
+    page_text: str,
+    candidates: List[dict],
+    llm_prompt: Optional[str] = None,
+    llm_json: Optional[List[Dict[str, Any]]] = None,
+) -> None:
+    if not CONFIG.get("debug"):
+        return
+
+    base_dir = CONFIG.get("debug_dir", "./_debug/headers") or "./_debug/headers"
+    _ensure_dir(base_dir)
+    out_dir = os.path.join(base_dir, doc_id or "document", f"page_{page_idx:04d}")
+    _ensure_dir(out_dir)
+
+    csv_path = os.path.join(out_dir, "candidates.csv")
+    with open(csv_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(
+            [
+                "line_idx",
+                "text",
+                "regex_hits",
+                "numbering_depth",
+                "font_size",
+                "bold",
+                "caps",
+                "disqualifiers",
+                "partial_scores",
+                "total_score",
+                "accepted",
+                "threshold",
+            ]
+        )
+        threshold = CONFIG.get("accept_score_threshold", 2.25)
+        for cand in candidates:
+            breakdown = score_header_candidate_debug(cand.get("text"), style=cand.get("style") or {})
+            accepted = breakdown.total >= threshold
+            writer.writerow(
+                [
+                    cand.get("line_idx"),
+                    breakdown.text,
+                    " | ".join(breakdown.regex_hits),
+                    breakdown.numbering_depth,
+                    breakdown.font_size,
+                    breakdown.bold,
+                    breakdown.caps,
+                    " | ".join(breakdown.disqualifiers),
+                    json.dumps(breakdown.partial_scores, ensure_ascii=False),
+                    f"{breakdown.total:.2f}",
+                    accepted,
+                    threshold,
+                ]
+            )
+
+    with open(os.path.join(out_dir, "candidates.json"), "w", encoding="utf-8") as fh:
+        json.dump(candidates, fh, ensure_ascii=False, indent=2)
+
+    with open(os.path.join(out_dir, "page.txt"), "w", encoding="utf-8") as fh:
+        fh.write(page_text)
+
+    if llm_prompt is not None:
+        with open(os.path.join(out_dir, "llm_prompt.txt"), "w", encoding="utf-8") as fh:
+            fh.write(llm_prompt)
+
+    if llm_json is not None:
+        with open(os.path.join(out_dir, "llm_selection.json"), "w", encoding="utf-8") as fh:
+            json.dump(llm_json, fh, ensure_ascii=False, indent=2)
+
+
+def dump_appendix_audit(
+    doc_id: str,
+    pages_debug: List[Tuple[int, List[dict], str]],
+) -> None:
+    if not CONFIG.get("debug"):
+        return
+
+    rx = re.compile(r"^\s*(?:Appendix\s+[A-Za-z]|[A-Za-z]\d+\.)")
+    base_dir = CONFIG.get("debug_dir", "./_debug/headers") or "./_debug/headers"
+    _ensure_dir(base_dir)
+    out_dir = os.path.join(base_dir, doc_id or "document")
+    _ensure_dir(out_dir)
+
+    audit_rows: List[Dict[str, Any]] = []
+    threshold = CONFIG.get("accept_score_threshold", 2.25)
+    for page_idx, cand_list, _page_text in pages_debug:
+        for cand in cand_list:
+            txt = (cand.get("text") or "").strip()
+            if not rx.match(txt):
+                continue
+            breakdown = score_header_candidate_debug(txt, style=cand.get("style") or {})
+            audit_rows.append(
+                {
+                    "page": page_idx + 1,
+                    "line_idx": cand.get("line_idx"),
+                    "text": txt,
+                    "regex_hits": breakdown.regex_hits,
+                    "total": breakdown.total,
+                    "accepted": breakdown.total >= threshold,
+                    "partial_scores": breakdown.partial_scores,
+                    "disqualifiers": breakdown.disqualifiers,
+                }
+            )
+
+    with open(os.path.join(out_dir, "appendix_audit.json"), "w", encoding="utf-8") as fh:
+        json.dump(audit_rows, fh, ensure_ascii=False, indent=2)

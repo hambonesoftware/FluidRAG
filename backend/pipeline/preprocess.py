@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import importlib
+import copy
 from typing import List, Dict, Any, Iterable, Optional, Tuple
 
 # PDF extraction wrapper
@@ -9,7 +10,12 @@ from ..ingest.pdf_extract import extract as pdf_extract
 
 # v1.7 header helpers
 from ..parse.header_config import CONFIG
-from ..parse.header_page_mode import select_candidates, build_adjudication_prompt
+from ..parse.header_page_mode import (
+    select_candidates,
+    build_adjudication_prompt,
+    _dump_page_debug,
+    dump_appendix_audit,
+)
 from ..parse.header_detector import is_header_line
 from ..state import get_state
 
@@ -365,15 +371,26 @@ async def detect_headers_page_mode(
     page_line_styles: Optional[List[List[dict]]],
     page_texts: Optional[List[str]],
     llm_client,
+    doc_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Deterministic-first header detection, page-by-page, with optional LLM adjudication.
     Returns: [{"page": N, "headers": [{"line_idx","text","section_number","level","score","style"}]}]
     """
     results: List[Dict[str, Any]] = []
+    debug_snapshots: List[Tuple[int, List[dict], str]] = []
+    doc_tag = doc_id or "document"
     for pi, lines in enumerate(pages_lines or []):
         styles = page_line_styles[pi] if page_line_styles and pi < len(page_line_styles) else [{} for _ in lines]
         candidates = select_candidates(lines, styles)
+        page_text = (
+            page_texts[pi]
+            if page_texts and pi < len(page_texts)
+            else "\n".join(lines)
+        )
+        snapshot = [copy.deepcopy(c) for c in candidates]
+        debug_snapshots.append((pi, snapshot, page_text))
+        _dump_page_debug(doc_tag, pi, page_text, snapshot)
 
         det = [c for c in candidates if c["score"] >= CONFIG.get("accept_score_threshold", 2.0)]
         ambiguous = [c for c in candidates if CONFIG.get("ambiguous_score_threshold", 1.0) <= c["score"] < CONFIG.get("accept_score_threshold", 2.0)]
@@ -381,13 +398,15 @@ async def detect_headers_page_mode(
 
         need_llm = CONFIG.get("llm_enabled", True) and (ambiguous or len(candidates) > CONFIG.get("max_candidates_per_page", 40)//2)
         if need_llm and llm_client is not None:
+            page_prompt = build_adjudication_prompt(
+                page_text,
+                candidates,
+                CONFIG.get("context_chars_per_candidate", 700),
+            )
+            _dump_page_debug(doc_tag, pi, page_text, snapshot, llm_prompt=page_prompt)
             user_msg = {
                 "role": "user",
-                "content": build_adjudication_prompt(
-                    page_texts[pi] if page_texts and pi < len(page_texts) else "\n".join(lines),
-                    candidates,
-                    CONFIG.get("context_chars_per_candidate", 700),
-                ),
+                "content": page_prompt,
             }
             sys_prompt = _get_header_system_prompt()
             try:
@@ -420,6 +439,14 @@ async def detect_headers_page_mode(
                                 })
                         except Exception:
                             continue
+                _dump_page_debug(
+                    doc_tag,
+                    pi,
+                    page_text,
+                    snapshot,
+                    llm_prompt=page_prompt,
+                    llm_json=payload if isinstance(payload, list) else [],
+                )
             except Exception:
                 pass
 
@@ -433,4 +460,6 @@ async def detect_headers_page_mode(
             ordered.append(c)
 
         results.append({"page": pi + 1, "headers": ordered})
+
+    dump_appendix_audit(doc_tag, debug_snapshots)
     return results
