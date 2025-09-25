@@ -14,6 +14,7 @@ import {
   onPreprocess,
   onHeaders,
   onHeadersRerun,
+  onHeadersRechunk,
   onLocalHeaders,
   onProcess,
   onProcessRerunAll
@@ -66,6 +67,8 @@ async function boot() {
   if (headersBtn) headersBtn.addEventListener("click", onHeaders);
   const headersRerunBtn = el("headersRerunBtn");
   if (headersRerunBtn) headersRerunBtn.addEventListener("click", onHeadersRerun);
+  const headersRechunkBtn = el("headersRechunkBtn");
+  if (headersRechunkBtn) headersRechunkBtn.addEventListener("click", onHeadersRechunk);
   const processBtn = el("processBtn");
   if (processBtn) processBtn.addEventListener("click", onProcess);
   const rerunBtn = el("processRerunBtn");
