@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import re
 
 from .patterns_rfq import RFQ_SECTION_RES, UNIT_NEARBY_RX, ADDRESS_HINT_RX, PAGE_ART_RX
-from . import header_config
 
 HEADER_RX = re.compile(r'^\s*(\d+(?:\.\d+)*)\s*(?:[-:]|\s+)\s*(.+?)\s*$')
 ALT_HEADER_RX = re.compile(r'^\s*Section\s+(\d+(?:\.\d+)*)\s*[-:]?\s*(.+?)\s*$', re.IGNORECASE)
@@ -150,7 +149,7 @@ def score_header_candidate_debug(line: str, style: dict | None = None) -> ScoreB
     if isinstance(meta, dict):
         section_number = meta.get("section_number")
     if not section_number:
-        match = header_config.SECTION_PREFIX_RX.search(txt)
+        match = re.match(r"^\s*([A-Za-z]\d+(?:\.\d+)*)", txt)
         if match:
             section_number = match.group(1)
 

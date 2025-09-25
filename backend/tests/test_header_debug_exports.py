@@ -37,10 +37,18 @@ def test_header_debug_analysis_and_manifest(tmp_path, llm_selected):
         )
 
         page_dir = Path(tmp_path) / "doc-123" / "page_0000"
-        scored_path = page_dir / "candidates_scored.csv"
-        assert scored_path.exists()
+        analysis_path = page_dir / "analysis.json"
+        assert analysis_path.exists()
 
-        snapshots = [(0, copy.deepcopy(candidates), page_text, [])]
+        analysis = json.loads(analysis_path.read_text())
+        assert isinstance(analysis, list) and analysis
+        first = analysis[0]
+        assert "score" in first and "line_idx" in first
+        assert first["line_idx"] == 0
+        assert first["llm_selected"] is True
+        assert any(item["line_idx"] == 1 for item in analysis)
+
+        snapshots = [(0, copy.deepcopy(candidates), page_text)]
         results = [
             {
                 "page": 1,
@@ -82,7 +90,6 @@ def test_header_candidate_audit_written_without_debug(tmp_path):
                 {"line_idx": 1, "text": "A5 Optional", "style": {"font_size": 12}},
             ],
             "1. Scope\nA5 Optional",
-            [],
         )
     ]
     results = [

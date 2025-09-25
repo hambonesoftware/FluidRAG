@@ -380,30 +380,20 @@ async def detect_headers_page_mode(
     Returns: [{"page": N, "headers": [{"line_idx","text","section_number","level","score","style"}]}]
     """
     results: List[Dict[str, Any]] = []
-    debug_snapshots: List[Tuple[int, List[dict], str, List[Dict[str, Any]]]] = []
+    debug_snapshots: List[Tuple[int, List[dict], str]] = []
     llm_selections: Dict[int, List[Dict[str, Any]]] = {}
     doc_tag = doc_id or "document"
     for pi, lines in enumerate(pages_lines or []):
-        styles = (
-            page_line_styles[pi]
-            if page_line_styles and pi < len(page_line_styles)
-            else [{} for _ in lines]
-        )
-        candidates, line_records = select_candidates(
-            lines,
-            styles,
-            doc_id=doc_tag,
-            page_idx=pi,
-        )
+        styles = page_line_styles[pi] if page_line_styles and pi < len(page_line_styles) else [{} for _ in lines]
+        candidates = select_candidates(lines, styles)
         page_text = (
             page_texts[pi]
             if page_texts and pi < len(page_texts)
             else "\n".join(lines)
         )
         snapshot = [copy.deepcopy(c) for c in candidates]
-        line_snapshot = [copy.deepcopy(r) for r in line_records]
-        debug_snapshots.append((pi, snapshot, page_text, line_snapshot))
-        write_page_debug(doc_tag, pi, page_text, snapshot, line_snapshot)
+        debug_snapshots.append((pi, snapshot, page_text))
+        write_page_debug(doc_tag, pi, page_text, snapshot)
 
         det = [c for c in candidates if c["score"] >= CONFIG.get("accept_score_threshold", 2.0)]
         ambiguous = [c for c in candidates if CONFIG.get("ambiguous_score_threshold", 1.0) <= c["score"] < CONFIG.get("accept_score_threshold", 2.0)]
@@ -416,14 +406,7 @@ async def detect_headers_page_mode(
                 candidates,
                 CONFIG.get("context_chars_per_candidate", 700),
             )
-            write_page_debug(
-                doc_tag,
-                pi,
-                page_text,
-                snapshot,
-                line_snapshot,
-                llm_prompt=page_prompt,
-            )
+            write_page_debug(doc_tag, pi, page_text, snapshot, llm_prompt=page_prompt)
             user_msg = {
                 "role": "user",
                 "content": page_prompt,
@@ -469,7 +452,6 @@ async def detect_headers_page_mode(
                     pi,
                     page_text,
                     snapshot,
-                    line_snapshot,
                     llm_prompt=page_prompt,
                     llm_json=selections,
                 )
