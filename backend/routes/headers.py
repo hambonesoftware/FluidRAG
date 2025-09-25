@@ -106,7 +106,7 @@ def determine_headers():
         )
         doc_tag = _sanitize_component(doc_tag_source, "document")
         header_debug_dir: Optional[str] = None
-        page_debug_snapshots: List[Tuple[int, List[dict], str, List[Dict[str, Any]]]] = []
+        page_debug_snapshots: List[Tuple[int, List[dict], str]] = []
         page_debug_map: Dict[int, Dict[str, Any]] = {}
         page_llm_selections: Dict[int, List[Dict[str, Any]]] = {}
 
@@ -177,12 +177,7 @@ def determine_headers():
                     if page_line_styles and pi < len(page_line_styles)
                     else [{} for _ in lines]
                 )
-                cands, line_records = select_candidates(
-                    lines,
-                    styles,
-                    doc_id=doc_tag,
-                    page_idx=pi,
-                )
+                cands = select_candidates(lines, styles)
                 all_page_cands.append(cands)
                 if pi < 15:
                     debug_candidates.append({"page": pi + 1, "candidates": cands[:12]})
@@ -193,15 +188,10 @@ def determine_headers():
                     else "\n".join(lines)
                 )
                 snapshot = [copy.deepcopy(c) for c in cands]
-                line_snapshot = [copy.deepcopy(r) for r in line_records]
-                page_debug_snapshots.append((pi, snapshot, page_text, line_snapshot))
-                page_debug_map[pi] = {
-                    "snapshot": snapshot,
-                    "text": page_text,
-                    "lines": line_snapshot,
-                }
+                page_debug_snapshots.append((pi, snapshot, page_text))
+                page_debug_map[pi] = {"snapshot": snapshot, "text": page_text}
                 if debug_active:
-                    write_page_debug(doc_tag, pi, page_text, snapshot, line_snapshot)
+                    write_page_debug(doc_tag, pi, page_text, snapshot)
 
             adjudicated: Dict[int, List[int]] = {}
             llm_debug: List[Dict[str, Any]] = []
@@ -250,24 +240,10 @@ def determine_headers():
                                     if p < len(pages_linear)
                                     else "\n".join(pages_lines[p])
                                 )
-                                line_snapshot_local = [
-                                    copy.deepcopy(r)
-                                    for r in page_debug_map.get(p, {}).get("lines", [])
-                                ] or []
-                                entry = {
-                                    "snapshot": snapshot,
-                                    "text": page_text_local,
-                                    "lines": line_snapshot_local,
-                                }
+                                entry = {"snapshot": snapshot, "text": page_text_local}
                                 page_debug_map[p] = entry
-                                page_debug_snapshots.append((p, snapshot, page_text_local, line_snapshot_local))
-                                write_page_debug(
-                                    doc_tag,
-                                    p,
-                                    page_text_local,
-                                    snapshot,
-                                    line_snapshot_local,
-                                )
+                                page_debug_snapshots.append((p, snapshot, page_text_local))
+                                write_page_debug(doc_tag, p, page_text_local, snapshot)
                             entry["prompt"] = prompt
                             write_page_debug(
                                 doc_tag,
@@ -279,7 +255,6 @@ def determine_headers():
                                     else "\n".join(pages_lines[p])
                                 ),
                                 entry.get("snapshot") or [],
-                                entry.get("lines") or [],
                                 llm_prompt=prompt,
                             )
 
