@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import itertools
-import json
 from collections import defaultdict
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 from .context import RAGContext
 from .utils import normalize_text
@@ -47,10 +46,17 @@ def micrograph(query, candidate_sections, profile, context: RAGContext, seeds=No
 
     nodes: Dict[str, Dict[str, Any]] = {}
     edges: List[Tuple[str, str, str]] = []
+    normalized_seeds = {normalize_text(s) for s in seeds}
 
     for section in candidate_sections:
         text = section.get("text") or section.get("section_name") or ""
         section_entities = _extract_entities(text, vocab)
+        if radius <= 0:
+            continue
+        normalized_entities = {normalize_text(ent) for ent in section_entities}
+        if normalized_seeds and not (normalized_entities & normalized_seeds):
+            if radius <= 1:
+                continue
         for ent in section_entities:
             if ent not in nodes:
                 nodes[ent] = {
@@ -76,16 +82,34 @@ def micrograph(query, candidate_sections, profile, context: RAGContext, seeds=No
     summaries = []
     for comm in comm_items:
         description = ", ".join(comm)
+        citations = []
+        for node_id in comm:
+            node = nodes.get(node_id, {})
+            anchors = node.get("anchors", [])
+            citations.append(
+                {
+                    "anchor": anchors[0] if anchors else None,
+                    "pages": node.get("pages", []),
+                }
+            )
         summaries.append({
             "community": list(comm),
             "summary": f"Entities connected: {description}",
+            "citations": citations,
         })
+
+    deduped_edges = []
+    seen_edges = set()
+    for src, dst, rel in edges:
+        key = (src, dst, rel)
+        if key in seen_edges:
+            continue
+        deduped_edges.append({"source": src, "target": dst, "relation": rel})
+        seen_edges.add(key)
 
     result = {
         "nodes": list(nodes.values()),
-        "edges": [
-            {"source": s, "target": t, "relation": rel} for s, t, rel in edges
-        ],
+        "edges": deduped_edges,
         "communities": comm_items,
         "summaries": summaries,
     }

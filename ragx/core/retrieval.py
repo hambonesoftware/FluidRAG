@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any, Dict, Iterable, List, Tuple
 
 from .context import RAGContext
-from .utils import normalize_text
 
 
 def _apply_boost(text: str, boosts: Iterable[str]) -> float:
@@ -75,15 +74,45 @@ def retrieve(query, indexes, profile, context: RAGContext, budget=None):
 
     for doc_id, entry in combined.items():
         entry["score"] = sum(entry["stage_scores"].values())
+        if entry["stage_scores"]:
+            best_stage = max(entry["stage_scores"], key=entry["stage_scores"].get)
+        else:
+            best_stage = "sparse"
+        entry["stage_tag"] = best_stage
 
     ranked = sorted(combined.values(), key=lambda x: x["score"], reverse=True)
     if budget is not None:
         ranked = ranked[:budget]
 
+    meso_index = indexes.get("meso", {})
+    expanded: List[Dict[str, Any]] = []
+    seen_ids = set()
     for hit in ranked:
-        if hit.get("parent") and hit["parent"] not in combined:
-            parent = indexes.get("meso", {}).get(hit["parent"])
-            if parent:
-                combined[hit["parent"]] = parent
+        expanded.append(hit)
+        seen_ids.add(hit["id"])
+        parent_id = hit.get("parent")
+        if not parent_id or parent_id in seen_ids:
+            continue
+        parent_section = meso_index.get(parent_id)
+        if not parent_section:
+            continue
+        parent_hit = {
+            "id": parent_id,
+            "text": parent_section.get("section_name") or parent_section.get("text", ""),
+            "anchors": parent_section.get("anchors", []),
+            "pages": [
+                page
+                for page in [parent_section.get("page_start"), parent_section.get("page_end")]
+                if page is not None
+            ],
+            "resolution": parent_section.get("resolution", "meso"),
+            "provenance": [parent_section.get("section_id")],
+            "parent": None,
+            "stage_scores": {"coverage": hit["stage_scores"].get(hit["stage_tag"], hit.get("score", 0.0))},
+            "score": hit.get("score", 0.0),
+            "stage_tag": "coverage",
+        }
+        expanded.append(parent_hit)
+        seen_ids.add(parent_id)
 
-    return ranked
+    return expanded

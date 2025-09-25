@@ -16,7 +16,7 @@ from .signals import (
     regex_prior,
     smoothed_entropy,
 )
-from .utils import build_anchor
+from .utils import build_anchor, normalize_text
 
 
 _DEF_STD_EPS = 1e-6
@@ -59,6 +59,7 @@ def detect_headers(chunks, embeddings, clusters, profile, context: RAGContext):
     token_boosts = set(tok.lower() for tok in seg_cfg.get("token_boosts", []))
     min_gap = seg_cfg.get("min_gap", 1)
     threshold_cfg = seg_cfg.get("threshold", {"mode": "zscore", "lambda": 1.0})
+    normalize_within = {normalize.lower() for normalize in seg_cfg.get("normalize_within", [])}
 
     entropies = [_shannon_entropy(chunk.get("text", "")) for chunk in chunks]
     smoothed = smoothed_entropy(entropies, window=2)
@@ -113,6 +114,9 @@ def detect_headers(chunks, embeddings, clusters, profile, context: RAGContext):
             + weights.get("wN", 0.0) * num_score
             + weights.get("wL", 0.0) * lay_score
         )
+        family = normalize_text(meta.get("family")) if meta else ""
+        if family and family in normalize_within:
+            score *= 1.05
         scores.append(score)
 
     if threshold_cfg.get("mode") == "zscore":
@@ -136,7 +140,7 @@ def detect_headers(chunks, embeddings, clusters, profile, context: RAGContext):
             "start_idx": idx,
             "end_idx": idx,
             "anchors": anchors,
-            "signals": signal_traces,
+            "signals": {k: list(v) for k, v in signal_traces.items()},
             "break_score": score,
         }
 
@@ -179,9 +183,12 @@ def detect_headers(chunks, embeddings, clusters, profile, context: RAGContext):
         page_end = section["page_end"]
         if sec_idx + 1 < len(sections):
             end_idx = sections[sec_idx + 1]["start_idx"] - 1
-            next_page = sections[sec_idx + 1]["page_start"]
-            page_end = max(page_end, next_page)
-        section["end_idx"] = max(section["start_idx"], end_idx)
-        section["page_end"] = page_end
+        end_idx = max(section["start_idx"], end_idx)
+        section["end_idx"] = end_idx
+        end_page = section["page_start"]
+        for i in range(section["start_idx"], end_idx + 1):
+            if 0 <= i < len(chunks):
+                end_page = max(end_page, chunks[i].get("meta", {}).get("page", end_page))
+        section["page_end"] = max(section.get("page_end", end_page), end_page)
 
     return sections

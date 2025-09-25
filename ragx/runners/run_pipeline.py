@@ -57,7 +57,7 @@ def _build_indexes(sections, hep_passages):
             }
         )
     indexes = {
-        "sparse": sparse + micro,
+        "sparse": sparse,
         "dense": micro,
         "colbert": micro,
         "meso": {sec["section_id"]: sec for sec in sections},
