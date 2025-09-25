@@ -448,18 +448,8 @@ export function onHeadersRerun() {
   return onHeaders({ forceRefresh: true });
 }
 
-export async function onHeadersRechunk() {
-  const end = openGroup("[Flow] Re-chunk before headers", false);
-  try {
-    const preOk = await onPreprocess({ forceRefresh: true });
-    if (!preOk) {
-      log("Re-chunk before headers aborted: preprocess failed");
-      return;
-    }
-    await onHeaders({ forceRefresh: true });
-  } finally {
-    end();
-  }
+export function onPreprocessRechunk() {
+  return onPreprocess({ forceRefresh: true });
 }
 
 export async function onProcess(options = {}) {
