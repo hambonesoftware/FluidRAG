@@ -1,0 +1,54 @@
+name: Requirements Register
+
+on:
+  push:
+    paths:
+      - "tools/**"
+      - "schemas/**"
+      - "data/stages/**"
+      - "data/output/FluidRAG_results.csv"
+      - "tests/test_register_pipeline.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/register.yml"
+  pull_request:
+    paths:
+      - "tools/**"
+      - "schemas/**"
+      - "data/stages/**"
+      - "data/output/FluidRAG_results.csv"
+      - "tests/test_register_pipeline.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/register.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pytest
+      - name: Run unit tests
+        run: pytest -q
+      - name: Generate requirements register
+        run: >-
+          python -m tools.register_cli
+          --stages data/stages
+          --raw data/output/FluidRAG_results.csv
+          --out data/output/requirements_register.csv
+          --metrics data/output/requirements_register_metrics.json
+          --matrix data/output/compliance_matrix.csv
+      - name: Upload register artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: requirements-register
+          path: |
+            data/output/requirements_register.csv
+            data/output/requirements_register_metrics.json
+            data/output/compliance_matrix.csv

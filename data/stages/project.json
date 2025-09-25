@@ -1,0 +1,22 @@
+[
+  {
+    "chunk_id": "chunk-pm-001",
+    "pass": "Project Management",
+    "section_id": "3.1",
+    "section_title": "Project Milestones",
+    "header_anchor": "pm-milestones",
+    "page_start": 4,
+    "page_end": 4,
+    "text": "FAT shall occur in week 14 with customer witness. Payment milestones 30/30/30/10 tied to FAT, SAT, shipment, and site acceptance."
+  },
+  {
+    "chunk_id": "chunk-pm-002",
+    "pass": "Project Management",
+    "section_id": "17.5",
+    "section_title": "Commercial Evaluation",
+    "header_anchor": "pm-commercial",
+    "page_start": 32,
+    "page_end": 33,
+    "text": "Evaluation buckets include schedule adherence and commercial terms."
+  }
+]

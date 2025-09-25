@@ -1,0 +1,32 @@
+[
+  {
+    "chunk_id": "chunk-ctrl-001",
+    "pass": "Controls",
+    "section_id": "11.1",
+    "section_title": "Control Architecture",
+    "header_anchor": "control-architecture",
+    "page_start": 11,
+    "page_end": 11,
+    "text": "The PLC shall support remote I/O expansion.\nThe HMI shall present alarms, diagnostics, and e-stop status."
+  },
+  {
+    "chunk_id": "chunk-ctrl-002",
+    "pass": "Controls",
+    "section_id": "11.2",
+    "section_title": "HMI Functions",
+    "header_anchor": "hmi-functions",
+    "page_start": 12,
+    "page_end": 12,
+    "text": "The system shall provide:\n• Recipe management for 50 recipes.\n• Alarm history for 30 days.\n• Diagnostic dashboards for all stations."
+  },
+  {
+    "chunk_id": "chunk-ctrl-003",
+    "pass": "Controls",
+    "section_id": "17.1",
+    "section_title": "Evaluation Criteria",
+    "header_anchor": "eval-controls",
+    "page_start": 30,
+    "page_end": 31,
+    "text": "Section 17 evaluation criteria include performance, safety, energy, and total cost of ownership buckets."
+  }
+]

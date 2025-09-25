@@ -1,0 +1,6 @@
+Specification,Pass,SourceDoc,ChunkID
+"HMI shall provide recipes, alarms, diagnostics, and e-stop indicators.",Controls,EPF_Spec.pdf,chunk-ctrl-001
+"The system shall provide recipe management for at least 50 recipes and retain alarm history for 30 days.",Controls,EPF_Spec.pdf,chunk-ctrl-002
+"Maintain alignment within 0.5 mm and provide guarding that meets ISO 14120; safe torque off must be integrated.",Mechanical,EPF_Spec.pdf,chunk-mech-001
+"EOAT shall withstand 40 lb payload with safety factor 4:1.",Mechanical,EPF_Spec.pdf,chunk-mech-002
+"FAT shall occur in week 14 with customer witness; payment milestones 30/30/30/10 tied to FAT, SAT, shipment, acceptance.",Project Management,EPF_Project.pdf,chunk-pm-001

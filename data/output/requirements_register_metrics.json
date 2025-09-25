@@ -1,0 +1,55 @@
+{
+  "generated_at": "2025-09-25T00:39:53.006847Z",
+  "total_requirements": 17,
+  "buckets": [
+    {
+      "bucket": "Performance20",
+      "weight": 20,
+      "requirements": 1,
+      "coverage_percent": 5.0,
+      "risk": "high"
+    },
+    {
+      "bucket": "Maintenance10",
+      "weight": 10,
+      "requirements": 8,
+      "coverage_percent": 80.0,
+      "risk": "medium"
+    },
+    {
+      "bucket": "Safety15",
+      "weight": 15,
+      "requirements": 5,
+      "coverage_percent": 33.3,
+      "risk": "high"
+    },
+    {
+      "bucket": "Energy10",
+      "weight": 10,
+      "requirements": 0,
+      "coverage_percent": 0.0,
+      "risk": "high"
+    },
+    {
+      "bucket": "Commercial20",
+      "weight": 20,
+      "requirements": 2,
+      "coverage_percent": 10.0,
+      "risk": "high"
+    },
+    {
+      "bucket": "Schedule15",
+      "weight": 15,
+      "requirements": 1,
+      "coverage_percent": 6.7,
+      "risk": "high"
+    },
+    {
+      "bucket": "Documentation5",
+      "weight": 5,
+      "requirements": 0,
+      "coverage_percent": 0.0,
+      "risk": "high"
+    }
+  ]
+}

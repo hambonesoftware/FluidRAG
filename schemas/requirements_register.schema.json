@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidrag.ai/schemas/requirements-register.json",
+  "title": "FluidRAG Requirements Register Row",
+  "type": "object",
+  "required": [
+    "ReqID",
+    "ParentReqID",
+    "Atomicity",
+    "Pass",
+    "Tags",
+    "SourceDoc",
+    "SectionID",
+    "SectionTitle",
+    "PageStart",
+    "PageEnd",
+    "ChunkID",
+    "HeaderAnchor",
+    "Anchor",
+    "Specification",
+    "ReqType",
+    "Metric",
+    "Operator",
+    "TargetValue",
+    "Units",
+    "TestMethod",
+    "AcceptanceWindow",
+    "EvalBucket",
+    "Milestone",
+    "Week",
+    "PaymentTerm"
+  ],
+  "properties": {
+    "ReqID": {
+      "type": "string",
+      "pattern": "^EPF-[A-Za-z0-9_.-]+-[0-9a-f]{8}(-[A-Z])?$"
+    },
+    "ParentReqID": {
+      "type": ["string", "null"],
+      "default": ""
+    },
+    "Atomicity": {
+      "type": "string",
+      "enum": ["atomic", "parent"]
+    },
+    "Pass": {
+      "type": "string",
+      "enum": ["Controls", "Electrical", "Mechanical", "Project Management", "Software", "Header"]
+    },
+    "Tags": {
+      "type": "string"
+    },
+    "SourceDoc": {
+      "type": "string"
+    },
+    "SectionID": {
+      "type": "string"
+    },
+    "SectionTitle": {
+      "type": "string"
+    },
+    "PageStart": {
+      "type": ["integer", "null"]
+    },
+    "PageEnd": {
+      "type": ["integer", "null"]
+    },
+    "ChunkID": {
+      "type": "string"
+    },
+    "HeaderAnchor": {
+      "type": "string"
+    },
+    "Anchor": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}$"
+    },
+    "Specification": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ReqType": {
+      "type": "string",
+      "enum": ["Performance", "Safety", "Documentation", "Utility", "Commercial", "Schedule"]
+    },
+    "Metric": {
+      "type": "string"
+    },
+    "Operator": {
+      "type": "string",
+      "enum": ["", ">=", "<=", "="]
+    },
+    "TargetValue": {
+      "type": ["number", "null"]
+    },
+    "Units": {
+      "type": "string",
+      "enum": ["", "%", "cpm", "in", "mm", "lb", "A", "Hz", "s", "min", "hr", "day"]
+    },
+    "TestMethod": {
+      "type": "string",
+      "enum": ["FAT", "SAT", "DocReview", "VisualInspect", "Measurement"]
+    },
+    "AcceptanceWindow": {
+      "type": "string"
+    },
+    "EvalBucket": {
+      "type": "string",
+      "enum": [
+        "Performance20",
+        "Maintenance10",
+        "Safety15",
+        "Energy10",
+        "Commercial20",
+        "Schedule15",
+        "Documentation5"
+      ]
+    },
+    "Milestone": {
+      "type": "string"
+    },
+    "Week": {
+      "type": ["integer", "null"]
+    },
+    "PaymentTerm": {
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "Operator": {"enum": [">=", "<=", "="]}
+        }
+      },
+      "then": {
+        "required": ["Metric", "TargetValue", "Units"]
+      }
+    }
+  ]
+}
