@@ -135,9 +135,11 @@ def preprocess_route():
                 page_end = page_start
             pages = enriched.get("pages") or list(range(page_start, page_end + 1))
             hierarchy = enriched.get("hierarchy") or {}
+            heading_values = hierarchy.get("headings") or []
+            first_heading = heading_values[0] if heading_values else None
             section_title = (
                 enriched.get("section_title")
-                or hierarchy.get("headings", [None])[0]
+                or first_heading
                 or enriched.get("hier_path")
                 or "Document"
             )
