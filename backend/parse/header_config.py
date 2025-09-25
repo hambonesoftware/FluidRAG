@@ -26,4 +26,8 @@ CONFIG = {
     # Fallbacks
     "fallback_if_llm_low_quality": True,
     "fallback_top_k_per_page": 3,     # return top-k best heuristic headers if LLM not available
+
+    # Debugging helpers
+    "debug": False,
+    "debug_dir": "./_debug/headers",
 }

@@ -1,7 +1,8 @@
 # backend/parse/header_detector.py
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List, Optional
+from dataclasses import dataclass
 import re
 
 from .patterns_rfq import RFQ_SECTION_RES, UNIT_NEARBY_RX, ADDRESS_HINT_RX, PAGE_ART_RX
@@ -93,3 +94,116 @@ def score_header_candidate(line: str, style: dict | None = None) -> float:
         score -= 1.0
 
     return score
+
+
+@dataclass
+class ScoreBreakdown:
+    text: str
+    regex_hits: List[str]
+    numbering_depth: Optional[int]
+    font_size: Optional[float]
+    bold: Optional[bool]
+    caps: bool
+    disqualifiers: List[str]
+    partial_scores: Dict[str, float]
+    total: float
+
+
+def score_header_candidate_debug(line: str, style: dict | None = None) -> ScoreBreakdown:
+    """Return a structured breakdown of how a candidate line was scored."""
+    style = style or {}
+    txt = (line or "").strip()
+    if not txt:
+        return ScoreBreakdown(
+            text="",
+            regex_hits=[],
+            numbering_depth=None,
+            font_size=style.get("font_size"),
+            bold=style.get("bold"),
+            caps=False,
+            disqualifiers=["empty"],
+            partial_scores={},
+            total=-99.0,
+        )
+
+    regex_hits: List[str] = []
+    partial: Dict[str, float] = {}
+    disqualifiers: List[str] = []
+    score = 0.0
+
+    # Mirror RFQ regex checks
+    for rx in RFQ_SECTION_RES:
+        if rx.search(txt):
+            regex_hits.append(rx.pattern)
+    if ALLCAPS_HEADER_RX.match(txt):
+        regex_hits.append("ALLCAPS_HEADER_RX")
+
+    ok, meta = is_header_line(txt, style=style)
+    if ok:
+        score += 2.0
+        partial["is_header_line"] = 2.0
+    else:
+        partial["is_header_line"] = 0.0
+
+    section_number: Optional[str] = None
+    if isinstance(meta, dict):
+        section_number = meta.get("section_number")
+    if not section_number:
+        match = re.match(r"^\s*([A-Za-z]\d+(?:\.\d+)*)", txt)
+        if match:
+            section_number = match.group(1)
+
+    from .header_levels import numbering_depth
+
+    depth = numbering_depth(section_number)
+    if depth:
+        boost = 0.5
+        score += boost
+        partial["numbering_depth"] = boost
+
+    font_size = style.get("font_size")
+    if font_size:
+        boost = 0.5
+        score += boost
+        partial["font_size"] = boost
+
+    if style.get("bold"):
+        boost = 0.4
+        score += boost
+        partial["bold"] = boost
+
+    caps_hit = bool(ALLCAPS_HEADER_RX.match(txt))
+
+    if UNIT_NEARBY_RX.search(txt):
+        penalty = -2.0
+        score += penalty
+        disqualifiers.append("units")
+        partial["units_penalty"] = penalty
+    if ADDRESS_HINT_RX.search(txt):
+        penalty = -2.0
+        score += penalty
+        disqualifiers.append("address")
+        partial["address_penalty"] = penalty
+    if PAGE_ART_RX.search(txt):
+        penalty = -2.0
+        score += penalty
+        disqualifiers.append("page_art")
+        partial["page_art_penalty"] = penalty
+
+    if len(txt) > 140 and not depth:
+        penalty = -1.0
+        score += penalty
+        disqualifiers.append("long_line")
+        partial["long_line_penalty"] = penalty
+
+    return ScoreBreakdown(
+        text=txt,
+        regex_hits=regex_hits,
+        numbering_depth=depth,
+        font_size=font_size,
+        bold=style.get("bold"),
+        caps=caps_hit,
+        disqualifiers=disqualifiers,
+        partial_scores=partial,
+        total=score,
+    )

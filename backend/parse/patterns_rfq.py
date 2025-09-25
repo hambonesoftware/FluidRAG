@@ -3,6 +3,7 @@
 import re
 
 RFQ_SECTION_RES = [re.compile(p, re.IGNORECASE) for p in [
+    r'^\s*([A-Z])(\d{1,3})\.\s+(.+?)\s*$',                          # A5. Heading
     r'^\s*(\d{1,3})\)\s+(.+?)\s*$',                                 # 1) Scope
     r'^\s*(\d{1,3}(?:\.\d{1,3}){0,4})\s+([A-Z].{3,})\s*$',          # 1.2 Subsection Title
     r'^\s*([A-Z])\.(\d{1,3})\s+(.+?)\s*$',                          # A.1 Heading
