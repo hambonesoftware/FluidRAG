@@ -130,6 +130,9 @@ def _dump_page_debug(
         return
 
     base_dir = CONFIG.get("debug_dir", "./_debug/headers") or "./_debug/headers"
+
+    _ensure_dir(base_dir)
+
     out_dir = os.path.join(base_dir, doc_id or "document", f"page_{page_idx:04d}")
     _ensure_dir(out_dir)
 
@@ -197,6 +200,9 @@ def dump_appendix_audit(
 
     rx = re.compile(r"^\s*(?:Appendix\s+[A-Za-z]|[A-Za-z]\d+\.)")
     base_dir = CONFIG.get("debug_dir", "./_debug/headers") or "./_debug/headers"
+
+    _ensure_dir(base_dir)
+
     out_dir = os.path.join(base_dir, doc_id or "document")
     _ensure_dir(out_dir)
 
