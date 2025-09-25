@@ -17,6 +17,7 @@ from ..parse.header_page_mode import (
     write_header_candidate_audit,
     write_header_debug_manifest,
     write_page_debug,
+    _sequence_sanity_promote,
 )
 from ..parse.header_detector import is_header_line
 from ..state import get_state
@@ -457,6 +458,14 @@ async def detect_headers_page_mode(
                 )
             except Exception:
                 pass
+
+        promoted = _sequence_sanity_promote(
+            candidates,
+            final,
+            threshold=float(CONFIG.get("accept_score_threshold", 2.25) or 2.25),
+        )
+        if promoted:
+            final.extend(promoted)
 
         # dedup by line_idx
         seen = set()

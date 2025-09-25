@@ -12,20 +12,42 @@ except Exception:
     import difflib
     def fuzz_ratio(a, b): return int(100 * difflib.SequenceMatcher(None, a or "", b or "").ratio())
 
-from .header_detector import score_header_candidate, score_header_candidate_debug
+from .header_detector import (
+    score_header_candidate,
+    score_header_candidate_debug,
+    normalize_heading_text,
+    HEADER_RX,
+    ALT_HEADER_RX,
+    APPENDIX_NUM_RX,
+)
 from .header_levels import map_font_sizes_to_levels, infer_heading_level
+from .patterns_rfq import APPENDIX_TOLERANT_PATTERN
 from .header_config import CONFIG
 
 MEASURE_RX = re.compile(r'\b(?:\d{1,4}(?:\.\d+)?)(?:\s*(?:mm|cm|m|in|inch|ft|°c|°f|a|v|hz|psi|kpa|ip\d{2}))\b', re.I)
 ADDRESS_RX = re.compile(r'\b(?:Street|St\.|Road|Rd\.|Drive|Dr\.|Ave\.|Avenue|Suite|USA|Tel|Fax)\b', re.I)
 TOO_LONG_RX = re.compile(r'^\s*.{161,}\s*$')
 SAFE_COMPONENT_RX = re.compile(r"[^A-Za-z0-9._-]+")
+NUMERIC_PREFIX_RX = re.compile(r'^\s*(?:Appendix\s+[A-Z]|Annex\s+[A-Z]|[A-Z]\d+(?:\.\d+)*|\d+(?:\.\d+)*|\d+\))', re.IGNORECASE)
+APPENDIX_SEQ_RX = re.compile(r'^\s*([A-Z])(\d{1,3})[.\u2024\u2027\uFF0E]\s{0,2}(.+?)\s*$')
+APPENDIX_WORD_RX = re.compile(r'^\s*(Appendix|Annex)\s+([A-Z])', re.IGNORECASE)
+SECTION_LETTER_NUM_RX = re.compile(r'^\s*([A-Za-z]\d+(?:\.\d+)*)')
+DEBUG_DOT_CHARS = {'.', '\u2024', '\u2027', '\uFF0E'}
+_NUMERIC_REGEX_PATTERNS = {
+    APPENDIX_TOLERANT_PATTERN,
+    r'^\s*(\d{1,3})\)\s+(.+?)\s*$',
+    r'^\s*(\d{1,3}(?:\.\d{1,3}){0,4})\s+([A-Z].{3,})\s*$',
+    r'^\s*([A-Z])\.(\d{1,3})\s+(.+?)\s*$',
+    r'^\s*(Appendix|Annex)\s+([A-Z])(?:\s*[-:]\s*(.+))?\s*$',
+}
 
 def _caps_ratio(s: str) -> float:
     letters = [c for c in s if c.isalpha()]
     return (sum(c.isupper() for c in letters) / max(1, len(letters))) if letters else 0.0
 
 def _looks_like_header_text(txt: str) -> bool:
+    if not txt:
+        return False
     if not (6 <= len(txt) <= 160):       # keep in sync with header_detector
         return False
     if ADDRESS_RX.search(txt):
@@ -36,6 +58,26 @@ def _looks_like_header_text(txt: str) -> bool:
     if TOO_LONG_RX.match(txt):
         return False
     return True
+
+
+def _extract_section_number(normalized: str) -> str:
+    if not normalized:
+        return ""
+    m = APPENDIX_NUM_RX.match(normalized)
+    if m:
+        return f"{m.group(1)}{m.group(2)}"
+    for rx in (HEADER_RX, ALT_HEADER_RX):
+        match = rx.match(normalized)
+        if match:
+            return (match.group(1) or "").strip()
+    match = SECTION_LETTER_NUM_RX.match(normalized)
+    if match:
+        return match.group(1)
+    word = APPENDIX_WORD_RX.match(normalized)
+    if word:
+        return f"{word.group(1).title()} {word.group(2)}"
+    return ""
+
 
 def select_candidates(page_lines: List[str], page_styles: List[dict]) -> List[dict]:
     cands = []
@@ -48,26 +90,27 @@ def select_candidates(page_lines: List[str], page_styles: List[dict]) -> List[di
             continue
 
         style = (page_styles[idx] if page_styles and idx < len(page_styles) else {}) or {}
-        if not _looks_like_header_text(line):
+        normalized = normalize_heading_text(line)
+        if not _looks_like_header_text(normalized):
             continue
 
         s = score_header_candidate(line, style)
         if s < CONFIG.get("ambiguous_score_threshold", 1.10):
             continue
 
-        caps = _caps_ratio(line)
+        caps = _caps_ratio(normalized)
         # Light boost for ALLCAPS or Title Case
         if caps >= 0.75:
             s += 0.25
 
         # Extract a plausible section number prefix if it exists
-        m = re.search(r"^\s*([A-Z]|Appendix\s+[A-Z]|\d+(?:\.\d+)*|\d+\))", line, flags=re.IGNORECASE)
-        section_number = (m.group(1) if m else "").strip()
+        section_number = _extract_section_number(normalized)
 
         level = infer_heading_level(style.get("font_size"), section_number, size_map)
         cands.append({
             "line_idx": idx,
             "text": line,
+            "normalized_text": normalized,
             "style": {
                 "font_sigma_rank": style.get("font_sigma_rank"),
                 "bold": style.get("bold"),
@@ -90,6 +133,118 @@ def select_candidates(page_lines: List[str], page_styles: List[dict]) -> List[di
         seen_text.append(c["text"])
 
     return deduped[: CONFIG.get("max_candidates_per_page", 40)]
+
+
+def _debug_whitespace_hex(text: str) -> List[str]:
+    codes: List[str] = []
+    if not text:
+        return codes
+    for ch in text:
+        if ch.isspace() or ch in DEBUG_DOT_CHARS:
+            codes.append(f"U+{ord(ch):04X}")
+    return codes
+
+
+def _allow_below_threshold(
+    breakdown,
+    candidate: Dict[str, Any],
+    *,
+    require_numeric: bool = False,
+) -> bool:
+    normalized = breakdown.normalized_text if getattr(breakdown, "normalized_text", None) else ""
+    numeric_match = bool(normalized and NUMERIC_PREFIX_RX.match(normalized)) or bool(
+        normalized and APPENDIX_NUM_RX.match(normalized)
+    )
+    regex_numeric = any(pattern in breakdown.regex_hits for pattern in _NUMERIC_REGEX_PATTERNS)
+    numbering_depth = getattr(breakdown, "numbering_depth", None) or 0
+    numeric_signal = numeric_match or regex_numeric or numbering_depth > 0
+    if require_numeric:
+        return bool(numeric_signal)
+
+    if numeric_signal:
+        return True
+
+    style = (candidate.get("style") or {})
+    font_rank = float(style.get("font_sigma_rank") or 0.0)
+    caps_ratio = float(style.get("caps_ratio") or 0.0)
+    bold = bool(style.get("bold"))
+    votes = 0
+    if font_rank >= 1.5:
+        votes += 1
+    if bold:
+        votes += 1
+    if caps_ratio >= 0.7:
+        votes += 1
+    if normalized and _caps_ratio(normalized) >= 0.7:
+        votes += 1
+    return votes >= 2
+
+
+def _sequence_sanity_promote(
+    candidates: List[dict],
+    final_headers: List[Dict[str, Any]],
+    threshold: float,
+) -> List[Dict[str, Any]]:
+    existing_indices = {h.get("line_idx") for h in final_headers if h.get("line_idx") is not None}
+    sequences: Dict[str, List[int]] = {}
+    for header in final_headers:
+        normalized = normalize_heading_text(header.get("text") or "")
+        match = APPENDIX_SEQ_RX.match(normalized)
+        if not match:
+            continue
+        letter = match.group(1).upper()
+        number = int(match.group(2))
+        sequences.setdefault(letter, []).append(number)
+
+    missing_map: Dict[str, List[int]] = {}
+    for letter, nums in sequences.items():
+        uniq = sorted(set(nums))
+        if len(uniq) < 2:
+            continue
+        gaps: List[int] = []
+        for left, right in zip(uniq, uniq[1:]):
+            if right - left > 1:
+                gaps.extend(range(left + 1, right))
+        if gaps:
+            missing_map[letter] = sorted(set(gaps))
+
+    if not missing_map:
+        return []
+
+    promoted: List[Dict[str, Any]] = []
+    breakdown_cache: Dict[int, Any] = {}
+    for cand in candidates:
+        idx = cand.get("line_idx")
+        if idx is None or idx in existing_indices:
+            continue
+        normalized = cand.get("normalized_text") or normalize_heading_text(cand.get("text") or "")
+        match = APPENDIX_SEQ_RX.match(normalized)
+        if not match:
+            continue
+        letter = match.group(1).upper()
+        number = int(match.group(2))
+        if number not in missing_map.get(letter, []):
+            continue
+        breakdown = breakdown_cache.get(idx)
+        if breakdown is None:
+            breakdown = score_header_candidate_debug(cand.get("text"), style=cand.get("style") or {})
+            breakdown_cache[idx] = breakdown
+        meets_threshold = breakdown.total >= threshold
+        if not meets_threshold and not _allow_below_threshold(breakdown, cand, require_numeric=True):
+            continue
+        promoted.append(
+            {
+                "line_idx": idx,
+                "text": cand.get("text"),
+                "section_number": cand.get("section_number") or f"{letter}{number}",
+                "level": cand.get("level"),
+                "score": max(float(cand.get("score") or 0.0), float(threshold)),
+                "style": cand.get("style"),
+            }
+        )
+        existing_indices.add(idx)
+
+    return promoted
 
 
 def build_adjudication_prompt(page_text: str, candidates: List[dict], context_chars: int) -> str:
@@ -152,6 +307,9 @@ def _dump_page_debug(
             [
                 "line_idx",
                 "text",
+                "normalized_text",
+                "original_hex",
+                "normalized_hex",
                 "regex_hits",
                 "numbering_depth",
                 "font_size",
@@ -169,9 +327,12 @@ def _dump_page_debug(
                 cand.get("text"), style=cand.get("style") or {}
             )
             accepted = breakdown.total >= threshold
+            orig_hex = _debug_whitespace_hex(cand.get("text"))
+            norm_hex = _debug_whitespace_hex(breakdown.normalized_text)
             entry = {
                 "line_idx": cand.get("line_idx"),
                 "text": breakdown.text,
+                "normalized_text": breakdown.normalized_text,
                 "regex_hits": breakdown.regex_hits,
                 "numbering_depth": breakdown.numbering_depth,
                 "font_size": breakdown.font_size,
@@ -182,12 +343,17 @@ def _dump_page_debug(
                 "score": float(breakdown.total),
                 "accepted": accepted,
                 "threshold": threshold,
+                "original_hex": orig_hex,
+                "normalized_hex": norm_hex,
             }
             breakdowns.append(entry)
             writer.writerow(
                 [
                     entry["line_idx"],
                     entry["text"],
+                    entry["normalized_text"],
+                    " ".join(orig_hex),
+                    " ".join(norm_hex),
                     " | ".join(entry["regex_hits"]),
                     entry["numbering_depth"],
                     entry["font_size"],
@@ -265,7 +431,6 @@ def dump_appendix_audit(
     if not CONFIG.get("debug"):
         return
 
-    rx = re.compile(r"^\s*(?:Appendix\s+[A-Za-z]|[A-Za-z]\d+\.)")
     base_dir = CONFIG.get("debug_dir", "./_debug/headers") or "./_debug/headers"
 
     _ensure_dir(base_dir)
@@ -278,7 +443,8 @@ def dump_appendix_audit(
     for page_idx, cand_list, _page_text in pages_debug:
         for cand in cand_list:
             txt = (cand.get("text") or "").strip()
-            if not rx.match(txt):
+            normalized = normalize_heading_text(txt)
+            if not (APPENDIX_NUM_RX.match(normalized) or APPENDIX_WORD_RX.match(normalized)):
                 continue
             breakdown = score_header_candidate_debug(txt, style=cand.get("style") or {})
             audit_rows.append(
@@ -384,28 +550,42 @@ def write_header_candidate_audit(
                 else False
             )
             meets_threshold = breakdown.total >= threshold
-            decision = "selected" if selected else (
-                "below_threshold" if not selected and not meets_threshold else "not_selected"
-            )
+            fallback_used = False
+            if selected:
+                if meets_threshold:
+                    decision = "selected"
+                else:
+                    fallback_used = _allow_below_threshold(breakdown, cand)
+                    decision = "selected_fallback" if fallback_used else "selected_below_threshold"
+            else:
+                decision = "below_threshold" if not meets_threshold else "not_selected"
             entry = {
                 "line_idx": line_idx,
                 "text": breakdown.text,
+                "normalized_text": breakdown.normalized_text,
                 "score": float(breakdown.total),
                 "meets_threshold": meets_threshold,
                 "decision": decision,
+                "selected": bool(selected),
+                "fallback_used": fallback_used,
                 "section_number": cand.get("section_number"),
                 "level": cand.get("level"),
                 "style": cand.get("style") or {},
                 "partial_scores": breakdown.partial_scores,
                 "disqualifiers": breakdown.disqualifiers,
                 "regex_hits": breakdown.regex_hits,
+                "text_debug": {
+                    "original": cand.get("text"),
+                    "normalized": breakdown.normalized_text,
+                    "original_hex": _debug_whitespace_hex(cand.get("text")),
+                    "normalized_hex": _debug_whitespace_hex(breakdown.normalized_text),
+                },
             }
             entries.append(entry)
 
         entries.sort(key=lambda item: item.get("score", 0.0), reverse=True)
         for rank, entry in enumerate(entries, start=1):
             entry["rank"] = rank
-            entry["selected"] = entry.get("decision") == "selected"
 
         page_record: Dict[str, Any] = {
             "page": page_idx + 1,
