@@ -1,13 +1,5 @@
 doc: ragx/tests/fixtures/tiny_doc.json
 pass: Mechanical
 queries:
-  - id: Q1
-    text: "mechanical weld thickness"
-    relevant:
-      - id: H1
-        weight: 3
-  - id: Q2
-    text: "what is the schedule"
-    relevant:
-      - id: H3
-        weight: 2
+  - {id: Q1, text: "mechanical weld thickness", relevant: [{id: H1, weight: 3}]}
+  - {id: Q2, text: "what is the schedule", relevant: [{id: H3, weight: 2}]}

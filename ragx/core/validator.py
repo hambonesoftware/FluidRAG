@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
+
+from .utils import extract_numbers, has_standard, has_unit
 
 ALLOWED_PASSES = {
     "Mechanical",
@@ -24,7 +26,24 @@ def _spec_valid(text: str) -> bool:
     tokens = text.split()
     if len(tokens) >= 8:
         return True
-    return any(token.isupper() or any(ch.isdigit() for ch in token) for token in tokens)
+    if has_standard(text):
+        return True
+    if has_unit(text) and extract_numbers(text):
+        return True
+    return False
+
+
+def _merge_lists(values):
+    merged = []
+    seen = set()
+    for value in values:
+        if not value:
+            continue
+        if value in seen:
+            continue
+        merged.append(value)
+        seen.add(value)
+    return merged
 
 
 def validate_rows(rows):
@@ -45,10 +64,15 @@ def validate_rows(rows):
         key = (row.get("document_id"), spec.lower())
         if key in seen:
             prev = seen[key]
-            prev_prov = set(prev.get("provenance", []))
-            new_prov = set(row.get("provenance", []))
-            prev["provenance"] = sorted(prev_prov | new_prov)
+            prev["provenance"] = sorted(
+                {*(prev.get("provenance") or []), *(row.get("provenance") or [])}
+            )
+            prev["pages"] = sorted({*(prev.get("pages") or []), *(row.get("pages") or [])})
             continue
+        row.setdefault("provenance", [])
+        row.setdefault("pages", [])
+        row["provenance"] = _merge_lists(row["provenance"])
+        row["pages"] = _merge_lists(row["pages"])
         seen[key] = row
         valid.append(row)
     return valid, report

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Sequence, Set
 
 from .context import RAGContext
 from .utils import normalize_text
@@ -33,15 +33,22 @@ def _section_embedding(section: Dict[str, Any], embeddings=None):
     return None
 
 
-def _section_tags(section: Dict[str, Any]) -> Iterable[str]:
+def _section_tags(section: Dict[str, Any]) -> Set[str]:
     tags = section.get("tags") or []
     if isinstance(tags, dict):
         tags = list(tags.keys())
-    for tag in tags:
-        yield normalize_text(tag)
+    normalized = {normalize_text(tag) for tag in tags if tag}
     text = section.get("section_name", "")
-    for token in text.split():
-        yield normalize_text(token)
+    normalized.update(normalize_text(token) for token in text.split())
+    return {tag for tag in normalized if tag}
+
+
+def _table_refs(section: Dict[str, Any]) -> Iterable[str]:
+    tables = section.get("tables") or []
+    if tables:
+        return tables
+    meta = section.get("meta", {}) if isinstance(section, dict) else {}
+    return meta.get("tables", []) or []
 
 
 def merge_fluid(sections, profile, context: RAGContext, embeddings=None):
@@ -52,6 +59,7 @@ def merge_fluid(sections, profile, context: RAGContext, embeddings=None):
     cfg = profile.get("fluid_merge", {})
     sim_threshold = cfg.get("sim_threshold", 0.8)
     must_share = {normalize_text(t) for t in cfg.get("must_share_any", [])}
+    keep_tables = cfg.get("keep_tables", False)
 
     merged: List[Dict[str, Any]] = []
     idx = 0
@@ -61,13 +69,21 @@ def merge_fluid(sections, profile, context: RAGContext, embeddings=None):
         cur.setdefault("pages", [cur.get("page_start")])
         cur.setdefault("anchors", cur.get("anchors", []))
         text_parts = [cur.get("text") or cur.get("section_name") or ""]
-        provenance_pages = set(cur.get("pages", []))
+        provenance_pages = set()
+        if cur.get("page_start"):
+            provenance_pages.add(cur.get("page_start"))
+        if cur.get("page_end"):
+            provenance_pages.add(cur.get("page_end"))
+        provenance_pages.update(cur.get("pages", []))
         provenance_sections = set(cur.get("provenance", []))
         anchors = list(cur.get("anchors", []))
+        cur_tags = _section_tags(cur)
+        tables: Set[str] = set(_table_refs(cur)) if keep_tables else set()
         j = idx + 1
         while j < len(sections):
             nxt = sections[j]
-            tag_overlap = must_share and (set(_section_tags(cur)) & set(_section_tags(nxt)) & must_share)
+            nxt_tags = _section_tags(nxt)
+            tag_overlap = (cur_tags & nxt_tags & must_share) if must_share else nxt_tags
             if must_share and not tag_overlap:
                 break
             cur_emb = _section_embedding(cur, embeddings)
@@ -76,19 +92,27 @@ def merge_fluid(sections, profile, context: RAGContext, embeddings=None):
             if sim < sim_threshold:
                 break
             text_parts.append(nxt.get("text") or nxt.get("section_name") or "")
-            provenance_pages.update([nxt.get("page_start"), nxt.get("page_end")])
+            if nxt.get("page_start"):
+                provenance_pages.add(nxt.get("page_start"))
+            if nxt.get("page_end"):
+                provenance_pages.add(nxt.get("page_end"))
+            provenance_pages.update(nxt.get("pages", []))
             provenance_sections.update([nxt.get("section_id")])
             anchors.extend(nxt.get("anchors", []))
+            cur_tags.update(nxt_tags)
+            if keep_tables:
+                tables.update(_table_refs(nxt))
             j += 1
         text = "\n".join(part for part in text_parts if part)
-        merged.append(
-            {
-                "text": text,
-                "anchors": anchors,
-                "pages": sorted(p for p in provenance_pages if p),
-                "provenance": sorted(provenance_sections),
-                "resolution": "fluid",
-            }
-        )
+        record = {
+            "text": text,
+            "anchors": anchors,
+            "pages": sorted(p for p in provenance_pages if p),
+            "provenance": sorted(provenance_sections),
+            "resolution": "fluid",
+        }
+        if keep_tables and tables:
+            record["tables"] = sorted(tables)
+        merged.append(record)
         idx = max(j, idx + 1)
     return merged
