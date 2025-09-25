@@ -18,7 +18,13 @@ def configure_runner(monkeypatch):
 
     monkeypatch.setattr(runner, "get_state", lambda session_id: state)
     monkeypatch.setattr(runner, "ensure_chunks", lambda session_id: ["chunk-1"])
-    monkeypatch.setattr(runner, "build_groups", lambda chunks: [["chunk-group"]])
+
+    def fake_build_pass_groups(chunks):
+        group = [{"chunks": [{"id": "chunk-1"}], "token_estimate": 1}]
+        per_pass = {name: group for name in runner.ALL_PASSES}
+        return group, per_pass
+
+    monkeypatch.setattr(runner, "build_pass_groups", fake_build_pass_groups)
     monkeypatch.setattr(
         runner,
         "resolve_pass_items",
@@ -53,7 +59,7 @@ def configure_runner(monkeypatch):
 
 def test_empty_cached_pass_triggers_rerun(monkeypatch):
     pass_cache = {
-        "Mechanical": {"payload": {"items": [{"pass": "Mechanical", "cached": True}]}},
+        "Mechanical": {"payload": {"items": [{"Pass": "Mechanical", "cached": True}]}},
         "Electrical": {"payload": {"items": []}},
     }
     monkeypatch.setattr(runner, "get_pass_cache", lambda file_hash: pass_cache)
@@ -63,8 +69,8 @@ def test_empty_cached_pass_triggers_rerun(monkeypatch):
     async def fake_execute_pass(pass_name, *args, **kwargs):
         executed.append(pass_name)
         return (
-            [{"pass": pass_name, "fresh": True}],
-            [{"pass": pass_name, "debug": True}],
+            [{"Pass": pass_name, "fresh": True}],
+            [{"Pass": pass_name, "debug": True}],
             [],
             [],
         )
@@ -82,18 +88,19 @@ def test_empty_cached_pass_triggers_rerun(monkeypatch):
 
     assert executed == ["Electrical"]
     assert saved_payloads == {
-        "Electrical": {"items": [{"pass": "Electrical", "fresh": True}]}
+        "Electrical": {"items": [{"Pass": "Electrical", "fresh": True}]}
     }
     assert result["cache"]["hits"] == ["Mechanical"]
     assert result["cache"]["misses"] == ["Electrical"]
     assert result["cache"]["stored_passes"] == ["Electrical", "Mechanical"]
-    assert {row["pass"] for row in result["rows"]} == {"Mechanical", "Electrical"}
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["Pass"] == "Electrical; Mechanical"
 
 
 def test_force_refresh_runs_all_passes(monkeypatch):
     pass_cache = {
-        "Mechanical": {"payload": {"items": [{"pass": "Mechanical", "cached": True}]}},
-        "Electrical": {"payload": {"items": [{"pass": "Electrical", "cached": True}]}}
+        "Mechanical": {"payload": {"items": [{"Pass": "Mechanical", "cached": True}]}},
+        "Electrical": {"payload": {"items": [{"Pass": "Electrical", "cached": True}]}}
     }
     monkeypatch.setattr(runner, "get_pass_cache", lambda file_hash: pass_cache)
 
@@ -102,8 +109,8 @@ def test_force_refresh_runs_all_passes(monkeypatch):
     async def fake_execute_pass(pass_name, *args, **kwargs):
         executed.append(pass_name)
         return (
-            [{"pass": pass_name, "fresh": True}],
-            [{"pass": pass_name, "debug": True}],
+            [{"Pass": pass_name, "fresh": True}],
+            [{"Pass": pass_name, "debug": True}],
             [],
             [],
         )
@@ -128,4 +135,5 @@ def test_force_refresh_runs_all_passes(monkeypatch):
     assert result["cache"]["hits"] == []
     assert set(result["cache"]["misses"]) == {"Mechanical", "Electrical"}
     assert set(result["cache"]["stored_passes"]) == {"Mechanical", "Electrical"}
-    assert {row["pass"] for row in result["rows"]} == {"Mechanical", "Electrical"}
+    assert len(result["rows"]) == 1
+    assert result["rows"][0]["Pass"] == "Electrical; Mechanical"

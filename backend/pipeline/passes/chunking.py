@@ -16,6 +16,8 @@ from backend.prompts import PASS_PROMPTS, atomic_user_template
 from backend.state import get_state
 from backend.utils.strings import s
 
+from backend.domain import PASS_DOMAIN_LEXICON, PASS_DOMAIN_THRESHOLD
+
 from ..fluid import fluid_refine_chunks  # type: ignore[import]
 from ..hep_cluster import hep_cluster_chunks  # type: ignore[import]
 from .constants import CHUNK_GROUP_TOKEN_LIMIT
@@ -72,6 +74,65 @@ def _collect_headers(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             existing["page_start"] = min(existing.get("page_start", page_start), page_start)
             existing["page_end"] = max(existing.get("page_end", page_end), page_end)
     return list(headers.values())
+
+
+def _normalize_for_lookup(value: str) -> str:
+    if not value:
+        return ""
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _build_section_lookup(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    lookup: List[Dict[str, Any]] = []
+    for idx, chunk in enumerate(chunks):
+        text = s(chunk.get("text"))
+        section_number = s(chunk.get("section_number") or chunk.get("section_id"))
+        section_name = s(chunk.get("section_name") or chunk.get("section_title"))
+        lookup.append(
+            {
+                "chunk_index": idx,
+                "section_number": section_number,
+                "section_name": section_name,
+                "text": text,
+                "normalized_text": _normalize_for_lookup(text),
+            }
+        )
+    return lookup
+
+
+def _compute_domain_scores(chunk: Dict[str, Any]) -> Dict[str, int]:
+    meta = chunk.setdefault("meta", {})
+    existing = meta.get("domain_scores")
+    if isinstance(existing, dict):
+        return existing
+    text_parts = [
+        s(chunk.get("section_name") or chunk.get("section_title")),
+        s(chunk.get("section_number") or chunk.get("section_id")),
+        s(chunk.get("text")),
+    ]
+    normalized = _normalize_for_lookup(" ".join(part for part in text_parts if part))
+    scores: Dict[str, int] = {}
+    for pass_name, keywords in PASS_DOMAIN_LEXICON.items():
+        count = 0
+        for keyword in keywords:
+            key = keyword.lower().strip()
+            if key and key in normalized:
+                count += 1
+        scores[pass_name] = count
+    meta["domain_scores"] = scores
+    return scores
+
+
+def _filter_chunks_for_pass(chunks: List[Dict[str, Any]], pass_name: str) -> List[Dict[str, Any]]:
+    threshold = PASS_DOMAIN_THRESHOLD.get(pass_name, 0)
+    filtered: List[Dict[str, Any]] = []
+    for chunk in chunks:
+        scores = _compute_domain_scores(chunk)
+        if scores.get(pass_name, 0) >= threshold:
+            filtered.append(chunk)
+    if not filtered:
+        return list(chunks)
+    return filtered
 
 def _normalize_stage_payload(chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Normalize chunk snapshots for JSON export."""
@@ -240,6 +301,10 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         "fluid_chunks": fluid_snapshot,
         "hep_chunks": hep_snapshot,
     }
+    try:
+        state.standard_section_lookup = _build_section_lookup(standard_snapshot)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[chunking] failed to build section lookup for session %s", session_id)
     return enriched
 
 
@@ -272,6 +337,19 @@ def build_groups(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "token_estimate": current_tokens,
         })
     return groups
+
+
+def build_pass_groups(
+    chunks: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+    """Return default chunk groups and discipline-filtered groups."""
+
+    base_groups = build_groups(chunks)
+    per_pass: Dict[str, List[Dict[str, Any]]] = {}
+    for pass_name in PASS_DOMAIN_LEXICON:
+        filtered = _filter_chunks_for_pass(chunks, pass_name)
+        per_pass[pass_name] = build_groups(filtered)
+    return base_groups, per_pass
 
 
 def build_user_prompt(metadata: Dict[str, Any], group: Dict[str, Any], batch_index: int, batch_total: int) -> str:
