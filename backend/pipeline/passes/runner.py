@@ -5,8 +5,10 @@ import asyncio
 import base64
 import json
 import logging
+import re
 import time
 import uuid
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Tuple
 
 from backend.llm.factory import provider_default_model
@@ -16,7 +18,11 @@ from backend.utils.envsafe import env
 from backend.utils.strings import s
 from ..merge import merge_pass_outputs
 
-from .chunking import build_groups, ensure_chunks, export_pass_stage_snapshots
+from .chunking import (
+    build_pass_groups,
+    ensure_chunks,
+    export_pass_stage_snapshots,
+)
 from .config import (
     is_truthy_flag,
     resolve_pass_concurrency,
@@ -41,6 +47,110 @@ def _snapshot(value: Any, limit: int = 3000) -> str:
     return text
 
 
+def _normalize_fragment(text: str) -> str:
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", str(text)).strip().lower()
+
+
+def _extract_pass_tokens(value: str) -> List[str]:
+    if not value:
+        return []
+    tokens = []
+    for token in str(value).replace(",", ";").split(";"):
+        token = token.strip()
+        if token:
+            tokens.append(token)
+    return tokens
+
+
+def _best_section_match(spec_text: str, lookup: List[Dict[str, Any]]) -> Dict[str, Any] | None:
+    if not spec_text or not lookup:
+        return None
+    norm_spec = _normalize_fragment(spec_text)
+    if not norm_spec:
+        return None
+    best: Dict[str, Any] | None = None
+    best_score = 0.0
+    for entry in lookup:
+        chunk_norm = entry.get("normalized_text") or _normalize_fragment(entry.get("text"))
+        if not chunk_norm:
+            continue
+        score = 0.0
+        if norm_spec in chunk_norm:
+            coverage = len(norm_spec) / max(len(chunk_norm), 1)
+            score = 1.0 + coverage * 0.01
+        elif chunk_norm in norm_spec:
+            score = 0.95
+        else:
+            ratio = SequenceMatcher(None, norm_spec, chunk_norm).ratio()
+            if ratio >= 0.55:
+                score = ratio
+        section_number = str(entry.get("section_number") or "")
+        if section_number.upper().startswith("A") and section_number[1:].isdigit():
+            score += 0.05
+        if score > best_score:
+            best = entry
+            best_score = score
+    return best if best_score > 0 else None
+
+
+def _assign_sections_to_rows(
+    rows: List[Dict[str, str]],
+    lookup: List[Dict[str, Any]] | None,
+) -> float:
+    if not rows:
+        return 0.0
+    if not lookup:
+        return 0.0
+    filled = 0
+    for row in rows:
+        spec_text = row.get("Specification")
+        match = _best_section_match(spec_text, lookup) if spec_text else None
+        if not match:
+            continue
+        current_num = _normalize_fragment(row.get("(Sub)Section #"))
+        matched_num = _normalize_fragment(match.get("section_number"))
+        if matched_num and (not current_num or len(matched_num) >= len(current_num)):
+            row["(Sub)Section #"] = match.get("section_number", "")
+        current_name = _normalize_fragment(row.get("(Sub)Section Name"))
+        matched_name = _normalize_fragment(match.get("section_name"))
+        if matched_name and (not current_name or len(matched_name) >= len(current_name)):
+            row["(Sub)Section Name"] = match.get("section_name", "")
+        if row.get("(Sub)Section #") or row.get("(Sub)Section Name"):
+            filled += 1
+    return filled / max(1, len(rows))
+
+
+def _dedupe_rows(rows: List[Dict[str, str]]) -> Tuple[List[Dict[str, str]], float]:
+    if not rows:
+        return [], 0.0
+    deduped: List[Dict[str, str]] = []
+    seen: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+    duplicates = 0
+    for row in rows:
+        spec_key = _normalize_fragment(row.get("Specification"))
+        section_number = _normalize_fragment(row.get("(Sub)Section #"))
+        section_name = _normalize_fragment(row.get("(Sub)Section Name"))
+        key = (spec_key, section_number, section_name)
+        passes = set(_extract_pass_tokens(row.get("Pass", "")))
+        if key in seen:
+            duplicates += 1
+            seen_entry = seen[key]
+            seen_entry.setdefault("_passes", set()).update(passes)
+        else:
+            record = dict(row)
+            record["_passes"] = set(passes) if passes else set()
+            seen[key] = record
+            deduped.append(record)
+    for record in deduped:
+        pass_tokens = record.pop("_passes", set()) or set()
+        existing_tokens = set(_extract_pass_tokens(record.get("Pass", "")))
+        pass_tokens.update(existing_tokens)
+        if pass_tokens:
+            record["Pass"] = "; ".join(sorted(pass_tokens))
+    overlap_ratio = duplicates / len(rows) if rows else 0.0
+    return deduped, overlap_ratio
 async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = payload or {}
     session_id = payload.get("session_id") or payload.get("session")
@@ -90,7 +200,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "httpStatus": 200,
         }
 
-    groups = build_groups(chunks)
+    default_groups, pass_groups = build_pass_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
     metadata["user_query"] = s(
         payload.get("question")
@@ -218,7 +328,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         len(pass_items),
         pending_count,
         len(cache_hits),
-        len(groups),
+        len(default_groups),
         concurrency_limit,
         requested_concurrency,
         pass_timeout,
@@ -232,7 +342,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         pass_rows, debug_records, pass_csv_segments, pass_errors = await execute_pass(
             pass_name,
             system_prompt,
-            groups,
+            pass_groups.get(pass_name, default_groups),
             provider,
             model,
             pass_metadata,
@@ -260,10 +370,11 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             pass_metadata = dict(metadata)
             pass_metadata["pass_name"] = pass_name
             pass_metadata.setdefault("discipline", pass_name)
+            target_groups = pass_groups.get(pass_name, default_groups)
             pass_rows, debug_records, pass_csv_segments, pass_errors = await execute_pass(
                 pass_name,
                 system_prompt,
-                groups,
+                target_groups,
                 provider,
                 model,
                 pass_metadata,
@@ -348,6 +459,10 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
     rows = merged.get("rows", [])
     merge_problems = merged.get("problems", [])
 
+    section_lookup = getattr(state, "standard_section_lookup", None)
+    coverage_ratio = _assign_sections_to_rows(rows, section_lookup)
+    rows, overlap_ratio = _dedupe_rows(rows)
+
     metrics["total"] = round((time.perf_counter() - total_start) * 1000, 1)
 
     csv_text = encode_rows_to_csv(rows)
@@ -360,7 +475,7 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         "csv_text": csv_text if rows else None,
         "llm_debug": llm_debug,
         "metrics_ms": metrics,
-        "chunk_groups": len(groups),
+        "chunk_groups": len(default_groups),
         "chunk_count": len(chunks),
         "httpStatus": 200,
     }
@@ -378,6 +493,10 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         response["debug"]["merge"] = {
             "problems": merge_problems,
             "rows_count": len(rows),
+        }
+        response["debug"]["sections"] = {
+            "coverage_ratio": coverage_ratio,
+            "overlap_ratio": overlap_ratio,
         }
 
     if all_errors:

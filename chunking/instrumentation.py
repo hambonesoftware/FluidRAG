@@ -8,9 +8,18 @@ from pathlib import Path
 from statistics import mean
 from typing import Dict, List, Sequence, Tuple
 
-MAIN_HEADING_RE = re.compile(r"(?m)^(?P<num>\d+)\)\s+[^\n]+$")
-APPENDIX_HEADING_RE = re.compile(r"(?m)^A(?P<anum>\d+)\.\s+[^\n]+$")
-APPENDIX_BLOCK_RE = re.compile(r"(?m)^Appendix\s+[A-D]\s+—\s+[^\n]+$")
+MAIN_HEADING_RE = re.compile(
+    r"(?m)^\s*(?P<num>\d{1,2})\)\s+.+$"
+)
+APPENDIX_HEADING_RE = re.compile(
+    r"(?m)^\s*A(?P<anum>\d{1,2})\.\s+.+$"
+)
+APPENDIX_BLOCK_RE = re.compile(
+    r"(?mi)^\s*Appendix\s+[A-Za-z0-9]+(?:[\s\-–—:.]+.+)?$"
+)
+INLINE_HEADING_SPLIT_RE = re.compile(
+    r"(?<=\S)\s+(?=(?:A\d{1,2}\.|\d{1,2}\))\s+)"
+)
 
 ARTIFACT_RE = re.compile(r"\s*(?:[0-9]{1,3}|[•\-]|i|ii|iii|iv|v)\s*$", re.IGNORECASE)
 
@@ -36,13 +45,53 @@ def is_artifact(line: str) -> bool:
     return bool(ARTIFACT_RE.fullmatch(line.strip()))
 
 
+def _split_inline_headings(line: str) -> List[Tuple[int, str]]:
+    segments: List[Tuple[int, str]] = []
+    cursor = 0
+    for match in INLINE_HEADING_SPLIT_RE.finditer(line):
+        end = match.start()
+        segments.append((cursor, line[cursor:end]))
+        cursor = end
+    segments.append((cursor, line[cursor:]))
+    return segments
+
+
+def _label_for_match(match: re.Match[str]) -> Tuple[str, str]:
+    groups = match.groupdict()
+    if "num" in groups and groups["num"]:
+        return groups["num"], match.group(0).strip()
+    if "anum" in groups and groups["anum"]:
+        return f"A{groups['anum']}", match.group(0).strip()
+    return match.group(0).strip(), match.group(0).strip()
+
+
 def detect_heading_spans(text: str) -> List[Tuple[str, int, int]]:
     spans: List[Tuple[str, int, int]] = []
-    for matcher in (MAIN_HEADING_RE, APPENDIX_HEADING_RE, APPENDIX_BLOCK_RE):
-        for match in matcher.finditer(text):
-            sec_id = match.groupdict().get("num") or match.groupdict().get("anum")
-            label = match.group(0).strip()
-            spans.append((sec_id or label, match.start(), match.end()))
+    if not text:
+        return spans
+
+    lines = text.splitlines(True)
+    offset = 0
+    for raw_line in lines:
+        line = raw_line.rstrip("\r\n")
+        segments = _split_inline_headings(line)
+        for seg_offset, segment in segments:
+            stripped = segment.strip()
+            if not stripped:
+                continue
+            match = MAIN_HEADING_RE.match(stripped)
+            if not match:
+                match = APPENDIX_HEADING_RE.match(stripped)
+            if not match:
+                match = APPENDIX_BLOCK_RE.match(stripped)
+            if not match:
+                continue
+            label, heading_text = _label_for_match(match)
+            leading_ws = len(segment) - len(segment.lstrip())
+            start = offset + seg_offset + leading_ws
+            end = start + len(heading_text)
+            spans.append((label, start, end))
+        offset += len(raw_line)
     spans.sort(key=lambda item: item[1])
     return spans
 
