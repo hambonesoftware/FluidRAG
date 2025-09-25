@@ -4,13 +4,15 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 
 from datetime import UTC, datetime
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 from backend.persistence import get_preprocess_cache
-from backend.prompts import PASS_PROMPTS
+
+from backend.prompts import PASS_PROMPTS, atomic_user_template
 from backend.state import get_state
 from backend.utils.strings import s
 
@@ -272,26 +274,12 @@ def build_groups(chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return groups
 
 
-def format_chunk_for_prompt(chunk: Dict[str, Any], idx: int, total: int) -> str:
-    """Return a formatted prompt segment for the supplied chunk."""
-
-    doc = s(chunk.get("document")) or "Document"
-    sec_num = s(chunk.get("section_number") or chunk.get("section_id"))
-    sec_name = s(chunk.get("section_name") or chunk.get("section_title"))
-    page_start = chunk.get("page_start") or chunk.get("page") or 1
-    page_end = chunk.get("page_end") or page_start
-    body = s(chunk.get("text"))
-    header_bits = [f"Document: {doc}"]
-    if sec_num or sec_name:
-        section_label = " ".join(bit for bit in [sec_num, sec_name] if bit).strip()
-        header_bits.append(f"Section: {section_label}")
-    header_bits.append(f"Pages: {page_start}-{page_end}")
-    header = " \u2022 ".join(header_bits)
-    return f"<<<CHUNK {idx + 1} OF {total}>>>\n{header}\n{body}\n<<<END CHUNK {idx + 1}>>>"
-
-
 def build_user_prompt(metadata: Dict[str, Any], group: Dict[str, Any], batch_index: int, batch_total: int) -> str:
     """Construct the user prompt for the provided chunk group."""
+
+    template = atomic_user_template()
+    if not template:
+        return ""
 
     if isinstance(group, dict):
         raw_chunks = group.get("chunks") or []
@@ -302,22 +290,69 @@ def build_user_prompt(metadata: Dict[str, Any], group: Dict[str, Any], batch_ind
                 chunks_list = list(raw_chunks)
             except TypeError:
                 chunks_list = []
-        token_estimate = group.get("token_estimate", 0)
     else:
         chunks_list = []
-        token_estimate = 0
 
-    chunk_texts = [
-        format_chunk_for_prompt(chunk, idx, len(chunks_list))
-        for idx, chunk in enumerate(chunks_list)
-        if isinstance(chunk, dict) and s(chunk.get("text"))
-    ]
-    document = metadata.get("document") or "Document"
-    lines = [
-        f"DOCUMENT_METADATA:\n- Document: {document}\n- Session: {metadata.get('session_id', '')}",
-        f"BATCH_INFO: batch {batch_index + 1} of {batch_total}; approx {token_estimate} tokens",
-        "DOCUMENT_TEXT:",
-        "\n\n".join(chunk_texts) if chunk_texts else "(no text)",
-        "Return results exactly as instructed in the system prompt. Do not omit CSV or JSON sections.",
-    ]
-    return "\n\n".join(lines).strip()
+    doc_name = metadata.get("document") or "Document"
+    discipline = metadata.get("pass_name") or metadata.get("discipline") or "General"
+    user_query = metadata.get("user_query") or metadata.get("question") or metadata.get("query") or ""
+
+    loop_pattern = re.compile(r"{{#for c in chunks}}(.*?){{/for}}", re.S)
+    match = loop_pattern.search(template)
+    chunk_template = match.group(1) if match else ""
+    rendered_chunks: List[str] = []
+    for chunk in chunks_list:
+        if not isinstance(chunk, dict):
+            continue
+        text = s(chunk.get("text"))
+        if not text:
+            continue
+        hier = chunk.get("hier") or {}
+        clause = s(
+            hier.get("clause")
+            or chunk.get("section_number")
+            or chunk.get("section_id")
+            or ""
+        )
+        heading = s(
+            hier.get("heading")
+            or chunk.get("section_name")
+            or chunk.get("section_title")
+        )
+        doc_id = s(chunk.get("doc_id") or chunk.get("document") or doc_name)
+        page_span = chunk.get("page_span")
+        if isinstance(page_span, (list, tuple)) and len(page_span) >= 2:
+            page_repr = f"[{int(page_span[0])}, {int(page_span[1])}]"
+        else:
+            start = int(chunk.get("page_start") or chunk.get("page") or 1)
+            end = int(chunk.get("page_end") or start)
+            page_repr = f"[{start}, {end}]"
+        prefix = s(chunk.get("prefix"))
+        if not prefix:
+            prefix_parts = [doc_id]
+            if clause:
+                prefix_parts.append(f"§{clause}")
+            if heading:
+                prefix_parts.append(f"— {heading}")
+            prefix = " ".join(part for part in prefix_parts if part).strip()
+            if prefix:
+                prefix += ": "
+        block = chunk_template
+        block = block.replace("{{c.hier.clause}}", clause or "")
+        block = block.replace("{{c.prefix}}", prefix or "")
+        block = block.replace("{{c.text}}", text)
+        block = block.replace("{{c.doc_id}}", doc_id)
+        block = block.replace("{{c.page_span}}", page_repr)
+        rendered_chunks.append(block.strip())
+
+    if match:
+        template = (
+            template[: match.start()]
+            + ("\n".join(rendered_chunks) if rendered_chunks else "(no excerpts)")
+            + template[match.end():]
+        )
+
+    template = template.replace("{{std_name}}", doc_name)
+    template = template.replace("{{discipline}}", discipline)
+    template = template.replace("{{user_query}}", user_query)
+    return template.strip()

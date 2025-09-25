@@ -1,0 +1,15 @@
+{
+  "atomicity": 1.0,
+  "verbatim_fidelity": 1.0,
+  "rerank_uplift": {
+    "baseline_accuracy": 0.5,
+    "reranked_accuracy": 1.0,
+    "uplift": 0.5
+  },
+  "unit_number_capture": {
+    "number_precision": 1.0,
+    "number_recall": 1.0,
+    "unit_precision": 1.0,
+    "unit_recall": 1.0
+  }
+}

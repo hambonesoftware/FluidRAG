@@ -85,6 +85,22 @@ Artifacts are written under `fluidrag/data/artifacts/` and include chunk JSONL f
    python run.py
    ```
 
+## Standards retrieval runbook
+
+```bash
+# 1) Reindex from uploads
+python -m cli.reindex --doc uploads/<session>.pdf --config config/fluidrag.yaml
+
+# 2) Smoke test retrieval + rerank
+python -m backend.retrieval.router --query "What does ISO 10218-1 say about emergency stop?" --discipline electrical --macro index/<doc>_macro.json --micro index/<doc>_micro.json
+
+# 3) Run passes on a session (existing endpoint/CLI)
+python -m cli.run_passes --session <id> --config config/fluidrag.yaml
+
+# 4) QA eval
+python -m cli.qa_eval --gold tests/gold_specs.jsonl --pred out/specs.jsonl --report out/qa_report.json
+```
+
 ## License
 
 MIT
