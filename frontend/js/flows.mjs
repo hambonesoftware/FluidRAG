@@ -98,7 +98,7 @@ export function resetAfterUpload() {
   if (headersPreview) headersPreview.innerHTML = "";
 
   const preStatus = el("preprocessStatus");
-  if (preStatus) setStatus(preStatus, "Pre-chunking pending…");
+  if (preStatus) setStatus(preStatus, "Micro/macro preprocessing pending…");
   const headerStatus = el("headersStatus");
   if (headerStatus) setStatus(headerStatus, "Header detection pending…");
   const processStatus = el("processStatus");
@@ -186,7 +186,7 @@ export async function onUpload() {
       } else {
         updateStatus(
           "preprocessStatus",
-          "Pre-chunking cached — select provider/model to load.",
+          "Micro/macro preprocessing cached — select provider/model to load.",
           "success"
         );
       }
@@ -290,7 +290,9 @@ export async function onPreprocess(options = {}) {
       const headerStatus = el("headersStatus");
       if (headerStatus) setStatus(headerStatus, "Header detection pending…");
     }
-    const statusLabel = forceRefresh ? "Re-running standard chunking…" : "Running standard chunking…";
+    const statusLabel = forceRefresh
+      ? "Re-running micro → macro chunking…"
+      : "Running micro → macro chunking…";
     updateStatus("preprocessStatus", statusLabel);
     log(forceRefresh ? "Preprocess rerun start" : "Preprocess start");
     withGroup("[Flow] Preprocess → Request payload", () => {
@@ -314,11 +316,14 @@ export async function onPreprocess(options = {}) {
     state.hasPre = true;
     state.cacheInfo.preprocess = true;
     const cacheTag = res.cache?.hit ? " [cached]" : forceRefresh ? " [refreshed]" : "";
-    updateStatus(
-      "preprocessStatus",
-      `Pages=${res.pages}, pre-chunks=${res.pre_chunks}${cacheTag}`,
-      "success"
-    );
+    const microCount = typeof res.micro_chunks === "number" ? res.micro_chunks : null;
+    const macroCount = typeof res.macro_chunks === "number" ? res.macro_chunks : res.pre_chunks;
+    const microLabel = microCount !== null ? `micro=${microCount}` : null;
+    const macroLabel = macroCount !== null ? `macro=${macroCount}` : null;
+    const parts = [`Pages=${res.pages}`];
+    if (microLabel) parts.push(microLabel);
+    if (macroLabel) parts.push(macroLabel);
+    updateStatus("preprocessStatus", `${parts.join(", ")}${cacheTag}`, "success");
     if (res.cache?.hit) {
       log("Preprocess complete via cache");
     } else if (forceRefresh) {

@@ -9,6 +9,8 @@ class PipelineState:
     file_path: str
     pages: Optional[List[str]] = None
     pre_chunks: Optional[List[Dict[str, Any]]] = None
+    micro_chunks: Optional[List[Dict[str, Any]]] = None
+    macro_chunks: Optional[List[Dict[str, Any]]] = None
     section_chunks: Optional[List[Dict[str, Any]]] = None
     refined_chunks: Optional[List[Dict[str, Any]]] = None
     clustered_chunks: Optional[List[Dict[str, Any]]] = None
