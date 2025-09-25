@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -137,3 +138,36 @@ def test_force_refresh_runs_all_passes(monkeypatch):
     assert set(result["cache"]["stored_passes"]) == {"Mechanical", "Electrical"}
     assert len(result["rows"]) == 1
     assert result["rows"][0]["Pass"] == "Electrical; Mechanical"
+
+
+def test_debug_manifest_written(monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "get_pass_cache", lambda file_hash: {})
+
+    async def fake_execute_pass(pass_name, *args, **kwargs):
+        return (
+            [{"Pass": pass_name, "fresh": True}],
+            [{"Pass": pass_name, "debug": True}],
+            ["Spec,Pass"],
+            [],
+        )
+
+    monkeypatch.setattr(runner, "execute_pass", fake_execute_pass)
+
+    payload = {
+        "session_id": "sess-debug",
+        "debug": True,
+        "debug_dir": str(tmp_path),
+    }
+
+    result = asyncio.run(runner.run_all_passes_async(payload))
+
+    debug_info = result.get("debug", {}).get("files", {}).get("passes")
+    assert debug_info and "directory" in debug_info
+
+    manifest_path = Path(debug_info["directory"]) / "index.json"
+    assert manifest_path.exists()
+
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["session_id"] == "sess-debug"
+    recorded = sorted(entry["pass"] for entry in manifest["passes"])
+    assert recorded == sorted(debug_info.get("recorded_passes", []))

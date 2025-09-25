@@ -13,8 +13,9 @@ from ..parse.header_config import CONFIG
 from ..parse.header_page_mode import (
     select_candidates,
     build_adjudication_prompt,
-    _dump_page_debug,
     dump_appendix_audit,
+    write_header_debug_manifest,
+    write_page_debug,
 )
 from ..parse.header_detector import is_header_line
 from ..state import get_state
@@ -379,6 +380,7 @@ async def detect_headers_page_mode(
     """
     results: List[Dict[str, Any]] = []
     debug_snapshots: List[Tuple[int, List[dict], str]] = []
+    llm_selections: Dict[int, List[Dict[str, Any]]] = {}
     doc_tag = doc_id or "document"
     for pi, lines in enumerate(pages_lines or []):
         styles = page_line_styles[pi] if page_line_styles and pi < len(page_line_styles) else [{} for _ in lines]
@@ -390,7 +392,7 @@ async def detect_headers_page_mode(
         )
         snapshot = [copy.deepcopy(c) for c in candidates]
         debug_snapshots.append((pi, snapshot, page_text))
-        _dump_page_debug(doc_tag, pi, page_text, snapshot)
+        write_page_debug(doc_tag, pi, page_text, snapshot)
 
         det = [c for c in candidates if c["score"] >= CONFIG.get("accept_score_threshold", 2.0)]
         ambiguous = [c for c in candidates if CONFIG.get("ambiguous_score_threshold", 1.0) <= c["score"] < CONFIG.get("accept_score_threshold", 2.0)]
@@ -403,7 +405,7 @@ async def detect_headers_page_mode(
                 candidates,
                 CONFIG.get("context_chars_per_candidate", 700),
             )
-            _dump_page_debug(doc_tag, pi, page_text, snapshot, llm_prompt=page_prompt)
+            write_page_debug(doc_tag, pi, page_text, snapshot, llm_prompt=page_prompt)
             user_msg = {
                 "role": "user",
                 "content": page_prompt,
@@ -439,13 +441,18 @@ async def detect_headers_page_mode(
                                 })
                         except Exception:
                             continue
-                _dump_page_debug(
+                selections = payload if isinstance(payload, list) else []
+                if selections:
+                    llm_selections[pi] = [
+                        dict(item) for item in selections if isinstance(item, dict)
+                    ]
+                write_page_debug(
                     doc_tag,
                     pi,
                     page_text,
                     snapshot,
                     llm_prompt=page_prompt,
-                    llm_json=payload if isinstance(payload, list) else [],
+                    llm_json=selections,
                 )
             except Exception:
                 pass
@@ -462,4 +469,10 @@ async def detect_headers_page_mode(
         results.append({"page": pi + 1, "headers": ordered})
 
     dump_appendix_audit(doc_tag, debug_snapshots)
+    write_header_debug_manifest(
+        doc_tag,
+        debug_snapshots,
+        results,
+        llm_selections=llm_selections,
+    )
     return results

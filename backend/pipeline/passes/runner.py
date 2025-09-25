@@ -5,9 +5,11 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import re
 import time
 import uuid
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
 from typing import Any, Dict, List, Tuple
 
@@ -47,6 +49,15 @@ def _snapshot(value: Any, limit: int = 3000) -> str:
     return text
 
 
+def _sanitize_component(value: Any, default: str = "run") -> str:
+    text = str(value or "").strip()
+    if not text:
+        return default
+    safe = re.sub(r"[^0-9A-Za-z._-]+", "_", text)
+    safe = safe.strip("_")
+    return safe or default
+
+
 def _normalize_fragment(text: str) -> str:
     if not text:
         return ""
@@ -62,6 +73,107 @@ def _extract_pass_tokens(value: str) -> List[str]:
         if token:
             tokens.append(token)
     return tokens
+
+
+def _write_pass_debug(run_dir: str, pass_name: str, result: Dict[str, Any], *, req_id: str) -> None:
+    try:
+        os.makedirs(run_dir, exist_ok=True)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[passes %s] failed to ensure debug run directory %s", req_id, run_dir)
+        return
+
+    safe_pass = _sanitize_component(pass_name, "pass")
+    pass_dir = os.path.join(run_dir, safe_pass)
+    try:
+        os.makedirs(pass_dir, exist_ok=True)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[passes %s] failed to ensure pass debug directory %s", req_id, pass_dir)
+        return
+
+    meta_payload: Dict[str, Any] = {
+        "pass": pass_name,
+        "req": req_id,
+        "elapsed_ms": result.get("elapsed"),
+    }
+    errors = result.get("errors")
+    if errors:
+        meta_payload["errors"] = errors
+    metadata = result.get("metadata")
+    if metadata:
+        meta_payload["metadata"] = metadata
+    with open(os.path.join(pass_dir, "meta.json"), "w", encoding="utf-8") as fh:
+        json.dump(meta_payload, fh, ensure_ascii=False, indent=2)
+
+    debug_records = result.get("debug") or []
+    if debug_records:
+        with open(os.path.join(pass_dir, "llm_debug.json"), "w", encoding="utf-8") as fh:
+            json.dump(debug_records, fh, ensure_ascii=False, indent=2)
+
+    groups = result.get("groups")
+    if groups:
+        with open(os.path.join(pass_dir, "groups.json"), "w", encoding="utf-8") as fh:
+            json.dump(groups, fh, ensure_ascii=False, indent=2)
+
+    rows = result.get("rows")
+    if rows:
+        with open(os.path.join(pass_dir, "rows.json"), "w", encoding="utf-8") as fh:
+            json.dump(rows, fh, ensure_ascii=False, indent=2)
+
+    csv_segments = result.get("csv") or []
+    csv_text = "\n".join(segment.rstrip("\n") for segment in csv_segments if segment)
+    if csv_text:
+        with open(os.path.join(pass_dir, "rows.csv"), "w", encoding="utf-8") as fh:
+            fh.write(csv_text + "\n")
+
+
+def _write_pass_run_manifest(
+    run_dir: str,
+    session_id: str,
+    req_id: str,
+    results: Dict[str, Dict[str, Any]],
+    *,
+    metrics: Dict[str, float] | None = None,
+    cache_hits: List[str] | None = None,
+    cache_misses: List[str] | None = None,
+) -> None:
+    try:
+        os.makedirs(run_dir, exist_ok=True)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[passes %s] failed to ensure debug manifest directory %s", req_id, run_dir)
+        return
+
+    manifest: Dict[str, Any] = {
+        "session_id": session_id,
+        "req_id": req_id,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "passes": [],
+    }
+
+    if metrics:
+        manifest["metrics"] = dict(metrics)
+    if cache_hits or cache_misses:
+        manifest["cache"] = {
+            "hits": sorted(cache_hits or []),
+            "misses": sorted(cache_misses or []),
+        }
+
+    for name, payload in sorted(results.items()):
+        safe_name = _sanitize_component(name, "pass")
+        entry = {
+            "pass": name,
+            "directory": safe_name,
+            "rows": len(payload.get("rows") or []),
+            "errors": payload.get("errors") or [],
+            "elapsed_ms": payload.get("elapsed"),
+            "debug_records": len(payload.get("debug") or []),
+        }
+        manifest["passes"].append(entry)
+
+    try:
+        with open(os.path.join(run_dir, "index.json"), "w", encoding="utf-8") as fh:
+            json.dump(manifest, fh, ensure_ascii=False, indent=2)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("[passes %s] failed to write debug manifest", req_id)
 
 
 def _best_section_match(spec_text: str, lookup: List[Dict[str, Any]]) -> Dict[str, Any] | None:
@@ -172,6 +284,18 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         or s(payload.get("req_id"))
         or uuid.uuid4().hex[:8]
     )
+
+    debug_requested = bool(payload.get("_debug") or payload.get("debug"))
+    debug_env = env("DEBUG", "").lower() in {"1", "true", "yes"}
+    debug_enabled = debug_requested or debug_env
+    if debug_enabled:
+        debug_root = payload.get("debug_dir") or os.path.join("_debug", "passes")
+        session_tag = _sanitize_component(session_id, "session")
+        run_tag = _sanitize_component(req_id, "run")
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        debug_run_dir = os.path.join(debug_root, session_tag, f"{timestamp}_{run_tag}")
+    else:
+        debug_run_dir = None
 
     state = get_state(session_id)
     if state is None:
@@ -339,10 +463,11 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         pass_metadata = dict(metadata)
         pass_metadata["pass_name"] = pass_name
         pass_metadata.setdefault("discipline", pass_name)
+        target_groups = pass_groups.get(pass_name, default_groups)
         pass_rows, debug_records, pass_csv_segments, pass_errors = await execute_pass(
             pass_name,
             system_prompt,
-            pass_groups.get(pass_name, default_groups),
+            target_groups,
             provider,
             model,
             pass_metadata,
@@ -351,10 +476,19 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             debug_llm_io=debug_llm_io,
         )
         elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
-        return pass_name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors
+        result_payload = {
+            "rows": pass_rows,
+            "debug": debug_records,
+            "csv": pass_csv_segments,
+            "elapsed": elapsed_ms,
+            "errors": pass_errors,
+            "groups": target_groups,
+            "metadata": pass_metadata,
+        }
+        return pass_name, result_payload
 
     total_start = time.perf_counter()
-    results: Dict[str, Tuple[List[Dict[str, str]], List[Dict[str, Any]], List[str], float, List[Dict[str, Any]]]] = {}
+    results: Dict[str, Dict[str, Any]] = {}
 
     if pending_count <= 1:
         for index, (pass_name, system_prompt) in enumerate(runnable_passes):
@@ -383,13 +517,16 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
                 debug_llm_io=debug_llm_io,
             )
             elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
-            results[pass_name] = (
-                pass_rows,
-                debug_records,
-                pass_csv_segments,
-                elapsed_ms,
-                pass_errors,
-            )
+            result_payload = {
+                "rows": pass_rows,
+                "debug": debug_records,
+                "csv": pass_csv_segments,
+                "elapsed": elapsed_ms,
+                "errors": pass_errors,
+                "groups": target_groups,
+                "metadata": pass_metadata,
+            }
+            results[pass_name] = result_payload
             if pass_errors:
                 break
     else:
@@ -412,18 +549,16 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
         for task in asyncio.as_completed(tasks):
-            name, pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = await task
-            results[name] = (
-                pass_rows,
-                debug_records,
-                pass_csv_segments,
-                elapsed_ms,
-                pass_errors,
-            )
+            name, result_payload = await task
+            results[name] = result_payload
 
     for pass_name, _system_prompt in pass_items:
         if pass_name in results:
-            pass_rows, debug_records, pass_csv_segments, elapsed_ms, pass_errors = results[pass_name]
+            result_payload = results[pass_name]
+            pass_rows = result_payload.get("rows") or []
+            debug_records = result_payload.get("debug") or []
+            elapsed_ms = result_payload.get("elapsed") or 0.0
+            pass_errors = result_payload.get("errors") or []
 
             metrics[pass_name] = elapsed_ms
             llm_debug.extend(debug_records)
@@ -436,6 +571,8 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
                 pass_name,
                 _snapshot(payload_preview),
             )
+            if debug_enabled and debug_run_dir:
+                _write_pass_debug(debug_run_dir, pass_name, result_payload, req_id=req_id)
             if not pass_errors and pass_rows:
                 save_pass_cache(
                     file_hash,
@@ -487,7 +624,6 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
         "stored_passes": sorted(pass_outputs.keys()),
     }
 
-    debug_enabled = bool(payload.get("debug") or env("DEBUG", "").lower() in {"1", "true", "yes"})
     if debug_enabled:
         response.setdefault("debug", {})
         response["debug"]["merge"] = {
@@ -498,6 +634,23 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
             "coverage_ratio": coverage_ratio,
             "overlap_ratio": overlap_ratio,
         }
+        if debug_run_dir:
+            response["debug"].setdefault("files", {})
+            response["debug"]["files"]["passes"] = {
+                "directory": debug_run_dir,
+                "recorded_passes": sorted(results.keys()),
+            }
+
+    if debug_enabled and debug_run_dir:
+        _write_pass_run_manifest(
+            debug_run_dir,
+            session_id,
+            req_id,
+            results,
+            metrics=metrics,
+            cache_hits=cache_hits,
+            cache_misses=cache_misses,
+        )
 
     if all_errors:
         first = all_errors[0]
