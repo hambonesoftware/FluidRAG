@@ -14,7 +14,7 @@ import {
   onPreprocess,
   onHeaders,
   onHeadersRerun,
-  onHeadersRechunk,
+  onPreprocessRechunk,
   onLocalHeaders,
   onProcess,
   onProcessRerunAll
@@ -61,14 +61,14 @@ async function boot() {
   if (testBtn) testBtn.addEventListener("click", handleTestLLM);
   const preprocessBtn = el("preprocessBtn");
   if (preprocessBtn) preprocessBtn.addEventListener("click", onPreprocess);
+  const preprocessRechunkBtn = el("preprocessRechunkBtn");
+  if (preprocessRechunkBtn) preprocessRechunkBtn.addEventListener("click", onPreprocessRechunk);
   const localHeadersBtn = el("localHeadersBtn");
   if (localHeadersBtn) localHeadersBtn.addEventListener("click", onLocalHeaders);
   const headersBtn = el("headersBtn");
   if (headersBtn) headersBtn.addEventListener("click", onHeaders);
   const headersRerunBtn = el("headersRerunBtn");
   if (headersRerunBtn) headersRerunBtn.addEventListener("click", onHeadersRerun);
-  const headersRechunkBtn = el("headersRechunkBtn");
-  if (headersRechunkBtn) headersRechunkBtn.addEventListener("click", onHeadersRechunk);
   const processBtn = el("processBtn");
   if (processBtn) processBtn.addEventListener("click", onProcess);
   const rerunBtn = el("processRerunBtn");
