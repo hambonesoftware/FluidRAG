@@ -14,6 +14,7 @@ from ..parse.header_page_mode import (
     select_candidates,
     build_adjudication_prompt,
     dump_appendix_audit,
+    write_header_candidate_audit,
     write_header_debug_manifest,
     write_page_debug,
 )
@@ -474,5 +475,10 @@ async def detect_headers_page_mode(
         debug_snapshots,
         results,
         llm_selections=llm_selections,
+    )
+    write_header_candidate_audit(
+        doc_tag,
+        debug_snapshots,
+        results,
     )
     return results

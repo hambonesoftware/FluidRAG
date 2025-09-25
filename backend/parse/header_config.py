@@ -30,4 +30,5 @@ CONFIG = {
     # Debugging helpers
     "debug": False,
     "debug_dir": "./_debug/headers",
+    "audit_dir": "./debug/headers",
 }

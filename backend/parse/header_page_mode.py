@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Iterable
 import re
 import os
 import csv
@@ -19,6 +19,7 @@ from .header_config import CONFIG
 MEASURE_RX = re.compile(r'\b(?:\d{1,4}(?:\.\d+)?)(?:\s*(?:mm|cm|m|in|inch|ft|°c|°f|a|v|hz|psi|kpa|ip\d{2}))\b', re.I)
 ADDRESS_RX = re.compile(r'\b(?:Street|St\.|Road|Rd\.|Drive|Dr\.|Ave\.|Avenue|Suite|USA|Tel|Fax)\b', re.I)
 TOO_LONG_RX = re.compile(r'^\s*.{161,}\s*$')
+SAFE_COMPONENT_RX = re.compile(r"[^A-Za-z0-9._-]+")
 
 def _caps_ratio(s: str) -> float:
     letters = [c for c in s if c.isalpha()]
@@ -116,6 +117,12 @@ def build_adjudication_prompt(page_text: str, candidates: List[dict], context_ch
 def _ensure_dir(path: str) -> None:
     if path:
         os.makedirs(path, exist_ok=True)
+
+
+def _sanitize_doc_id(value: Optional[str]) -> str:
+    base = (value or "document").strip() or "document"
+    cleaned = SAFE_COMPONENT_RX.sub("_", base)
+    return cleaned or "document"
 
 
 def _dump_page_debug(
@@ -289,6 +296,137 @@ def dump_appendix_audit(
 
     with open(os.path.join(out_dir, "appendix_audit.json"), "w", encoding="utf-8") as fh:
         json.dump(audit_rows, fh, ensure_ascii=False, indent=2)
+
+
+def write_header_candidate_audit(
+    doc_id: str,
+    pages_debug: Iterable[Tuple[int, List[dict], str]],
+    results: Iterable[Dict[str, Any]],
+    *,
+    output_root: Optional[str] = None,
+) -> None:
+    """Persist a machine-readable snapshot of header candidate scoring.
+
+    Unlike the debug artefacts, this runs for every request so that operators
+    can inspect ranking decisions even when debug mode is disabled.
+    """
+
+    base_dir = (output_root or CONFIG.get("audit_dir") or "./debug/headers").strip()
+    if not base_dir:
+        base_dir = "./debug/headers"
+
+    doc_component = _sanitize_doc_id(doc_id)
+    out_dir = os.path.join(base_dir, doc_component)
+    _ensure_dir(out_dir)
+
+    threshold = float(CONFIG.get("accept_score_threshold", 2.25) or 2.25)
+
+    def _coerce_int(value: Any) -> Optional[int]:
+        try:
+            return int(value)
+        except Exception:
+            return None
+
+    snapshot_map: Dict[int, List[dict]] = {}
+    page_text_map: Dict[int, str] = {}
+    for page_idx, snapshot, page_text in pages_debug or []:
+        idx = _coerce_int(page_idx)
+        if idx is None:
+            continue
+        snapshot_map[idx] = list(snapshot or [])
+        page_text_map[idx] = page_text or ""
+
+    headers_by_page: Dict[int, List[Dict[str, Any]]] = {}
+    for result in results or []:
+        page_idx = _coerce_int(result.get("page", 0))
+        if page_idx is None:
+            continue
+        page_idx -= 1
+        if page_idx is None or page_idx < 0:
+            continue
+        headers = []
+        for header in result.get("headers") or []:
+            if not isinstance(header, dict):
+                continue
+            headers.append({
+                "line_idx": header.get("line_idx"),
+                "text": header.get("text"),
+                "section_number": header.get("section_number"),
+                "level": header.get("level"),
+                "score": header.get("score"),
+                "style": header.get("style"),
+            })
+        headers_by_page[page_idx] = headers
+
+    selected_keys = set()
+    for page_idx, headers in headers_by_page.items():
+        for header in headers:
+            key = _coerce_int(header.get("line_idx"))
+            if key is None:
+                continue
+            selected_keys.add((page_idx, key))
+
+    all_page_indices = sorted(set(snapshot_map.keys()) | set(headers_by_page.keys()))
+
+    pages_payload: List[Dict[str, Any]] = []
+    for page_idx in all_page_indices:
+        snapshot = snapshot_map.get(page_idx, [])
+        entries: List[Dict[str, Any]] = []
+        for cand in snapshot:
+            line_idx = cand.get("line_idx")
+            coerced_idx = _coerce_int(line_idx)
+            breakdown = score_header_candidate_debug(
+                cand.get("text"), style=cand.get("style") or {}
+            )
+            selected = (
+                (page_idx, coerced_idx) in selected_keys
+                if coerced_idx is not None
+                else False
+            )
+            meets_threshold = breakdown.total >= threshold
+            decision = "selected" if selected else (
+                "below_threshold" if not selected and not meets_threshold else "not_selected"
+            )
+            entry = {
+                "line_idx": line_idx,
+                "text": breakdown.text,
+                "score": float(breakdown.total),
+                "meets_threshold": meets_threshold,
+                "decision": decision,
+                "section_number": cand.get("section_number"),
+                "level": cand.get("level"),
+                "style": cand.get("style") or {},
+                "partial_scores": breakdown.partial_scores,
+                "disqualifiers": breakdown.disqualifiers,
+                "regex_hits": breakdown.regex_hits,
+            }
+            entries.append(entry)
+
+        entries.sort(key=lambda item: item.get("score", 0.0), reverse=True)
+        for rank, entry in enumerate(entries, start=1):
+            entry["rank"] = rank
+            entry["selected"] = entry.get("decision") == "selected"
+
+        page_record: Dict[str, Any] = {
+            "page": page_idx + 1,
+            "candidate_count": len(entries),
+            "candidates": entries,
+            "final_headers": headers_by_page.get(page_idx, []),
+        }
+        text_sample = page_text_map.get(page_idx)
+        if text_sample:
+            page_record["sample_text"] = text_sample[:4000]
+
+        pages_payload.append(page_record)
+
+    report = {
+        "doc": doc_component,
+        "threshold": threshold,
+        "pages": pages_payload,
+    }
+
+    with open(os.path.join(out_dir, "candidate_audit.json"), "w", encoding="utf-8") as fh:
+        json.dump(report, fh, ensure_ascii=False, indent=2)
 
 
 def write_header_debug_manifest(
