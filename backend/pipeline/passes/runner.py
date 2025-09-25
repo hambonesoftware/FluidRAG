@@ -92,6 +92,13 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     groups = build_groups(chunks)
     metadata = {"document": state.filename or "Document", "session_id": session_id}
+    metadata["user_query"] = s(
+        payload.get("question")
+        or payload.get("query")
+        or payload.get("prompt")
+        or payload.get("task")
+        or ""
+    )
 
     debug_llm_io = bool(payload.get("_debug_llm_io") or payload.get("debug_llm_io"))
 
@@ -219,13 +226,16 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     async def _execute(pass_name: str, system_prompt: str):
         start = time.perf_counter()
+        pass_metadata = dict(metadata)
+        pass_metadata["pass_name"] = pass_name
+        pass_metadata.setdefault("discipline", pass_name)
         pass_rows, debug_records, pass_csv_segments, pass_errors = await execute_pass(
             pass_name,
             system_prompt,
             groups,
             provider,
             model,
-            metadata,
+            pass_metadata,
             pass_timeout,
             req_id=req_id,
             debug_llm_io=debug_llm_io,
@@ -247,13 +257,16 @@ async def run_all_passes_async(payload: Dict[str, Any]) -> Dict[str, Any]:
                 await asyncio.sleep(delay)
 
             start = time.perf_counter()
+            pass_metadata = dict(metadata)
+            pass_metadata["pass_name"] = pass_name
+            pass_metadata.setdefault("discipline", pass_name)
             pass_rows, debug_records, pass_csv_segments, pass_errors = await execute_pass(
                 pass_name,
                 system_prompt,
                 groups,
                 provider,
                 model,
-                metadata,
+                pass_metadata,
                 pass_timeout,
                 req_id=req_id,
                 debug_llm_io=debug_llm_io,

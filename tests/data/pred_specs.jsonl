@@ -1,0 +1,2 @@
+{"exact_text": "The guard shall stop the robot.", "source": {"chunk_id": "chunk-1"}, "numbers": ["1.0"], "units": ["mm"], "baseline_top1": "chunk-2", "reranked_top1": "chunk-1", "gold_chunk_id": "chunk-1"}
+{"exact_text": "The system shall have two stops.", "source": {"chunk_id": "chunk-2"}, "numbers": ["2"], "units": [], "baseline_top1": "chunk-2", "reranked_top1": "chunk-2", "gold_chunk_id": "chunk-2"}

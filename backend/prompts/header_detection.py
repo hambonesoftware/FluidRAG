@@ -13,6 +13,7 @@ WHAT COUNTS AS A HEADER
 - May start with numbering: "1", "1.2", "A", "A.1", "I", "II", "(a)", "1)", "Appendix A", "Appendix D".
 - May end with ":" or "—" followed by a short title.
 - Ignore pure bullets ("•", "-", "—") and ornament lines; ignore running headers/footers and page numbers.
+- Reject footer text (copyright, addresses, revision notices), table column headers, and page references even if styled.
 - Exclude lines dominated by measurements, addresses, or phone numbers.
 
 RETURN FORMAT (JSON only)

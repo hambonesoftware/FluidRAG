@@ -1,0 +1,48 @@
+chunking:
+  micro:
+    target_tokens: 180
+    min_tokens: 40
+    max_tokens: 320
+    one_requirement_per_chunk: true
+    copy_leadin_to_prefix: true
+    prepend_prefix_in_embedding: true
+  macro:
+    target_tokens: 1600
+    max_tokens: 2200
+
+retrieval:
+  k_exact: 6
+  k_sparse: 12
+  k_dense: 16
+  k_candidates: 24
+  k_final: 1
+  allow_multi_final: false
+  hybrid_weights: { dense: 0.55, sparse: 0.35, exact: 0.10 }
+  reranker:
+    type: "colbert"
+    cross_encoder_model: "cross-encoder/msmarco-MiniLM-L6"
+    cache_ttl_sec: 7200
+
+routing:
+  discipline_keywords:
+    mechanical: ["guard", "pinch", "torque", "bearing", "frame", "clearance"]
+    electrical: ["NFPA 79", "wiring", "voltage", "amp", "ground", "E-stop"]
+    software:   ["PLC", "HMI", "safety PLC", "logic", "program"]
+    controls:   ["sensor", "interlock", "category", "PLd", "SIL"]
+    pm:         ["FAT", "SAT", "documentation", "risk assessment"]
+
+scoring:
+  weights:
+    modal_must_shall: 1.8
+    numeric_units:    1.6
+    clause_id_match:  2.0
+    heading_match:    1.2
+    list_semantics:   1.0
+    refs_present:     0.8
+    entropy:         -0.6
+    numbering_continuity: 0.5
+
+qa:
+  require_clause_id_in_answer: true
+  forbid_paraphrase: true
+  json_schema_validate: true
