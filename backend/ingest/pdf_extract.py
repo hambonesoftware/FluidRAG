@@ -11,7 +11,9 @@ Produces:
 """
 from __future__ import annotations
 from typing import List, Dict, Any, Optional
-import os, csv, hashlib, math
+import os, csv, hashlib, math, json
+
+from ..parse import header_config
 
 def _stats(nums):
     if not nums: 
@@ -33,12 +35,15 @@ def extract(pdf_path: str, out_dir: Optional[str]=None) -> Dict[str, Any]:
         import fitz  # PyMuPDF
         tried.append("pymupdf")
         doc = fitz.open(pdf_path)
+        doc_tag = header_config.sanitize_component(os.path.splitext(os.path.basename(pdf_path or ""))[0])
         for i, page in enumerate(doc, start=1):
             d = page.get_text('dict')  # blocks -> lines -> spans
             # Reconstruct lines with style metrics
             lines_text: List[str] = []
             lines_style: List[Dict[str,Any]] = []
             font_sizes = []
+            debug_spans: List[Dict[str, Any]] = []
+            span_counter = 0
             for b in d.get('blocks', []):
                 for l in b.get('lines', []):
                     spans = l.get('spans', [])
@@ -50,15 +55,44 @@ def extract(pdf_path: str, out_dir: Optional[str]=None) -> Dict[str, Any]:
                         continue
                     fs = max((s.get('size', 0.0) for s in spans), default=0.0)
                     is_bold = any('Bold' in (s.get('font','') or '') or s.get('flags',0) & 2 for s in spans)
+                    is_italic = any('Italic' in (s.get('font','') or '') or s.get('flags',0) & 1 for s in spans)
                     bbox = l.get('bbox', [0,0,0,0])
+                    x0, y0, x1, y1 = (bbox + [0,0,0,0])[:4]
+                    font_names = [s.get('font') for s in spans if s.get('font')]
+                    primary_font = font_names[0] if font_names else ''
                     letters = [c for c in text if c.isalpha()]
                     caps_ratio = (sum(c.isupper() for c in letters)/max(1,len(letters))) if letters else 0.0
                     lines_text.append(text)
-                    lines_style.append({'font_size': fs, 'bold': bool(is_bold), 'caps_ratio': caps_ratio, 'bbox': bbox})
+                    lines_style.append({
+                        'font_size': fs,
+                        'bold': bool(is_bold),
+                        'italics': bool(is_italic),
+                        'caps_ratio': caps_ratio,
+                        'bbox': bbox,
+                        'x_left': x0,
+                        'x_right': x1,
+                        'y_top': y0,
+                        'font_name': primary_font,
+                        'span_count': len(spans),
+                    })
                     font_sizes.append(fs)
+                    if header_config.DEBUG_HEADERS:
+                        for span in spans:
+                            bbox_span = span.get('bbox') or [x0, y0, x1, y1]
+                            debug_spans.append({
+                                'span_idx': span_counter,
+                                'text_raw': span.get('text', ''),
+                                'bbox': list(bbox_span),
+                                'font': span.get('font'),
+                                'size': span.get('size'),
+                                'bold': bool('Bold' in (span.get('font','') or '') or span.get('flags',0) & 2),
+                                'italics': bool('Italic' in (span.get('font','') or '') or span.get('flags',0) & 1),
+                                'source': 'pdf',
+                            })
+                            span_counter += 1
             # Per-page font sigma rank
             mu, sigma = _stats(font_sizes)
-            if sigma <= 0: 
+            if sigma <= 0:
                 sigma = 1.0
             for st in lines_style:
                 st['font_sigma_rank'] = (st['font_size'] - mu)/sigma
@@ -66,6 +100,16 @@ def extract(pdf_path: str, out_dir: Optional[str]=None) -> Dict[str, Any]:
             page_line_styles.append(lines_style)
             # Also keep plain text for backward compatibility
             pages_linear.append("\n".join(lines_text))
+
+            if header_config.DEBUG_HEADERS:
+                base_dir = header_config.DEBUG_DIR or "./_debug/headers"
+                header_config._ensure_dir(base_dir)
+                page_dir = os.path.join(base_dir, doc_tag, f"page_{i-1:04d}")
+                header_config._ensure_dir(page_dir)
+                spans_path = os.path.join(page_dir, "spans.jsonl")
+                with open(spans_path, 'w', encoding='utf-8') as fh:
+                    for entry in debug_spans:
+                        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
             # Blocks for coarse layout view
             blocks = page.get_text('blocks') or []
