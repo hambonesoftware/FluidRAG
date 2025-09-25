@@ -11,3 +11,7 @@ __pycache__/
 data/*
 !data/corpus/
 !data/corpus/**
+!data/stages/
+!data/stages/**
+!data/output/
+!data/output/**

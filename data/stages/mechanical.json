@@ -1,0 +1,32 @@
+[
+  {
+    "chunk_id": "chunk-mech-001",
+    "pass": "Mechanical",
+    "section_id": "12.1",
+    "section_title": "Mechanical Performance",
+    "header_anchor": "mechanical-performance",
+    "page_start": 20,
+    "page_end": 20,
+    "text": "Maintain alignment within ±0.5 mm during operation; provide guarding that meets ISO 14120."
+  },
+  {
+    "chunk_id": "chunk-mech-002",
+    "pass": "Mechanical",
+    "section_id": "12.2",
+    "section_title": "Safety Hardware",
+    "header_anchor": "mechanical-safety",
+    "page_start": 21,
+    "page_end": 21,
+    "text": "The EOAT shall withstand 40 lb payloads with safety factor 4:1.\nInclude safe torque off certified components."
+  },
+  {
+    "chunk_id": "chunk-mech-003",
+    "pass": "Mechanical",
+    "section_id": "17.2",
+    "section_title": "Evaluation Criteria",
+    "header_anchor": "eval-mechanical",
+    "page_start": 31,
+    "page_end": 32,
+    "text": "Evaluation criteria address maintenance, safety, and energy efficiency."
+  }
+]
