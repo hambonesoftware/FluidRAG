@@ -31,8 +31,9 @@ def preprocess_route():
 
         state = get_state(session_id) if session_id else None
         file_hash = getattr(state, "file_hash", None) if state else None
+        force_refresh = bool(data.get("force_refresh"))
 
-        cached = get_preprocess_cache(file_hash)
+        cached = get_preprocess_cache(file_hash) if not force_refresh else None
         if cached:
             cached_chunks = [dict(chunk) for chunk in cached.get("chunks", [])]
             if state is not None:

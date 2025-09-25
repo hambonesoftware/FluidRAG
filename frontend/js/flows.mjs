@@ -262,26 +262,46 @@ export async function handleTestLLM() {
   }
 }
 
-export async function onPreprocess() {
-  if (!requireSession()) return;
+export async function onPreprocess(options = {}) {
+  if (!requireSession()) return false;
   updateModel();
   if (!state.provider) {
     alert("Select an LLM provider first.");
-    return;
+    return false;
   }
   if (!state.model) {
     alert("Select a model first.");
-    return;
+    return false;
   }
-  const end = openGroup("[Flow] Preprocess", false);
+  const forceRefresh = Boolean(options?.forceRefresh);
+  const end = openGroup(forceRefresh ? "[Flow] Preprocess (force)" : "[Flow] Preprocess", false);
+  let success = false;
   try {
     console.log("State before preprocess", { ...state });
-    updateStatus("preprocessStatus", "Running standard chunking…");
-    log("Preprocess start");
+    if (forceRefresh) {
+      state.hasHeaders = false;
+      state.cacheInfo.headers = false;
+      state.hasLocalHeaders = false;
+      state.localHeaders = [];
+      const previewTarget = el("headersPreview");
+      if (previewTarget) renderHeaderPreview(previewTarget, []);
+      const localPreviewTarget = el("headersLocalPreview");
+      if (localPreviewTarget) renderLocalHeaders(localPreviewTarget, []);
+      const headerStatus = el("headersStatus");
+      if (headerStatus) setStatus(headerStatus, "Header detection pending…");
+    }
+    const statusLabel = forceRefresh ? "Re-running standard chunking…" : "Running standard chunking…";
+    updateStatus("preprocessStatus", statusLabel);
+    log(forceRefresh ? "Preprocess rerun start" : "Preprocess start");
     withGroup("[Flow] Preprocess → Request payload", () => {
-      console.log({ session_id: state.sessionId, model: state.model, provider: state.provider });
+      console.log({
+        session_id: state.sessionId,
+        model: state.model,
+        provider: state.provider,
+        force_refresh: forceRefresh || undefined
+      });
     }, true);
-    const res = await preprocessDocument(state.sessionId, state.model, state.provider);
+    const res = await preprocessDocument(state.sessionId, state.model, state.provider, { forceRefresh });
     withGroup(`[Flow] Preprocess → Raw response (${res.httpStatus ?? "?"})`, () => {
       console.log(res);
     }, true);
@@ -289,11 +309,11 @@ export async function onPreprocess() {
       const msg = res.error || "Preprocess failed";
       updateStatus("preprocessStatus", msg, "warn");
       log(`Preprocess error: ${msg}`);
-      return;
+      return false;
     }
     state.hasPre = true;
     state.cacheInfo.preprocess = true;
-    const cacheTag = res.cache?.hit ? " [cached]" : "";
+    const cacheTag = res.cache?.hit ? " [cached]" : forceRefresh ? " [refreshed]" : "";
     updateStatus(
       "preprocessStatus",
       `Pages=${res.pages}, pre-chunks=${res.pre_chunks}${cacheTag}`,
@@ -301,13 +321,17 @@ export async function onPreprocess() {
     );
     if (res.cache?.hit) {
       log("Preprocess complete via cache");
+    } else if (forceRefresh) {
+      log(`Preprocess rerun complete pages=${res.pages} chunks=${res.pre_chunks}`);
     } else {
       log(`Preprocess complete pages=${res.pages} chunks=${res.pre_chunks}`);
     }
     console.log("State after preprocess", { ...state });
+    success = true;
   } finally {
     end();
   }
+  return success;
 }
 
 export async function onLocalHeaders() {
@@ -422,6 +446,20 @@ export async function onHeaders(options = {}) {
 
 export function onHeadersRerun() {
   return onHeaders({ forceRefresh: true });
+}
+
+export async function onHeadersRechunk() {
+  const end = openGroup("[Flow] Re-chunk before headers", false);
+  try {
+    const preOk = await onPreprocess({ forceRefresh: true });
+    if (!preOk) {
+      log("Re-chunk before headers aborted: preprocess failed");
+      return;
+    }
+    await onHeaders({ forceRefresh: true });
+  } finally {
+    end();
+  }
 }
 
 export async function onProcess(options = {}) {
