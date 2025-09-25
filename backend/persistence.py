@@ -84,7 +84,8 @@ def save_preprocess_cache(
     file_hash: Optional[str],
     filename: Optional[str],
     response: Dict[str, Any],
-    chunks: Optional[list],
+    macro_chunks: Optional[list],
+    micro_chunks: Optional[list],
 ) -> None:
     if not file_hash:
         return
@@ -92,7 +93,9 @@ def save_preprocess_cache(
     payload.setdefault("passes", {})
     payload["preprocess"] = {
         "response": response,
-        "chunks": chunks or [],
+        "chunks": macro_chunks or [],
+        "macro_chunks": macro_chunks or [],
+        "micro_chunks": micro_chunks or [],
         "stored_at": time.time(),
     }
     _write_payload(file_hash, payload, filename)
@@ -101,7 +104,11 @@ def save_preprocess_cache(
 def get_preprocess_cache(file_hash: Optional[str]) -> Optional[Dict[str, Any]]:
     payload = _load_payload(file_hash)
     entry = payload.get("preprocess") if isinstance(payload, dict) else None
-    if isinstance(entry, dict) and entry.get("chunks"):
+    if isinstance(entry, dict) and (
+        entry.get("macro_chunks")
+        or entry.get("micro_chunks")
+        or entry.get("chunks")
+    ):
         return entry
     return None
 

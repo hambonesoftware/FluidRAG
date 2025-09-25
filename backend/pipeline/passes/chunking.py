@@ -251,8 +251,9 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         chunks = [dict(chunk) for chunk in state.pre_chunks]
     else:
         cached_pre = get_preprocess_cache(getattr(state, "file_hash", None))
-        if cached_pre and cached_pre.get("chunks"):
-            cached_chunks = [dict(chunk) for chunk in cached_pre.get("chunks", [])]
+        if cached_pre:
+            cached_payload = cached_pre.get("macro_chunks") or cached_pre.get("chunks") or []
+            cached_chunks = [dict(chunk) for chunk in cached_payload]
             state.pre_chunks = cached_chunks
             chunks = cached_chunks
         else:
