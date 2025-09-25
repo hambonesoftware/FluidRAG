@@ -137,6 +137,8 @@ def _dump_page_debug(
     _ensure_dir(out_dir)
 
     csv_path = os.path.join(out_dir, "candidates.csv")
+    threshold = CONFIG.get("accept_score_threshold", 2.25)
+    breakdowns: List[Dict[str, Any]] = []
     with open(csv_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(
@@ -155,26 +157,63 @@ def _dump_page_debug(
                 "threshold",
             ]
         )
-        threshold = CONFIG.get("accept_score_threshold", 2.25)
         for cand in candidates:
-            breakdown = score_header_candidate_debug(cand.get("text"), style=cand.get("style") or {})
+            breakdown = score_header_candidate_debug(
+                cand.get("text"), style=cand.get("style") or {}
+            )
             accepted = breakdown.total >= threshold
+            entry = {
+                "line_idx": cand.get("line_idx"),
+                "text": breakdown.text,
+                "regex_hits": breakdown.regex_hits,
+                "numbering_depth": breakdown.numbering_depth,
+                "font_size": breakdown.font_size,
+                "bold": breakdown.bold,
+                "caps": breakdown.caps,
+                "disqualifiers": breakdown.disqualifiers,
+                "partial_scores": breakdown.partial_scores,
+                "score": float(breakdown.total),
+                "accepted": accepted,
+                "threshold": threshold,
+            }
+            breakdowns.append(entry)
             writer.writerow(
                 [
-                    cand.get("line_idx"),
-                    breakdown.text,
-                    " | ".join(breakdown.regex_hits),
-                    breakdown.numbering_depth,
-                    breakdown.font_size,
-                    breakdown.bold,
-                    breakdown.caps,
-                    " | ".join(breakdown.disqualifiers),
-                    json.dumps(breakdown.partial_scores, ensure_ascii=False),
-                    f"{breakdown.total:.2f}",
-                    accepted,
-                    threshold,
+                    entry["line_idx"],
+                    entry["text"],
+                    " | ".join(entry["regex_hits"]),
+                    entry["numbering_depth"],
+                    entry["font_size"],
+                    entry["bold"],
+                    entry["caps"],
+                    " | ".join(entry["disqualifiers"]),
+                    json.dumps(entry["partial_scores"], ensure_ascii=False),
+                    f"{entry['score']:.2f}",
+                    entry["accepted"],
+                    entry["threshold"],
                 ]
             )
+
+    llm_indices = set()
+    if llm_json:
+        for item in llm_json:
+            try:
+                idx = int(item.get("line_idx"))
+            except Exception:
+                continue
+            llm_indices.add(idx)
+
+    for entry in breakdowns:
+        entry["llm_selected"] = bool(llm_indices and entry["line_idx"] in llm_indices)
+
+    analysis_path = os.path.join(out_dir, "analysis.json")
+    with open(analysis_path, "w", encoding="utf-8") as fh:
+        json.dump(
+            sorted(breakdowns, key=lambda item: item.get("score", 0.0), reverse=True),
+            fh,
+            ensure_ascii=False,
+            indent=2,
+        )
 
     with open(os.path.join(out_dir, "candidates.json"), "w", encoding="utf-8") as fh:
         json.dump(candidates, fh, ensure_ascii=False, indent=2)
@@ -189,6 +228,27 @@ def _dump_page_debug(
     if llm_json is not None:
         with open(os.path.join(out_dir, "llm_selection.json"), "w", encoding="utf-8") as fh:
             json.dump(llm_json, fh, ensure_ascii=False, indent=2)
+
+
+def write_page_debug(
+    doc_id: str,
+    page_idx: int,
+    page_text: str,
+    candidates: List[dict],
+    *,
+    llm_prompt: Optional[str] = None,
+    llm_json: Optional[List[Dict[str, Any]]] = None,
+) -> None:
+    """Persist debug artefacts for a header page snapshot if debug mode is enabled."""
+
+    _dump_page_debug(
+        doc_id,
+        page_idx,
+        page_text,
+        candidates,
+        llm_prompt=llm_prompt,
+        llm_json=llm_json,
+    )
 
 
 def dump_appendix_audit(
@@ -229,3 +289,100 @@ def dump_appendix_audit(
 
     with open(os.path.join(out_dir, "appendix_audit.json"), "w", encoding="utf-8") as fh:
         json.dump(audit_rows, fh, ensure_ascii=False, indent=2)
+
+
+def write_header_debug_manifest(
+    doc_id: str,
+    pages_debug: List[Tuple[int, List[dict], str]],
+    results: List[Dict[str, Any]],
+    *,
+    llm_selections: Optional[Dict[int, List[Dict[str, Any]]]] = None,
+) -> None:
+    if not CONFIG.get("debug"):
+        return
+
+    base_dir = CONFIG.get("debug_dir", "./_debug/headers") or "./_debug/headers"
+    _ensure_dir(base_dir)
+
+    out_dir = os.path.join(base_dir, doc_id or "document")
+    _ensure_dir(out_dir)
+
+    llm_selections = llm_selections or {}
+    selection_map: Dict[int, List[Dict[str, Any]]] = {}
+    for idx, payload in llm_selections.items():
+        if not isinstance(payload, list):
+            continue
+        filtered: List[Dict[str, Any]] = []
+        for item in payload:
+            if isinstance(item, dict):
+                filtered.append(dict(item))
+        if filtered:
+            selection_map[idx] = filtered
+
+    headers_by_page: Dict[int, List[Dict[str, Any]]] = {}
+    for result in results or []:
+        try:
+            page_idx = int(result.get("page", 0)) - 1
+        except Exception:
+            continue
+        if page_idx < 0:
+            continue
+        page_headers = [dict(header) for header in (result.get("headers") or []) if isinstance(header, dict)]
+        headers_by_page[page_idx] = page_headers
+
+    threshold = CONFIG.get("accept_score_threshold", 2.25)
+    manifest_pages: List[Dict[str, Any]] = []
+
+    for page_idx, snapshot, _page_text in pages_debug:
+        entries: List[Dict[str, Any]] = []
+        for cand in snapshot or []:
+            breakdown = score_header_candidate_debug(cand.get("text"), style=cand.get("style") or {})
+            entry = {
+                "line_idx": cand.get("line_idx"),
+                "text": breakdown.text,
+                "score": float(breakdown.total),
+                "accepted": breakdown.total >= threshold,
+                "disqualifiers": breakdown.disqualifiers,
+                "regex_hits": breakdown.regex_hits,
+            }
+            entries.append(entry)
+
+        entries.sort(key=lambda item: item.get("score", 0.0), reverse=True)
+
+        llm_items = selection_map.get(page_idx) or []
+        llm_lines = sorted(
+            {
+                int(item.get("line_idx"))
+                for item in llm_items
+                if isinstance(item, dict) and item.get("line_idx") is not None
+            }
+        )
+
+        headers = headers_by_page.get(page_idx) or []
+        page_entry = {
+            "page": page_idx + 1,
+            "directory": f"page_{page_idx:04d}",
+            "candidate_count": len(snapshot or []),
+            "llm_selected": llm_lines,
+            "final_headers": [
+                {
+                    "line_idx": header.get("line_idx"),
+                    "text": header.get("text"),
+                    "section_number": header.get("section_number"),
+                    "score": header.get("score"),
+                    "level": header.get("level"),
+                }
+                for header in headers
+            ],
+            "top_candidates": entries[: min(len(entries), 8)],
+        }
+        manifest_pages.append(page_entry)
+
+    manifest = {
+        "doc": doc_id or "document",
+        "threshold": threshold,
+        "pages": manifest_pages,
+    }
+
+    with open(os.path.join(out_dir, "index.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh, ensure_ascii=False, indent=2)
