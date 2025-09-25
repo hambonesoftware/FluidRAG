@@ -14,6 +14,8 @@ import pandas as pd
 from jsonschema import ValidationError, validate
 from rapidfuzz import fuzz, process
 
+from index import BM25Store, EmbeddingStore
+from retrieval import HybridRetriever, rerank_by_section_density
 from tools.llm_client import LLMClient
 from tools.refine_prompts import SYSTEM_PROMPT, get_granularity_guide
 
@@ -160,11 +162,180 @@ class StageIndex:
             if not normalized:
                 normalized = "Header"
             normalized_lower = normalized.lower()
-            return [
-                c for c in self.chunk_by_id.values() if c.pass_name.lower() == normalized_lower
-            ]
+        return [
+            c for c in self.chunk_by_id.values() if c.pass_name.lower() == normalized_lower
+        ]
         return list(self.chunk_by_id.values())
 
+
+class MicrochunkContextBuilder:
+    """Build hybrid retrieval contexts from cached microchunk artifacts."""
+
+    def __init__(self, cache_dir: Path, *, context_radius: int = 2) -> None:
+        self.cache_dir = cache_dir
+        self.context_radius = max(0, context_radius)
+        self.available = False
+        self.micro_index: Dict[str, Dict[str, Any]] = {}
+        self.micro_by_para: Dict[str, List[str]] = {}
+        self.section_groups: Dict[Tuple[Optional[str], Optional[str]], List[str]] = {}
+        self.doc_lookup: Dict[str, str] = {}
+
+        micro_path = cache_dir / "microchunks.parquet"
+        sections_path = cache_dir / "sections.jsonl"
+        embeddings_path = cache_dir / "embeddings.parquet"
+        bm25_path = cache_dir / "bm25.idx"
+
+        if not (micro_path.exists() and embeddings_path.exists() and bm25_path.exists()):
+            LOGGER.warning("Microchunk caches missing under %s; falling back to stage context", cache_dir)
+            return
+
+        try:
+            micro_df = pd.read_parquet(micro_path)
+        except Exception as exc:  # pragma: no cover - pandas errors should be rare
+            LOGGER.warning("Unable to load microchunks from %s: %s", micro_path, exc)
+            return
+
+        for record in micro_df.to_dict(orient="records"):
+            micro_id = record.get("micro_id")
+            if not micro_id:
+                continue
+            char_span = record.get("char_span")
+            if isinstance(char_span, list) and len(char_span) == 2:
+                record["char_span"] = (int(char_span[0]), int(char_span[1]))
+            doc_id = record.get("doc_id")
+            if isinstance(doc_id, str):
+                self.doc_lookup.setdefault(self._canonical_doc(doc_id), doc_id)
+            self.micro_index[str(micro_id)] = record
+            para_id = record.get("para_id")
+            if para_id:
+                self.micro_by_para.setdefault(str(para_id), []).append(str(micro_id))
+
+        if sections_path.exists():
+            with sections_path.open("r", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    payload = json.loads(line)
+                    doc_id = payload.get("doc_id")
+                    section_id = payload.get("section_id")
+                    key = (self._resolve_doc(doc_id), str(section_id) if section_id else None)
+                    self.section_groups.setdefault(key, []).extend(
+                        [str(mid) for mid in payload.get("micro_ids", [])]
+                    )
+
+        try:
+            embeddings = EmbeddingStore(embeddings_path)
+            embeddings.load()
+            embeddings.ensure_vectorizer()
+            bm25 = BM25Store(bm25_path)
+            bm25.load()
+        except Exception as exc:  # pragma: no cover - missing caches
+            LOGGER.warning("Unable to load retrieval indices from %s: %s", cache_dir, exc)
+            return
+
+        log_path = Path("logs") / "retrieval_log.jsonl"
+        self.hybrid = HybridRetriever(
+            embeddings=embeddings,
+            bm25=bm25,
+            micro_index=self.micro_index,
+            section_map={
+                (section_id or ""): micro_ids
+                for (_, section_id), micro_ids in self.section_groups.items()
+            },
+            log_path=log_path,
+        )
+        self.available = True
+
+    def _canonical_doc(self, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        return Path(str(value)).stem.lower()
+
+    def _resolve_doc(self, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        canonical = self._canonical_doc(value)
+        if canonical and canonical in self.doc_lookup:
+            return self.doc_lookup[canonical]
+        return value if isinstance(value, str) else None
+
+    def _section_key(self, doc_id: Optional[str], section_id: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
+        resolved_doc = self._resolve_doc(doc_id)
+        return resolved_doc, section_id
+
+    def _micro_window(self, micro_id: str, doc_id: Optional[str], section_id: Optional[str]) -> List[str]:
+        key = self._section_key(doc_id, section_id)
+        ordered = self.section_groups.get(key, [])
+        if not ordered or micro_id not in ordered:
+            return [micro_id]
+        index = ordered.index(micro_id)
+        start = max(0, index - self.context_radius)
+        end = min(len(ordered), index + self.context_radius + 1)
+        return ordered[start:end]
+
+    def context_for(
+        self,
+        *,
+        specification: str,
+        section: Optional[SectionRecord],
+        chunk_id: Optional[str],
+        source_doc: Optional[str],
+    ) -> Optional[List[Dict[str, str]]]:
+        if not self.available:
+            return None
+
+        candidate_ids: List[str] = []
+        if chunk_id and chunk_id in self.micro_by_para:
+            candidate_ids.extend(self.micro_by_para[chunk_id])
+
+        doc_id = self._resolve_doc(source_doc)
+        section_id = section.section_id if section else None
+
+        if not candidate_ids:
+            results = self.hybrid.search(specification, k=40)
+            if doc_id:
+                filtered = [mid for mid in results if self.micro_index.get(mid, {}).get("doc_id") == doc_id]
+                if filtered:
+                    results = filtered
+            if section_id:
+                key = self._section_key(doc_id, section_id)
+                allowed = set(self.section_groups.get(key, []))
+                if allowed:
+                    filtered = [mid for mid in results if mid in allowed]
+                    if filtered:
+                        results = filtered
+                reranked = rerank_by_section_density(
+                    results,
+                    {section_id: self.section_groups.get(key, [])},
+                    topk=self.context_radius * 2 + 3,
+                    mmr_lambda=0.4,
+                )
+                if reranked:
+                    results = reranked
+            candidate_ids = results
+
+        if not candidate_ids:
+            return None
+
+        primary_id = candidate_ids[0]
+        window_ids = self._micro_window(primary_id, doc_id, section_id)
+
+        snippets: List[Dict[str, str]] = []
+        header_text = f"{section.section_id} {section.section_title}".strip() if section else ""
+        if header_text:
+            snippets.append({"Type": "SectionHeader", "Text": header_text})
+        for micro_id in window_ids:
+            micro = self.micro_index.get(micro_id)
+            if not micro:
+                continue
+            snippets.append(
+                {
+                    "Type": "MicroChunk",
+                    "MicroID": micro_id,
+                    "Text": str(micro.get("text", "")),
+                }
+            )
+        return snippets
 
 def parse_stage_file(path: Path, index: StageIndex) -> None:
     """Parse a staged JSON file and populate the stage index."""
@@ -337,6 +508,9 @@ def run_pipeline(
     schema_path: Optional[Path] = None,
     threshold: int = 120,
     llm_client: Optional[LLMClient] = None,
+    use_microchunks: bool = False,
+    microchunk_cache: Optional[Path] = None,
+    context_radius: int = 2,
 ) -> None:
     """Execute the two-phase section mapping and refinement pipeline."""
 
@@ -405,6 +579,11 @@ def run_pipeline(
     ensure_artifacts_dir(artifacts_dir)
 
     llm = llm_client or LLMClient()
+    micro_context = (
+        MicrochunkContextBuilder(microchunk_cache or Path("data/cache"), context_radius=context_radius)
+        if use_microchunks
+        else None
+    )
 
     section_counters: Dict[str, int] = {}
     output_rows: List[Dict[str, Any]] = []
@@ -440,6 +619,18 @@ def run_pipeline(
             parent_req_id = f"S-{section_id}-{seq:03d}" if section_id else f"S-UNK-{seq:03d}"
             section_counters[section_id or "UNK"] = seq
 
+            if micro_context and micro_context.available:
+                context_snippets = micro_context.context_for(
+                    specification=spec_text,
+                    section=section_record,
+                    chunk_id=chunk_id,
+                    source_doc=row.get("SourceDoc"),
+                )
+            else:
+                context_snippets = None
+            if not context_snippets:
+                context_snippets = build_context_snippets(section_record, chunk_id, index)
+
             payload = {
                 "Pass": pass_name,
                 "SourceDoc": row.get("SourceDoc"),
@@ -449,7 +640,12 @@ def run_pipeline(
                 "HeaderAnchor": section_record.header_anchor,
                 "ParentSpecID": parent_req_id,
                 "ParentVerbatimText": spec_text,
-                "ContextSnippets": build_context_snippets(section_record, chunk_id, index),
+                "ContextSnippets": context_snippets,
+                "ContextMicroIDs": [
+                    snippet.get("MicroID")
+                    for snippet in context_snippets
+                    if isinstance(snippet, dict) and snippet.get("Type") == "MicroChunk"
+                ],
             }
 
             guide = get_granularity_guide(str(pass_name))
@@ -628,6 +824,24 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--artifacts-dir", dest="artifacts_dir", type=Path, required=True, help="Directory to store refinement logs")
     parser.add_argument("--threshold", type=int, default=120, help="Character threshold for suspect detection")
     parser.add_argument("--schema", type=Path, default=None, help="Override path to refinement schema")
+    parser.add_argument(
+        "--use-microchunks",
+        type=lambda value: str(value).lower() in {"1", "true", "yes", "on"},
+        default=False,
+        help="Enable hybrid microchunk retrieval when building refinement context",
+    )
+    parser.add_argument(
+        "--microchunk-cache",
+        type=Path,
+        default=None,
+        help="Directory containing microchunk cache artifacts (defaults to data/cache)",
+    )
+    parser.add_argument(
+        "--context-radius",
+        type=int,
+        default=2,
+        help="Number of neighbouring microchunks to include on each side of the primary hit",
+    )
     return parser.parse_args(argv)
 
 
@@ -641,6 +855,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         artifacts_dir=args.artifacts_dir,
         schema_path=args.schema,
         threshold=args.threshold,
+        use_microchunks=args.use_microchunks,
+        microchunk_cache=args.microchunk_cache,
+        context_radius=args.context_radius,
     )
 
 
