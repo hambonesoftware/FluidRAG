@@ -7,6 +7,7 @@ import pytest
 from backend.parse.header_config import CONFIG
 from backend.parse.header_page_mode import (
     write_page_debug,
+    write_header_candidate_audit,
     write_header_debug_manifest,
 )
 
@@ -78,3 +79,50 @@ def test_header_debug_analysis_and_manifest(tmp_path, llm_selected):
     finally:
         CONFIG["debug"] = prev_debug
         CONFIG["debug_dir"] = prev_dir
+
+
+def test_header_candidate_audit_written_without_debug(tmp_path):
+    snapshots = [
+        (
+            0,
+            [
+                {"line_idx": 0, "text": "1. Scope", "style": {"font_size": 14, "bold": True}},
+                {"line_idx": 1, "text": "A5 Optional", "style": {"font_size": 12}},
+            ],
+            "1. Scope\nA5 Optional",
+        )
+    ]
+    results = [
+        {
+            "page": 1,
+            "headers": [
+                {
+                    "line_idx": 0,
+                    "text": "1. Scope",
+                    "section_number": "1",
+                    "score": 3.0,
+                    "level": 2,
+                }
+            ],
+        }
+    ]
+
+    write_header_candidate_audit(
+        "Doc Name",
+        snapshots,
+        results,
+        output_root=str(tmp_path),
+    )
+
+    audit_path = Path(tmp_path) / "Doc_Name" / "candidate_audit.json"
+    assert audit_path.exists()
+
+    data = json.loads(audit_path.read_text())
+    assert data["doc"] == "Doc_Name"
+    assert data["pages"], "pages list should not be empty"
+    page_entry = data["pages"][0]
+    assert page_entry["page"] == 1
+    candidates = page_entry["candidates"]
+    assert any(item.get("selected") for item in candidates)
+    ranks = [c.get("rank") for c in candidates]
+    assert ranks == sorted(ranks)
