@@ -3,7 +3,18 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, MutableSequence, Optional, Sequence, Tuple, TypedDict
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypedDict,
+)
 
 import regex as re
 
@@ -21,12 +32,19 @@ class MicroChunk(TypedDict, total=False):
     text: str
     norm_text: str
     token_count: int
+    token_span: Tuple[int, int]
     page: Optional[int]
+    pages: List[int]
     char_span: Optional[Tuple[int, int]]
+    char_count: int
+    line_count: int
+    part_span: Optional[Tuple[int, int]]
+    part_indices: List[int]
     para_id: Optional[str]
     header_anchor: Optional[str]
     section_id: Optional[str]
     section_title: Optional[str]
+    sequence_index: int
 
 
 @dataclass
@@ -191,20 +209,33 @@ def _microchunk_from_window(
     micro_id = hashlib.sha1(norm_text.encode("utf-8")).hexdigest()[:10]
 
     part_indices = sorted({token.part_index for token in window_tokens})
+    part_span: Optional[Tuple[int, int]] = None
+    if part_indices:
+        part_span = (part_indices[0], part_indices[-1])
+
+    page_candidates: Set[int] = set()
     page = None
     for idx in part_indices:
         part = parts[idx]
-        page = part.get("page") or part.get("page_start") or part.get("page_end")
-        if page:
+        for key in ("page", "page_start", "page_end"):
+            value = part.get(key)
+            if value is None:
+                continue
             try:
-                page = int(page)
+                page_num = int(value)
             except (TypeError, ValueError):
-                page = None
-            break
+                continue
+            page_candidates.add(page_num)
+    if page_candidates:
+        page = min(page_candidates)
 
     para_id = _select_metadata(parts, part_indices, "chunk_id") or _select_metadata(
         parts, part_indices, "para_id"
     )
+
+    char_count = len(raw_text)
+    line_count = raw_text.count("\n") + 1 if raw_text else 0
+    pages = sorted(page_candidates)
 
     chunk: MicroChunk = {
         "doc_id": doc_id,
@@ -212,8 +243,14 @@ def _microchunk_from_window(
         "text": raw_text.strip(),
         "norm_text": norm_text,
         "token_count": end_idx - start_idx,
+        "token_span": (start_idx, end_idx),
         "page": page,
+        "pages": pages,
         "char_span": (start_char, end_char),
+        "char_count": char_count,
+        "line_count": line_count,
+        "part_span": part_span,
+        "part_indices": part_indices,
         "para_id": para_id,
         "header_anchor": _select_metadata(parts, part_indices, "header_anchor"),
         "section_id": _select_metadata(parts, part_indices, "section_id"),
@@ -276,15 +313,15 @@ def microchunk_text(
             end_idx = min(start_idx + size, total_tokens)
             if end_idx <= start_idx:
                 end_idx = min(start_idx + 1, total_tokens)
-        microchunks.append(
-            _microchunk_from_window(
-                doc_id=doc_id,
-                doc_text=doc_text,
-                parts=parts,
-                tokens=tokens,
-                token_indices=(start_idx, end_idx),
-            )
+        chunk = _microchunk_from_window(
+            doc_id=doc_id,
+            doc_text=doc_text,
+            parts=parts,
+            tokens=tokens,
+            token_indices=(start_idx, end_idx),
         )
+        chunk["sequence_index"] = len(microchunks)
+        microchunks.append(chunk)
         if end_idx >= total_tokens:
             break
         next_start = end_idx - overlap

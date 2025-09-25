@@ -171,17 +171,41 @@ def _sections_from_detected_headers(
     return sections
 
 
-def _emit_section_chunk(section: Dict[str, Any], buf: List[str], idx: int) -> Dict[str, Any]:
-    text = "".join(buf).strip()
+def _emit_section_chunk(
+    section: Dict[str, Any], buf: List[Tuple[str, Optional[int]]], idx: int
+) -> Dict[str, Any]:
+    text = "".join(part for part, _ in buf).strip()
+    line_indices = [line_idx for _, line_idx in buf if line_idx is not None]
+    line_span: Optional[Tuple[int, int]] = None
+    if line_indices:
+        line_span = (min(line_indices), max(line_indices))
+    token_estimate = approximate_tokens(text)
+    char_count = len(text)
+    line_count = len(line_indices)
+    page_start = int(section.get("page_start", 1) or 1)
+    page_end = int(section.get("page_end", section.get("page_start", 1)) or 1)
+    pages = list(range(page_start, page_end + 1)) if page_end >= page_start else [page_start]
+    chunk_id = f"{section.get('id', 'section')}|{idx:03d}"
     return {
         "text": text,
         "section_title": section.get("title", "Document"),
         "section_id": section.get("id", "1"),
-        "page_start": int(section.get("page_start", 1) or 1),
-        "page_end": int(section.get("page_end", section.get("page_start", 1)) or 1),
+        "section_number": section.get("section_number"),
+        "section_sequence_index": section.get("sequence_index"),
+        "page_start": page_start,
+        "page_end": page_end,
+        "pages": pages,
         "chunk_index_in_section": idx,
         "chunk_type": "paragraph",
         "heading_level": section.get("heading_level"),
+        "section_source_page": section.get("source_page"),
+        "section_source_line_idx": section.get("source_line_idx"),
+        "section_line_span": line_span,
+        "char_count": char_count,
+        "line_count": line_count,
+        "token_estimate": token_estimate,
+        "chunk_id": chunk_id,
+        "resolution": "legacy",
     }
 
 
@@ -194,17 +218,17 @@ def _yield_chunks_from_sections(
         lines = section.get("content") or []
         if not lines:
             continue
-        buf: List[str] = []
+        buf: List[Tuple[str, Optional[int]]] = []
         size = 0
         idx = 0
-        for line in lines:
+        for local_idx, line in enumerate(lines):
             segment = (line or "") + "\n"
             if size + len(segment) > tok_budget_chars and buf:
                 yield _emit_section_chunk(section, buf, idx)
                 idx += 1
                 buf = buf[-overlap_lines:] if overlap_lines > 0 else []
-                size = sum(len(part) for part in buf)
-            buf.append(segment)
+                size = sum(len(part) for part, _ in buf)
+            buf.append((segment, local_idx))
             size += len(segment)
         if buf:
             yield _emit_section_chunk(section, buf, idx)
@@ -261,7 +285,8 @@ def section_bounded_chunks_from_pdf(
     # Fallback: size-based chunking
     linear = data.get("pages_linear") or []
     text = "\n".join(linear)
-    buf, size, idx = [], 0, 0
+    buf: List[Tuple[str, Optional[int]]] = []
+    size, idx, line_idx = 0, 0, 0
     for line in text.splitlines():
         l = (line or "") + "\n"
         if size + len(l) > tok_budget_chars and buf:
@@ -271,15 +296,18 @@ def section_bounded_chunks_from_pdf(
                     "id": "1",
                     "page_start": 1,
                     "page_end": max(1, len(linear)),
+                    "section_number": "1",
+                    "sequence_index": 0,
                 },
                 buf,
                 idx,
             )
             idx += 1
             buf = buf[-overlap_lines:] if overlap_lines > 0 else []
-            size = sum(len(t) for t in buf)
-        buf.append(l)
+            size = sum(len(part) for part, _ in buf)
+        buf.append((l, line_idx))
         size += len(l)
+        line_idx += 1
     if buf:
         yield _emit_section_chunk(
             {
@@ -287,6 +315,8 @@ def section_bounded_chunks_from_pdf(
                 "id": "1",
                 "page_start": 1,
                 "page_end": max(1, len(linear)),
+                "section_number": "1",
+                "sequence_index": 0,
             },
             buf,
             idx,
