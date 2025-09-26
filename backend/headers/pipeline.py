@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from backend.efhg.entropy import (
+    DEFAULT_WEIGHTS,
     DEFAULT_SEED_QUANTILE,
     DEFAULT_STOP_QUANTILE,
     compute_entropy_features,
@@ -300,7 +301,11 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         "config": {
             "uf_max_tokens": 90,
             "uf_overlap": 12,
-            "entropy": {"weights": {"w1": 0.7, "w2": 0.2, "w3": 0.1, "w4": 0.6, "w5": 0.25, "w6": 0.15}, "seed_quantile": DEFAULT_SEED_QUANTILE, "stop_quantile": DEFAULT_STOP_QUANTILE},
+        "entropy": {
+            "weights": dict(DEFAULT_WEIGHTS),
+            "seed_quantile": DEFAULT_SEED_QUANTILE,
+            "stop_quantile": DEFAULT_STOP_QUANTILE,
+        },
             "fluid": FLUID_DEFAULTS,
             "hep": HEP_DEFAULTS,
             "graph": GRAPH_DEFAULTS,

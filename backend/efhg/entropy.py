@@ -119,6 +119,7 @@ __all__ = [
     "score_starts",
     "score_stops",
     "select_quantile_ids",
+    "DEFAULT_WEIGHTS",
     "DEFAULT_SEED_QUANTILE",
     "DEFAULT_STOP_QUANTILE",
 ]
