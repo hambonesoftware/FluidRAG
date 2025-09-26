@@ -74,7 +74,15 @@ def test_sequence_repair_appx_gap(tmp_path):
     assert "A6." in final_headers and final_headers["A6."]["source"] == "repair"
 
     audit = json.loads((output_dir / "candidate_audit.json").read_text())
-    assert any(entry["gap"].startswith("A5") for entry in audit["sequence_repair"])
+    gap_entry = next((entry for entry in audit["sequence_repair"] if entry["gap"].startswith("A5")), None)
+    assert gap_entry is not None
+    assert gap_entry["series"] == "APPX"
+    assert gap_entry["before"]["text"].startswith("Prior")
+    assert gap_entry["after"]["text"].startswith("Closing")
+    assert gap_entry["result"], "Expected repair candidates logged"
+    for candidate in gap_entry["result"]:
+        assert candidate["confidence"] >= 0.55
+        assert candidate["method"] in {"regex", "header_resegment", "soft_unwrap+regex", "ocr_window"}
 
 
 def test_header_split_across_uf(tmp_path):
@@ -95,6 +103,7 @@ def test_header_split_across_uf(tmp_path):
     span_entry = accepted[0]
     assert span_entry["scores"]["fluid"]["Flow_total"] > 0
     assert span_entry["scores"]["hep"]["S_HEP"] >= HEP_DEFAULTS["theta_hep"]
+    assert "cross_bleed" in span_entry["scores"]["graph"]["penalties"]
 
 
 def test_logging_schema(tmp_path):
@@ -123,14 +132,27 @@ def test_logging_schema(tmp_path):
         assert section in config
 
     for chunk in audit["uf_chunks"]:
-        assert set(["id", "page", "span", "style", "lex", "entropy", "header_anchor"]).issubset(chunk.keys())
+        assert set(
+            [
+                "id",
+                "page",
+                "span",
+                "span_char",
+                "span_bbox",
+                "style",
+                "lex",
+                "entropy",
+                "header_anchor",
+                "domain_hint",
+            ]
+        ).issubset(chunk.keys())
 
     llm_headers = audit["llm_headers"]
     assert "raw_fenced_json" in llm_headers
     assert "verified" in llm_headers
 
     for entry in audit["final_headers"]:
-        for field in ("page", "span", "source"):
+        for field in ("page", "span", "span_char", "source"):
             assert field in entry
 
     candidate = next((entry for entry in audit["final_headers"] if entry["label"].startswith("A1")), None)

@@ -9,6 +9,13 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 HEADER_PATTERN = re.compile(r"^(?:\d+\)|A\d+\.)")
 MODAL_WORDS = {"may", "shall", "should", "must", "will", "can", "could", "would"}
+DOMAIN_KEYWORDS = {
+    "safety": {"safety", "safe", "hazard"},
+    "performance": {"performance", "efficiency", "output"},
+    "utilities": {"utility", "utilities", "consumption", "power"},
+    "financial": {"cost", "budget", "finance"},
+    "compliance": {"compliance", "regulation", "standard"},
+}
 
 
 @dataclass
@@ -69,6 +76,29 @@ def _compute_indent(token: Dict[str, Any]) -> float:
     return float(token.get("indent", 0.0) or 0.0)
 
 
+def _infer_domain_hint(text: str) -> Optional[str]:
+    lowered = text.lower()
+    best_hint: Optional[str] = None
+    best_hits = 0
+    for hint, keywords in DOMAIN_KEYWORDS.items():
+        hits = sum(1 for keyword in keywords if keyword in lowered)
+        if hits > best_hits:
+            best_hits = hits
+            best_hint = hint
+    return best_hint if best_hits else None
+
+
+def _bbox_union(tokens: Sequence[Dict[str, Any]]) -> Optional[Tuple[float, float, float, float]]:
+    bboxes = [tok.get("bbox") for tok in tokens if tok.get("bbox")]
+    if not bboxes:
+        return None
+    x0 = min(box[0] for box in bboxes)
+    y0 = min(box[1] for box in bboxes)
+    x1 = max(box[2] for box in bboxes)
+    y1 = max(box[3] for box in bboxes)
+    return float(x0), float(y0), float(x1), float(y1)
+
+
 def uf_chunk(doc_decomp: Dict[str, Any], max_tokens: int = 90, overlap: int = 12) -> List[UFChunk]:
     """Chunk a decomposed document into Ultrafine chunks."""
 
@@ -84,7 +114,6 @@ def uf_chunk(doc_decomp: Dict[str, Any], max_tokens: int = 90, overlap: int = 12
         while i < len(tokens):
             start_idx = i
             span_start = tokens[start_idx].get("start", 0)
-            last_indent = _compute_indent(tokens[start_idx])
             j = start_idx
             while j < len(tokens) and (j - start_idx) < max_tokens:
                 if j > start_idx:
@@ -97,7 +126,6 @@ def uf_chunk(doc_decomp: Dict[str, Any], max_tokens: int = 90, overlap: int = 12
                     indent_delta = _compute_indent(tokens[j]) - _compute_indent(tokens[j - 1])
                     if indent_delta >= 2.0:
                         break
-                last_indent = _compute_indent(tokens[j])
                 j += 1
             if j == start_idx:
                 j += 1
@@ -122,28 +150,27 @@ def uf_chunk(doc_decomp: Dict[str, Any], max_tokens: int = 90, overlap: int = 12
                 "citation_hints": bool(re.search(r"\[[^\]]+\]|\([^)]*\d{4}[^)]*\)", text)),
             }
             emb = _embed_text(text)
-            chunk_id = f"uf_{page_idx + 1}_{chunk_index}"
+            chunk_id = f"uf_{page_idx + 1:04d}_{chunk_index:05d}"
             header_anchor = bool(HEADER_PATTERN.search(text.strip().splitlines()[0] if text.strip() else ""))
-            bbox = chunk_tokens[0].get("bbox") if chunk_tokens[0].get("bbox") else None
+            bbox = _bbox_union(chunk_tokens)
             chunk = UFChunk(
                 id=chunk_id,
                 page=page_idx + 1,
                 span_char=(int(span_start), int(span_end)),
-                span_bbox=tuple(bbox) if bbox else None,
+                span_bbox=bbox,
                 text=text,
                 style=style,
                 lex=lex,
                 emb=emb,
+                domain_hint=_infer_domain_hint(text),
                 header_anchor=header_anchor,
             )
             chunks.append(chunk)
             chunk_index += 1
             if j >= len(tokens):
                 break
-            i = max(j - overlap, j - 1)
-            if i <= start_idx:
-                i = start_idx + 1
-        
+            i = max(j - max(overlap, 0), start_idx + 1)
+
     return chunks
 
 

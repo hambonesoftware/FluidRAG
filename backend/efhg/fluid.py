@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Mapping, Sequence, Tuple
 
 from backend.rag.embeddings import cosine
 from backend.uf_chunker import UFChunk
@@ -76,14 +76,18 @@ def build_edges(uf_chunks: List[UFChunk], params: Dict[str, float] | None = None
     return edges
 
 
-def _span_text(chunks: List[UFChunk], chunk_ids: List[str]) -> Tuple[str, Tuple[int, int], int]:
-    chunk_lookup = {chunk.id: chunk for chunk in chunks}
+def _span_text(chunk_lookup: Mapping[str, UFChunk], chunk_ids: Sequence[str]) -> Tuple[str, Tuple[int, int], int]:
     selected = [chunk_lookup[cid] for cid in chunk_ids]
     text = " ".join(chunk.text.strip() for chunk in selected).strip()
     start = selected[0].span_char[0]
     end = selected[-1].span_char[1]
     page = selected[0].page
     return text, (start, end), page
+
+
+def span_from_chunk_ids(chunk_lookup: Mapping[str, UFChunk], chunk_ids: Sequence[str]) -> Span:
+    text, span, page = _span_text(chunk_lookup, chunk_ids)
+    return Span(chunk_ids=list(chunk_ids), text=text, page=page, span=span, flow_total=0.0)
 
 
 def grow_span_from_seed(
@@ -100,23 +104,39 @@ def grow_span_from_seed(
         raise ValueError(f"Unknown seed chunk {seed_id}")
     idx = ordered_ids.index(seed_id)
     chain = [seed_id]
-    flow_total = 0.0
+    marginals: List[Tuple[str, float]] = []
     current_id = seed_id
     while idx + 1 < len(ordered_ids):
         next_id = ordered_ids[idx + 1]
-        edge_key = (current_id, next_id)
-        capacity = edges.get(edge_key, 0.0)
+        if stop_scores.get(next_id, 0.0) >= params["theta_end"]:
+            break
+        capacity = edges.get((current_id, next_id), 0.0)
         marginal = capacity - params["lambda"]
         if marginal < params["tau"]:
             break
-        if stop_scores.get(next_id, 0.0) >= params["theta_end"]:
-            break
-        flow_total += marginal
-        chain.append(next_id)
+        marginals.append((next_id, marginal))
         current_id = next_id
         idx += 1
-    text, span, page = _span_text(uf_chunks, chain)
-    return Span(chunk_ids=chain, text=text, page=page, span=span, flow_total=flow_total)
+
+    best_total = 0.0
+    best_end = -1
+    running_total = 0.0
+    running_start = 0
+    best_start = 0
+    for i, (_, marginal) in enumerate(marginals):
+        running_total += marginal
+        if running_total > best_total:
+            best_total = running_total
+            best_end = i
+            best_start = running_start
+        if running_total < 0:
+            running_total = 0.0
+            running_start = i + 1
+
+    if best_end >= 0:
+        chain.extend(cid for cid, _ in marginals[best_start : best_end + 1])
+    text, span, page = _span_text(chunk_lookup, chain)
+    return Span(chunk_ids=chain, text=text, page=page, span=span, flow_total=best_total)
 
 
-__all__ = ["Span", "build_edges", "grow_span_from_seed", "DEFAULT_PARAMS"]
+__all__ = ["Span", "build_edges", "grow_span_from_seed", "span_from_chunk_ids", "DEFAULT_PARAMS"]

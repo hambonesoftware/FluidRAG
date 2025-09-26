@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Sequence, Tuple
 
-from backend.efhg.fluid import Span
-from backend.uf_chunker import UFChunk
+from backend.efhg.fluid import Span, span_from_chunk_ids
+from backend.uf_chunker import HEADER_PATTERN, UFChunk
 
 DEFAULT_PARAMS = {
     "wH": 1.0,
@@ -21,9 +21,10 @@ class GraphContext:
     headers: List[Dict[str, object]]
     references: List[Dict[str, object]]
     tables: List[Dict[str, object]]
+    domain: str | None = None
 
 
-def _dominant_header(span: Span, chunks: Dict[str, UFChunk], headers: List[Dict[str, object]]) -> Tuple[str | None, float]:
+def _dominant_header(span: Span, chunks: Dict[str, UFChunk], headers: Sequence[Dict[str, object]]) -> Tuple[str | None, float]:
     if not headers:
         return None, 0.0
     best = None
@@ -42,12 +43,22 @@ def _dominant_header(span: Span, chunks: Dict[str, UFChunk], headers: List[Dict[
     return best.get("label"), best_overlap
 
 
+def _collect_domain_hints(span: Span, chunks: Dict[str, UFChunk]) -> List[str]:
+    hints: List[str] = []
+    for cid in span.chunk_ids:
+        hint = chunks[cid].domain_hint
+        if hint:
+            hints.append(hint)
+    return hints
+
+
 def score_graph(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk], params: Dict[str, float] | None = None) -> Tuple[float, Dict[str, float]]:
     params = params or DEFAULT_PARAMS
     penalties = {
         "header_mismatch": 0.0,
         "domain_conflict": 0.0,
         "reference_gap": 0.0,
+        "cross_bleed": 0.0,
     }
     dominant_label, overlap = _dominant_header(span, chunks, header_ctx.headers)
     header_score = params["wH"] * (1.0 if dominant_label else 0.0)
@@ -57,23 +68,58 @@ def score_graph(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk]
     ref_score = params["wR"] * (1.0 if header_ctx.references else 0.5)
     table_score = params["wC"] * (1.0 if header_ctx.tables else 0.4)
     penalties["header_mismatch"] = 0.0 if dominant_label else 0.6
+
+    domain_hints = _collect_domain_hints(span, chunks)
+    if header_ctx.domain and domain_hints and header_ctx.domain not in domain_hints:
+        penalties["domain_conflict"] = 0.5
+
+    if dominant_label and any(
+        HEADER_PATTERN.match(chunks[cid].text.strip().splitlines()[0]) and cid != span.chunk_ids[0]
+        for cid in span.chunk_ids
+    ):
+        penalties["cross_bleed"] = 0.4
+
+    if dominant_label and header_ctx.references and not any(chunks[cid].lex.get("citation_hints") for cid in span.chunk_ids):
+        penalties["reference_gap"] = 0.3
+
     score = header_score + domain_score + param_score + ref_score + table_score - sum(penalties.values())
     return score, penalties
 
 
 def snap_and_trim(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk]) -> Span:
     dominant_label, _ = _dominant_header(span, chunks, header_ctx.headers)
-    if not dominant_label:
-        return span
-    header_spans = [h for h in header_ctx.headers if h.get("label") == dominant_label]
-    if not header_spans:
-        return span
-    header_span = header_spans[0]
-    h_start, h_end = header_span.get("span", span.span)
-    s_start, s_end = span.span
-    new_start = max(h_start, s_start)
-    new_end = min(h_end + 400, s_end)
-    return Span(chunk_ids=span.chunk_ids, text=span.text, page=span.page, span=(new_start, new_end), flow_total=span.flow_total)
+    chunk_ids = list(span.chunk_ids)
+    if dominant_label:
+        for idx, cid in enumerate(chunk_ids[1:], start=1):
+            chunk = chunks[cid]
+            first_line = chunk.text.strip().splitlines()[0] if chunk.text.strip() else ""
+            if HEADER_PATTERN.match(first_line):
+                chunk_ids = chunk_ids[:idx]
+                break
+        header_spans = [h for h in header_ctx.headers if h.get("label") == dominant_label]
+        if header_spans:
+            header_span = header_spans[0]
+            h_start, h_end = header_span.get("span", span.span)
+            base_span = span_from_chunk_ids(chunks, chunk_ids)
+            new_start = max(h_start, base_span.span[0])
+            new_end = min(h_end + 400, base_span.span[1])
+            trimmed = span_from_chunk_ids(chunks, chunk_ids)
+            return Span(
+                chunk_ids=trimmed.chunk_ids,
+                text=trimmed.text,
+                page=trimmed.page,
+                span=(new_start, new_end),
+                flow_total=span.flow_total,
+            )
+    # If no dominant header or no trimming needed, rehydrate span to ensure consistency.
+    recomputed = span_from_chunk_ids(chunks, chunk_ids)
+    return Span(
+        chunk_ids=recomputed.chunk_ids,
+        text=recomputed.text,
+        page=recomputed.page,
+        span=recomputed.span,
+        flow_total=span.flow_total,
+    )
 
 
 __all__ = ["GraphContext", "score_graph", "snap_and_trim", "DEFAULT_PARAMS"]
