@@ -76,7 +76,18 @@ def _extract_pass_tokens(value: str) -> List[str]:
 
 
 def _write_pass_debug(run_dir: str, pass_name: str, result: Dict[str, Any], *, req_id: str) -> None:
+    log.debug(
+        "[passes %s] starting debug export for pass %s into run directory %s",
+        req_id,
+        pass_name,
+        run_dir,
+    )
     try:
+        log.debug(
+            "[passes %s] ensuring debug run directory exists at %s",
+            req_id,
+            run_dir,
+        )
         os.makedirs(run_dir, exist_ok=True)
     except Exception:  # pragma: no cover - defensive
         log.exception("[passes %s] failed to ensure debug run directory %s", req_id, run_dir)
@@ -85,10 +96,22 @@ def _write_pass_debug(run_dir: str, pass_name: str, result: Dict[str, Any], *, r
     safe_pass = _sanitize_component(pass_name, "pass")
     pass_dir = os.path.join(run_dir, safe_pass)
     try:
+        log.debug(
+            "[passes %s] ensuring per-pass debug directory exists at %s",
+            req_id,
+            pass_dir,
+        )
         os.makedirs(pass_dir, exist_ok=True)
     except Exception:  # pragma: no cover - defensive
         log.exception("[passes %s] failed to ensure pass debug directory %s", req_id, pass_dir)
         return
+
+    log.debug(
+        "[passes %s] exporting debug bundle for pass %s (%s)",
+        req_id,
+        pass_name,
+        pass_dir,
+    )
 
     meta_payload: Dict[str, Any] = {
         "pass": pass_name,
@@ -101,29 +124,93 @@ def _write_pass_debug(run_dir: str, pass_name: str, result: Dict[str, Any], *, r
     metadata = result.get("metadata")
     if metadata:
         meta_payload["metadata"] = metadata
-    with open(os.path.join(pass_dir, "meta.json"), "w", encoding="utf-8") as fh:
+    meta_path = os.path.join(pass_dir, "meta.json")
+    log.debug(
+        "[passes %s] writing meta payload for pass %s to %s: %s",
+        req_id,
+        pass_name,
+        meta_path,
+        _snapshot(meta_payload),
+    )
+    with open(meta_path, "w", encoding="utf-8") as fh:
         json.dump(meta_payload, fh, ensure_ascii=False, indent=2)
 
     debug_records = result.get("debug") or []
     if debug_records:
-        with open(os.path.join(pass_dir, "llm_debug.json"), "w", encoding="utf-8") as fh:
+        llm_debug_path = os.path.join(pass_dir, "llm_debug.json")
+        log.debug(
+            "[passes %s] exporting %d LLM debug records for pass %s to %s",
+            req_id,
+            len(debug_records),
+            pass_name,
+            llm_debug_path,
+        )
+        with open(llm_debug_path, "w", encoding="utf-8") as fh:
             json.dump(debug_records, fh, ensure_ascii=False, indent=2)
+    else:
+        log.debug(
+            "[passes %s] no LLM debug records to export for pass %s",
+            req_id,
+            pass_name,
+        )
 
     groups = result.get("groups")
     if groups:
-        with open(os.path.join(pass_dir, "groups.json"), "w", encoding="utf-8") as fh:
+        groups_path = os.path.join(pass_dir, "groups.json")
+        log.debug(
+            "[passes %s] writing %d group entries for pass %s to %s",
+            req_id,
+            len(groups) if isinstance(groups, list) else 1,
+            pass_name,
+            groups_path,
+        )
+        with open(groups_path, "w", encoding="utf-8") as fh:
             json.dump(groups, fh, ensure_ascii=False, indent=2)
+    else:
+        log.debug(
+            "[passes %s] no group data to export for pass %s",
+            req_id,
+            pass_name,
+        )
 
     rows = result.get("rows")
     if rows:
-        with open(os.path.join(pass_dir, "rows.json"), "w", encoding="utf-8") as fh:
+        rows_path = os.path.join(pass_dir, "rows.json")
+        log.debug(
+            "[passes %s] writing %d row entries for pass %s to %s",
+            req_id,
+            len(rows),
+            pass_name,
+            rows_path,
+        )
+        with open(rows_path, "w", encoding="utf-8") as fh:
             json.dump(rows, fh, ensure_ascii=False, indent=2)
+    else:
+        log.debug(
+            "[passes %s] no row data to export for pass %s",
+            req_id,
+            pass_name,
+        )
 
     csv_segments = result.get("csv") or []
     csv_text = "\n".join(segment.rstrip("\n") for segment in csv_segments if segment)
     if csv_text:
-        with open(os.path.join(pass_dir, "rows.csv"), "w", encoding="utf-8") as fh:
+        csv_path = os.path.join(pass_dir, "rows.csv")
+        log.debug(
+            "[passes %s] writing CSV output for pass %s to %s (%d segments)",
+            req_id,
+            pass_name,
+            csv_path,
+            len(csv_segments),
+        )
+        with open(csv_path, "w", encoding="utf-8") as fh:
             fh.write(csv_text + "\n")
+    else:
+        log.debug(
+            "[passes %s] no CSV output generated for pass %s",
+            req_id,
+            pass_name,
+        )
 
 
 def _write_pass_run_manifest(
@@ -136,7 +223,18 @@ def _write_pass_run_manifest(
     cache_hits: List[str] | None = None,
     cache_misses: List[str] | None = None,
 ) -> None:
+    log.debug(
+        "[passes %s] preparing run manifest for session %s in %s",
+        req_id,
+        session_id,
+        run_dir,
+    )
     try:
+        log.debug(
+            "[passes %s] ensuring run manifest directory exists at %s",
+            req_id,
+            run_dir,
+        )
         os.makedirs(run_dir, exist_ok=True)
     except Exception:  # pragma: no cover - defensive
         log.exception("[passes %s] failed to ensure debug manifest directory %s", req_id, run_dir)
@@ -148,14 +246,30 @@ def _write_pass_run_manifest(
         "generated_at": datetime.now(UTC).isoformat(),
         "passes": [],
     }
+    log.debug(
+        "[passes %s] initialized manifest payload: %s",
+        req_id,
+        _snapshot(manifest),
+    )
 
     if metrics:
         manifest["metrics"] = dict(metrics)
+        log.debug(
+            "[passes %s] recorded metrics in manifest: %s",
+            req_id,
+            _snapshot(metrics),
+        )
     if cache_hits or cache_misses:
         manifest["cache"] = {
             "hits": sorted(cache_hits or []),
             "misses": sorted(cache_misses or []),
         }
+        log.debug(
+            "[passes %s] recorded cache summary in manifest: hits=%d misses=%d",
+            req_id,
+            len(cache_hits or []),
+            len(cache_misses or []),
+        )
 
     for name, payload in sorted(results.items()):
         safe_name = _sanitize_component(name, "pass")
@@ -168,12 +282,31 @@ def _write_pass_run_manifest(
             "debug_records": len(payload.get("debug") or []),
         }
         manifest["passes"].append(entry)
+        log.debug(
+            "[passes %s] appended pass manifest entry %s (%s)",
+            req_id,
+            name,
+            _snapshot(entry),
+        )
 
     try:
-        with open(os.path.join(run_dir, "index.json"), "w", encoding="utf-8") as fh:
+        manifest_path = os.path.join(run_dir, "index.json")
+        log.debug(
+            "[passes %s] writing run manifest to %s with %d passes",
+            req_id,
+            manifest_path,
+            len(manifest["passes"]),
+        )
+        with open(manifest_path, "w", encoding="utf-8") as fh:
             json.dump(manifest, fh, ensure_ascii=False, indent=2)
     except Exception:  # pragma: no cover - defensive
         log.exception("[passes %s] failed to write debug manifest", req_id)
+    else:
+        log.debug(
+            "[passes %s] completed run manifest export to %s",
+            req_id,
+            manifest_path,
+        )
 
 
 def _best_section_match(spec_text: str, lookup: List[Dict[str, Any]]) -> Dict[str, Any] | None:
