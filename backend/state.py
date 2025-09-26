@@ -20,6 +20,9 @@ class PipelineState:
     headers: Optional[List[Dict[str, Any]]] = None
     debug: Optional[Dict[str, Any]] = None
     file_hash: Optional[str] = None
+    uf_pipeline: Optional[Dict[str, Any]] = None
+    uf_chunks: Optional[List[Dict[str, Any]]] = None
+    uf_tables: Optional[List[Dict[str, Any]]] = None
 
 PIPELINE_STATES: Dict[str, PipelineState] = {}
 
