@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
 from ingest.microchunker import MicroChunk
 from index import BM25Store, EmbeddingStore
@@ -13,8 +14,30 @@ from index import BM25Store, EmbeddingStore
 RRF_K = 60
 
 
+@dataclass
+class _IndexSet:
+    key: str
+    prefix: str
+    result_type: str
+    bm25: Optional[BM25Store] = None
+    embeddings: Optional[EmbeddingStore] = None
+    docs: Mapping[str, Mapping[str, Any]] = None
+    weight: float = 1.0
+
+    def rank(self, query: str, k: int, rrf_fn) -> List[Tuple[str, float]]:
+        rankings: List[List[str]] = []
+        if self.embeddings:
+            rankings.append([f"{self.prefix}{mid}" for mid, _ in self.embeddings.search(query, k)])
+        if self.bm25:
+            rankings.append([f"{self.prefix}{mid}" for mid, _ in self.bm25.search(query, k)])
+        if not rankings:
+            return []
+        fused = rrf_fn(rankings, k)
+        return [(doc_id, score * self.weight) for doc_id, score in fused]
+
+
 class HybridRetriever:
-    """Combine embedding and lexical rankings using reciprocal rank fusion."""
+    """Combine embedding, header, and table rankings using reciprocal rank fusion."""
 
     def __init__(
         self,
@@ -23,10 +46,15 @@ class HybridRetriever:
         bm25: BM25Store,
         micro_index: Mapping[str, MicroChunk],
         section_map: Optional[Mapping[str, Sequence[str]]] = None,
+        header_embeddings: Optional[EmbeddingStore] = None,
+        header_bm25: Optional[BM25Store] = None,
+        header_docs: Optional[Sequence[Mapping[str, Any]]] = None,
+        table_embeddings: Optional[EmbeddingStore] = None,
+        table_bm25: Optional[BM25Store] = None,
+        table_docs: Optional[Sequence[Mapping[str, Any]]] = None,
+        span_map: Optional[Mapping[str, Mapping[str, Any]]] = None,
         log_path: Optional[Path] = None,
     ) -> None:
-        self.embeddings = embeddings
-        self.bm25 = bm25
         self.micro_index = dict(micro_index)
         self.section_for_micro: Dict[str, Optional[str]] = {}
         for micro_id, micro in self.micro_index.items():
@@ -35,33 +63,155 @@ class HybridRetriever:
             for section_id, micro_ids in section_map.items():
                 for micro_id in micro_ids:
                     self.section_for_micro.setdefault(micro_id, section_id)
+
+        self.span_map: Dict[str, Mapping[str, Any]] = {
+            str(key): value for key, value in (span_map or {}).items()
+        }
+
+        header_mapping = {
+            str(doc.get("micro_id")): dict(doc)
+            for doc in (header_docs or [])
+            if isinstance(doc, Mapping) and doc.get("micro_id")
+        }
+        table_mapping = {
+            str(doc.get("micro_id")): dict(doc)
+            for doc in (table_docs or [])
+            if isinstance(doc, Mapping) and doc.get("micro_id")
+        }
+
+        self.index_sets: Dict[str, _IndexSet] = {
+            "chunk": _IndexSet(
+                key="chunk",
+                prefix="chunk:",
+                result_type="chunk",
+                bm25=bm25,
+                embeddings=embeddings,
+                docs=self.micro_index,
+                weight=1.0,
+            )
+        }
+        if header_embeddings or header_bm25:
+            self.index_sets["header"] = _IndexSet(
+                key="header",
+                prefix="header:",
+                result_type="header",
+                bm25=header_bm25,
+                embeddings=header_embeddings,
+                docs=header_mapping,
+                weight=0.9,
+            )
+        if table_embeddings or table_bm25:
+            self.index_sets["table"] = _IndexSet(
+                key="table",
+                prefix="table:",
+                result_type="table",
+                bm25=table_bm25,
+                embeddings=table_embeddings,
+                docs=table_mapping,
+                weight=0.85,
+            )
+
         self.log_path = Path(log_path) if log_path else None
 
-    def _rrf(self, rankings: Sequence[Sequence[str]], k: int) -> List[str]:
+    def _rrf(self, rankings: Sequence[Sequence[str]], k: int) -> List[Tuple[str, float]]:
         scores: MutableMapping[str, float] = defaultdict(float)
         for ranking in rankings:
-            for rank, micro_id in enumerate(ranking):
-                scores[micro_id] += 1.0 / (RRF_K + rank + 1)
+            for rank, identifier in enumerate(ranking):
+                scores[identifier] += 1.0 / (RRF_K + rank + 1)
         ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        return [mid for mid, _ in ordered[:k]]
+        return [(doc_id, score) for doc_id, score in ordered[:k]]
 
-    def search(self, query: str, k: int = 40) -> List[str]:
-        embedding_hits = [mid for mid, _ in self.embeddings.search(query, k)]
-        bm25_hits = [mid for mid, _ in self.bm25.search(query, k)]
-        rankings = [hits for hits in (embedding_hits, bm25_hits) if hits]
-        if not rankings:
+    def _span_boost(self, record: Mapping[str, Any], result_type: str) -> float:
+        if not self.span_map:
+            return 0.0
+        candidate_ids: List[str] = []
+        if result_type == "chunk":
+            micro_id = record.get("micro_id") or record.get("chunk_id")
+            if micro_id:
+                candidate_ids.append(str(micro_id))
+        elif result_type == "header":
+            for micro_id in record.get("micro_ids", []):
+                candidate_ids.append(str(micro_id))
+        elif result_type == "table":
+            for micro_id in record.get("parameter_supports", []):
+                candidate_ids.append(str(micro_id))
+        best = 0.0
+        for micro_id in candidate_ids:
+            entry = self.span_map.get(str(micro_id))
+            if not entry:
+                continue
+            score = float(entry.get("score") or 0.0)
+            if score > best:
+                best = score
+        if best <= 0.0:
+            return 0.0
+        return best * 0.05
+
+    def _split_identifier(self, identifier: str) -> Tuple[str, str]:
+        if ":" in identifier:
+            return identifier.split(":", 1)
+        return "chunk", identifier
+
+    def search(self, query: str, k: int = 40) -> List[Dict[str, Any]]:
+        dataset_rankings: List[List[str]] = []
+        dataset_scores: Dict[str, float] = {}
+
+        for dataset in self.index_sets.values():
+            ranking = dataset.rank(query, k, self._rrf)
+            if not ranking:
+                continue
+            dataset_rankings.append([identifier for identifier, _ in ranking])
+            for identifier, score in ranking:
+                dataset_scores[identifier] = max(dataset_scores.get(identifier, 0.0), score)
+
+        if not dataset_rankings:
             return []
-        fused = self._rrf(rankings, k)
-        self._log(query, fused[:k])
-        return fused[:k]
 
-    def _log(self, query: str, micro_ids: Sequence[str]) -> None:
+        fused = self._rrf(dataset_rankings, k)
+        results: List[Dict[str, Any]] = []
+        for identifier, base_score in fused:
+            dataset_key, doc_id = self._split_identifier(identifier)
+            dataset = self.index_sets.get(dataset_key)
+            if not dataset:
+                continue
+            record = dataset.docs.get(doc_id)
+            if not record and dataset.result_type == "chunk":
+                record = self.micro_index.get(doc_id)
+            if not record:
+                continue
+            combined_score = base_score + dataset_scores.get(identifier, 0.0)
+            boost = self._span_boost(record, dataset.result_type)
+            total = combined_score + boost
+            results.append(
+                {
+                    "id": doc_id,
+                    "type": dataset.result_type,
+                    "score": round(total, 6),
+                    "base_score": round(combined_score, 6),
+                    "boost": round(boost, 6),
+                    "record": record,
+                }
+            )
+
+        results.sort(key=lambda item: item["score"], reverse=True)
+        limited = results[:k]
+        self._log(query, limited)
+        return limited
+
+    def _log(self, query: str, results: Sequence[Mapping[str, Any]]) -> None:
         if not self.log_path:
             return
         record = {
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "query": query,
-            "micro_ids": list(micro_ids),
+            "results": [
+                {
+                    "type": entry.get("type"),
+                    "id": entry.get("id"),
+                    "score": entry.get("score"),
+                }
+                for entry in results
+            ],
         }
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8") as handle:

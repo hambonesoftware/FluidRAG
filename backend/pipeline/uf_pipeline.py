@@ -123,6 +123,13 @@ class RetrievalSummary:
     table_count: int
     bm25_path: Optional[Path]
     embedding_path: Optional[Path]
+    header_bm25_path: Optional[Path]
+    header_embedding_path: Optional[Path]
+    table_bm25_path: Optional[Path]
+    table_embedding_path: Optional[Path]
+    span_index_path: Optional[Path]
+    header_doc_path: Optional[Path]
+    table_doc_path: Optional[Path]
 
 
 @dataclass
@@ -654,20 +661,156 @@ def _build_retrieval(
     chunks: Sequence[MicroChunk],
     shards: Sequence[Mapping[str, Any]],
     tables: Sequence[Mapping[str, Any]],
+    spans: Sequence[Mapping[str, Any]],
     *,
     sidecar_dir: Path,
 ) -> RetrievalSummary:
     idx_dir = sidecar_dir / "uf_pipeline" / "indexes"
-    bm25_store = BM25Store(idx_dir / "bm25.pkl")
-    embedding_store = EmbeddingStore(idx_dir / "embeddings.parquet")
-    bm25_store.build(chunks)
-    embedding_store.build(chunks)
+    micro_bm25 = BM25Store(idx_dir / "micro_bm25.pkl")
+    micro_embeddings = EmbeddingStore(idx_dir / "micro_embeddings.parquet")
+    micro_bm25.build(chunks)
+    micro_embeddings.build(chunks)
+
+    chunk_by_id: Dict[str, MicroChunk] = {}
+    for chunk in chunks:
+        micro_id = chunk.get("micro_id")
+        if isinstance(micro_id, str):
+            chunk_by_id[micro_id] = chunk
+
+    header_docs: List[Dict[str, Any]] = []
+    for idx, shard in enumerate(shards):
+        label = str(shard.get("label") or "").strip()
+        text = str(shard.get("text") or "").strip()
+        page = shard.get("page")
+        header_id = f"header-{idx:03d}-p{page}" if page else f"header-{idx:03d}"
+        snippet_parts: List[str] = []
+        for micro_id in shard.get("micro_ids") or []:
+            chunk = chunk_by_id.get(str(micro_id))
+            if not chunk:
+                continue
+            snippet = str(chunk.get("text") or "").strip()
+            if snippet:
+                snippet_parts.append(snippet)
+            if len(snippet_parts) >= 2:
+                break
+        content_parts = [f"{label} {text}".strip()]
+        if snippet_parts:
+            content_parts.append(" ".join(snippet_parts))
+        content = _normalise_text(" ".join(part for part in content_parts if part))
+        header_docs.append(
+            {
+                "micro_id": header_id,
+                "doc_id": chunk_by_id.get(str((shard.get("micro_ids") or [None])[0]), {}).get("doc_id")
+                or shard.get("doc_id")
+                or "header",
+                "text": content,
+                "norm_text": content,
+                "label": label,
+                "page": page,
+                "micro_ids": [str(mid) for mid in shard.get("micro_ids") or []],
+                "shard": dict(shard),
+            }
+        )
+
+    table_docs: List[Dict[str, Any]] = []
+    for table in tables:
+        page = table.get("page")
+        index = table.get("index")
+        table_id = (
+            f"table-{page}-{index}"
+            if page is not None and index is not None
+            else f"table-{len(table_docs):03d}"
+        )
+        rows = table.get("rows") or []
+        row_texts: List[str] = []
+        for row in rows:
+            if not isinstance(row, (list, tuple)):
+                continue
+            row_text = " ".join(str(cell or "").strip() for cell in row if cell)
+            if row_text:
+                row_texts.append(row_text)
+        numbers = " ".join(table.get("numbers") or [])
+        units = " ".join(table.get("units") or [])
+        description = " ".join(
+            part for part in (table.get("title"), table.get("summary")) if part
+        )
+        content = _normalise_text(" ".join(row_texts + [numbers, units, description]))
+        table_docs.append(
+            {
+                "micro_id": table_id,
+                "doc_id": table.get("doc_id") or "table",
+                "text": content,
+                "norm_text": content,
+                "page": page,
+                "index": index,
+                "parameter_supports": [str(mid) for mid in table.get("parameter_supports") or []],
+                "table": dict(table),
+            }
+        )
+
+    header_bm25: Optional[BM25Store] = None
+    header_embeddings: Optional[EmbeddingStore] = None
+    if header_docs:
+        header_bm25 = BM25Store(idx_dir / "header_bm25.pkl")
+        header_embeddings = EmbeddingStore(idx_dir / "header_embeddings.parquet")
+        header_bm25.build(header_docs)
+        header_embeddings.build(header_docs)
+
+    table_bm25: Optional[BM25Store] = None
+    table_embeddings: Optional[EmbeddingStore] = None
+    if table_docs:
+        table_bm25 = BM25Store(idx_dir / "table_bm25.pkl")
+        table_embeddings = EmbeddingStore(idx_dir / "table_embeddings.parquet")
+        table_bm25.build(table_docs)
+        table_embeddings.build(table_docs)
+
+    span_map: Dict[str, Dict[str, Any]] = {}
+    span_records: List[Dict[str, Any]] = []
+    for span_index, span in enumerate(spans):
+        chunk_indices = span.get("chunk_indices") or []
+        for idx_in_span in chunk_indices:
+            try:
+                chunk = chunks[int(idx_in_span)]
+            except (IndexError, ValueError, TypeError):
+                continue
+            micro_id = chunk.get("micro_id")
+            if not micro_id:
+                continue
+            score = float(span.get("score") or 0.0)
+            existing = span_map.get(micro_id)
+            if existing and existing.get("score", 0.0) >= score:
+                continue
+            entry = {
+                "micro_id": micro_id,
+                "span_id": span_index,
+                "score": score,
+                "start_index": span.get("start_index"),
+                "end_index": span.get("end_index"),
+                "E": span.get("E"),
+                "F": span.get("F"),
+                "H": span.get("H"),
+                "G_penalty": span.get("G_penalty"),
+            }
+            span_map[micro_id] = entry
+    span_records.extend(span_map.values())
+
+    header_doc_path = _write_json(sidecar_dir / "uf_pipeline" / "header_docs.json", header_docs)
+    table_doc_path = _write_json(sidecar_dir / "uf_pipeline" / "table_docs.json", table_docs)
+    span_index_path = _write_json(sidecar_dir / "uf_pipeline" / "efhg_span_index.json", span_records)
+
     return RetrievalSummary(
         micro_index_size=len(chunks),
         header_shard_count=sum(1 for shard in shards if shard.get("micro_ids")),
         table_count=len(tables),
-        bm25_path=bm25_store.path if bm25_store.path.exists() else None,
-        embedding_path=embedding_store.path if embedding_store.path.exists() else None,
+        bm25_path=micro_bm25.path if micro_bm25.path.exists() else None,
+        embedding_path=micro_embeddings.path if micro_embeddings.path.exists() else None,
+        header_bm25_path=header_bm25.path if header_bm25 and header_bm25.path.exists() else None,
+        header_embedding_path=header_embeddings.path if header_embeddings and header_embeddings.path.exists() else None,
+        table_bm25_path=table_bm25.path if table_bm25 and table_bm25.path.exists() else None,
+        table_embedding_path=table_embeddings.path if table_embeddings and table_embeddings.path.exists() else None,
+        span_index_path=span_index_path if span_records else None,
+        header_doc_path=header_doc_path if header_docs else None,
+        table_doc_path=table_doc_path if table_docs else None,
     )
 
 
@@ -783,7 +926,13 @@ def run_pipeline(
     header_result = _run_header_pass(ingest, chunks, llm_client=llm_client, sidecar_dir=target_dir)
     table_records = _link_tables_to_chunks(ingest.tables, chunks)
     tables_path = _write_json(target_dir / "uf_pipeline" / "tables.json", table_records)
-    retrieval_summary = _build_retrieval(chunks, header_result.header_shards, table_records, sidecar_dir=target_dir)
+    retrieval_summary = _build_retrieval(
+        chunks,
+        header_result.header_shards,
+        table_records,
+        spans,
+        sidecar_dir=target_dir,
+    )
     chunk_artifacts = _write_chunk_audit(target_dir, chunks, chunk_scores, spans)
 
     artifacts: Dict[str, Path] = {
@@ -792,6 +941,12 @@ def run_pipeline(
         "tables": tables_path,
         **chunk_artifacts,
     }
+    if retrieval_summary.header_doc_path:
+        artifacts["header_docs"] = retrieval_summary.header_doc_path
+    if retrieval_summary.table_doc_path:
+        artifacts["table_docs"] = retrieval_summary.table_doc_path
+    if retrieval_summary.span_index_path:
+        artifacts["efhg_span_index"] = retrieval_summary.span_index_path
     audits = {
         "headers": header_result.audit,
         "tables": table_records,

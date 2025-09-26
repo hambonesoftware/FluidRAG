@@ -8,7 +8,7 @@ import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 from jsonschema import ValidationError, validate
@@ -292,7 +292,11 @@ class MicrochunkContextBuilder:
         section_id = section.section_id if section else None
 
         if not candidate_ids:
-            results = self.hybrid.search(specification, k=40)
+            retrieval_results = self.hybrid.search(specification, k=40)
+            if retrieval_results and isinstance(retrieval_results[0], Mapping):
+                results = [res["id"] for res in retrieval_results if res.get("type") == "chunk"]
+            else:
+                results = list(retrieval_results)
             if doc_id:
                 filtered = [mid for mid in results if self.micro_index.get(mid, {}).get("doc_id") == doc_id]
                 if filtered:
