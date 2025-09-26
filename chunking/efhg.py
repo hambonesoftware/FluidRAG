@@ -174,23 +174,83 @@ def compute_chunk_scores(chunks: Sequence[Mapping[str, object]]) -> List[Dict[st
     return results
 
 
-def _hep_score(span: Sequence[_ChunkView]) -> float:
+def _hep_score(span: Sequence[_ChunkView]) -> Tuple[float, Dict[str, object]]:
     modal = sum(chunk.modalness for chunk in span)
     numbers = sum(1 for chunk in span if chunk.params["numbers"])
     citations = sum(1 for chunk in span if chunk.data.get("lex", {}).get("citation_hint"))
-    actors = sum(1 for chunk in span if "shall" in " ".join(chunk.tokens))
-    ambiguity_penalty = sum(0.3 for chunk in span if "etc" in chunk.tokens or "as" in chunk.tokens)
-    return modal + 0.9 * numbers + 0.6 * citations + 0.8 * bool(actors) - ambiguity_penalty
+    actors = any("shall" in " ".join(chunk.tokens) for chunk in span)
+    ambiguity_terms = sum(
+        1
+        for chunk in span
+        if "etc" in chunk.tokens or "as" in chunk.tokens or "needed" in chunk.tokens
+    )
+    ambiguity_penalty = 0.3 * ambiguity_terms
+    score = modal + 0.9 * numbers + 0.6 * citations + 0.8 * bool(actors) - ambiguity_penalty
+    details: Dict[str, object] = {
+        "modal_sum": round(modal, 4),
+        "constraint_hits": int(numbers),
+        "citation_hits": int(citations),
+        "actor_present": bool(actors),
+        "ambiguity_terms": int(ambiguity_terms),
+        "penalty": round(ambiguity_penalty, 4),
+    }
+    return score, details
 
 
-def _graph_penalty(span: Sequence[_ChunkView]) -> float:
+def _graph_penalty(span: Sequence[_ChunkView]) -> Tuple[float, Dict[str, object]]:
     headers = {chunk.data.get("section_id") for chunk in span if chunk.data.get("section_id")}
-    if len(headers) > 1:
-        return 1.0
+    header_conflict = len(headers) > 1
     anchors = {chunk.data.get("header_anchor") for chunk in span if chunk.data.get("header_anchor")}
-    if len(anchors) > 1:
-        return 0.6
-    return 0.0
+    anchor_conflict = len(anchors) > 1
+    penalty = 0.0
+    conflicts: List[str] = []
+    if header_conflict:
+        penalty += 1.0
+        conflicts.append("header_mismatch")
+    if anchor_conflict:
+        penalty += 0.6
+        conflicts.append("anchor_mismatch")
+    details: Dict[str, object] = {
+        "header_conflict": header_conflict,
+        "anchor_conflict": anchor_conflict,
+        "conflicts": conflicts,
+    }
+    return penalty, details
+
+
+def compute_fluid_neighbors(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
+    """Return adjacency summaries for each chunk using the Fluid capacity metric."""
+
+    prepared = _prepare_chunks(chunks)
+    if not prepared:
+        return []
+
+    neighbors: List[Dict[str, object]] = []
+    for idx, chunk in enumerate(prepared):
+        entry: Dict[str, object] = {
+            "index": idx,
+            "micro_id": chunk.data.get("micro_id"),
+        }
+        if idx > 0:
+            prev = prepared[idx - 1]
+            cap = _capacity(prev, chunk)
+            if cap > 0.0:
+                entry["prev"] = {
+                    "index": idx - 1,
+                    "micro_id": prev.data.get("micro_id"),
+                    "capacity": round(cap, 4),
+                }
+        if idx + 1 < len(prepared):
+            nxt = prepared[idx + 1]
+            cap = _capacity(chunk, nxt)
+            if cap > 0.0:
+                entry["next"] = {
+                    "index": idx + 1,
+                    "micro_id": nxt.data.get("micro_id"),
+                    "capacity": round(cap, 4),
+                }
+        neighbors.append(entry)
+    return neighbors
 
 
 def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
@@ -213,6 +273,7 @@ def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
 
         span_chunks: List[_ChunkView] = [view]
         gain = metrics["S_start"]
+        flow_edges: List[Dict[str, object]] = []
 
         for candidate in prepared[view.idx + 1 :]:
             if candidate.idx in used_indices:
@@ -222,11 +283,18 @@ def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
                 break
             span_chunks.append(candidate)
             gain += cap
+            flow_edges.append(
+                {
+                    "from": span_chunks[-2].idx,
+                    "to": candidate.idx,
+                    "capacity": round(cap, 4),
+                }
+            )
             if compute_chunk_scores([candidate.data])[0]["S_stop"] > 1.5:
                 break
 
-        hep = _hep_score(span_chunks)
-        graph_penalty = _graph_penalty(span_chunks)
+        hep, hep_details = _hep_score(span_chunks)
+        graph_penalty, graph_details = _graph_penalty(span_chunks)
         total_score = hep + gain - graph_penalty
         if total_score < 1.5:
             continue
@@ -242,6 +310,22 @@ def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
                 "F": round(gain, 4),
                 "H": round(hep, 4),
                 "G_penalty": round(graph_penalty, 4),
+                "components": {
+                    "flow": {
+                        "start_seed": round(metrics["S_start"], 4),
+                        "edges": flow_edges,
+                        "total": round(gain, 4),
+                    },
+                    "hep": {
+                        "score": round(hep, 4),
+                        **hep_details,
+                    },
+                    "graph": {
+                        "penalty": round(graph_penalty, 4),
+                        **graph_details,
+                    },
+                },
+                "chunk_indices": [chunk.idx for chunk in span_chunks],
                 "preview": span_text[:120],
             }
         )
@@ -250,5 +334,5 @@ def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
     return spans
 
 
-__all__ = ["compute_chunk_scores", "run_efhg"]
+__all__ = ["compute_chunk_scores", "compute_fluid_neighbors", "run_efhg"]
 
