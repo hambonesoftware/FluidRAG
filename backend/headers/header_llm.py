@@ -142,13 +142,28 @@ def verify_headers(headers_json: Dict[str, Any], pages_norm: List[str], pages_ra
 
 
 def _label_series(label: str) -> Tuple[str, int]:
-    match = re.match(r"^(?P<prefix>[A-Za-z]+)(?P<num>\d+)", label)
-    if not match:
-        match = re.match(r"^(?P<num>\d+)", label)
-        if not match:
-            return label, -1
-        return "NUM", int(match.group("num"))
-    return match.group("prefix"), int(match.group("num"))
+    cleaned = (label or "").strip()
+    if not cleaned:
+        return "", -1
+    numeric = re.match(r"^(?P<num>\d+)\)", cleaned)
+    if numeric:
+        return "NUM", int(numeric.group("num"))
+    appendix = re.match(r"(?i)^(appendix|annex)\s+([A-Z])", cleaned)
+    if appendix:
+        prefix = appendix.group(1).upper()
+        letter = appendix.group(2).upper()
+        return prefix, ord(letter) - ord("A") + 1
+    base = cleaned.rstrip(".)")
+    dotted = re.match(r"^(?P<prefix>[A-Z])\.(?P<num>\d+)$", base)
+    if dotted:
+        return dotted.group("prefix").upper(), int(dotted.group("num"))
+    simple = re.match(r"^(?P<prefix>[A-Z])(?P<num>\d+)$", base)
+    if simple:
+        return simple.group("prefix").upper(), int(simple.group("num"))
+    generic = re.match(r"^(?P<prefix>[A-Za-z]+)(?P<num>\d+)$", base)
+    if generic:
+        return generic.group("prefix").upper(), int(generic.group("num"))
+    return cleaned.upper(), -1
 
 
 def _window_text(page_text: str, start: int, end: int, padding: int = 120) -> Tuple[int, int, str]:
@@ -233,9 +248,36 @@ def _verify_local_match(label: str, text: str, page_text: str, window_start: int
 def _series_name(prefix: str) -> str:
     if prefix == "NUM":
         return "NUMERIC"
-    if prefix.upper().startswith("A"):
-        return "APPX"
+    if prefix in {"APPENDIX", "ANNEX"}:
+        return prefix
     return prefix.upper()
+
+
+def _infer_label_pattern(label: str) -> str:
+    if not label:
+        return "generic"
+    if re.match(r"^\d+\)$", label):
+        return "numeric"
+    if re.match(r"(?i)^(appendix|annex)\s+[A-Z]$", label):
+        return "appendix_top"
+    if re.match(r"^[A-Z]\d+\.$", label):
+        return "appendix_sub_AN"
+    if re.match(r"^[A-Z]\.\d+$", label):
+        return "appendix_sub_AlN"
+    return "generic"
+
+
+def _format_missing_label(prefix: str, number: int, pattern: str) -> str:
+    if pattern == "numeric" or prefix == "NUM":
+        return f"{number})"
+    if pattern == "appendix_top" and prefix in {"APPENDIX", "ANNEX"}:
+        letter = chr(ord("A") + number - 1)
+        return f"{prefix.title()} {letter}"
+    if pattern == "appendix_sub_AlN":
+        return f"{prefix}.{number}"
+    if pattern == "appendix_sub_AN":
+        return f"{prefix}{number}."
+    return f"{prefix}{number}."
 
 
 def aggressive_sequence_repair(
@@ -262,9 +304,12 @@ def aggressive_sequence_repair(
             gap_numbers = list(range(current_num + 1, next_num))
             before_header = entries[idx][1]
             after_header = entries[idx + 1][1]
+            pattern_type = _infer_label_pattern(before_header.label)
+            if pattern_type == "generic":
+                pattern_type = _infer_label_pattern(after_header.label)
             log_entry = {
                 "series": _series_name(prefix),
-                "gap": f"{prefix}{gap_numbers[0]}..{prefix}{gap_numbers[-1]}",
+                "gap": f"{_format_missing_label(prefix, gap_numbers[0], pattern_type)}..{_format_missing_label(prefix, gap_numbers[-1], pattern_type)}",
                 "before": {
                     "label": before_header.label,
                     "text": before_header.text,
@@ -281,7 +326,7 @@ def aggressive_sequence_repair(
                 "result": [],
             }
             for missing in gap_numbers:
-                label = f"{prefix}{missing}." if prefix != "NUM" else f"{missing})"
+                label = _format_missing_label(prefix, missing, pattern_type)
                 page_index = before_header.page - 1
                 page_text = pages_norm[page_index]
                 start = before_header.span[1]
@@ -304,7 +349,7 @@ def aggressive_sequence_repair(
                     confidence = candidate["confidence"]
                     if confidence < confidence_threshold:
                         continue
-                    normalized_label = label.rstrip(".)") + ("." if label.endswith(".") else ")")
+                    normalized_label = label
                     new_header = VerifiedHeader(
                         label=normalized_label,
                         text=candidate["text"],
