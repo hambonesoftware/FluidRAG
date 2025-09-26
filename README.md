@@ -29,6 +29,17 @@ python run.py  # starts Flask and opens the frontend
 > Without `OPENROUTER_API_KEY`, network calls fall back to mocked responses so you can exercise the UI end-to-end.
 
 
+## Testing
+
+Run the full backend and integration test suite with `pytest` from the repository root:
+
+```bash
+pytest
+```
+
+All tests should pass without additional configuration when the optional API keys are not provided.
+
+
 ## FluidRAG refactor CLI
 
 The refactored Standard-centric pipeline is available under `fluidrag/src/cli.py` and can be exercised with the following commands:
