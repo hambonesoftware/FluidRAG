@@ -52,6 +52,14 @@ def _collect_domain_hints(span: Span, chunks: Dict[str, UFChunk]) -> List[str]:
     return hints
 
 
+def _chunk_has_citation(chunk: UFChunk) -> bool:
+    return bool(chunk.lex.get("citation_hints"))
+
+
+def _chunk_has_params(chunk: UFChunk) -> bool:
+    return bool(chunk.lex.get("numbers")) or bool(chunk.lex.get("units"))
+
+
 def score_graph(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk], params: Dict[str, float] | None = None) -> Tuple[float, Dict[str, float]]:
     params = params or DEFAULT_PARAMS
     penalties = {
@@ -60,29 +68,37 @@ def score_graph(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk]
         "reference_gap": 0.0,
         "cross_bleed": 0.0,
     }
+
     dominant_label, overlap = _dominant_header(span, chunks, header_ctx.headers)
-    header_score = params["wH"] * (1.0 if dominant_label else 0.0)
-    domain_score = params["wD"] * (1.0 if overlap > 0 else 0.5)
-    param_support = any(chunks[cid].lex.get("numbers") for cid in span.chunk_ids)
-    param_score = params["wP"] * (1.0 if param_support else 0.4)
-    ref_score = params["wR"] * (1.0 if header_ctx.references else 0.5)
-    table_score = params["wC"] * (1.0 if header_ctx.tables else 0.4)
+    header_alignment = 1.0 if dominant_label else 0.0
+    same_section = 1.0 if overlap > 0 else 0.3
+    citations = 1.0 if any(_chunk_has_citation(chunks[cid]) for cid in span.chunk_ids) else 0.0
+    parameters = 1.0 if any(_chunk_has_params(chunks[cid]) for cid in span.chunk_ids) else 0.0
+    context_tables = 1.0 if header_ctx.tables else 0.0
+
     penalties["header_mismatch"] = 0.0 if dominant_label else 0.6
 
     domain_hints = _collect_domain_hints(span, chunks)
     if header_ctx.domain and domain_hints and header_ctx.domain not in domain_hints:
         penalties["domain_conflict"] = 0.5
 
-    if dominant_label and any(
+    if any(
         HEADER_PATTERN.match(chunks[cid].text.strip().splitlines()[0]) and cid != span.chunk_ids[0]
-        for cid in span.chunk_ids
+        for cid in span.chunk_ids[1:]
     ):
         penalties["cross_bleed"] = 0.4
 
-    if dominant_label and header_ctx.references and not any(chunks[cid].lex.get("citation_hints") for cid in span.chunk_ids):
+    if header_ctx.references and citations == 0.0:
         penalties["reference_gap"] = 0.3
 
-    score = header_score + domain_score + param_score + ref_score + table_score - sum(penalties.values())
+    score = (
+        params["wH"] * header_alignment
+        + params["wD"] * same_section
+        + params["wP"] * parameters
+        + params["wR"] * citations
+        + params["wC"] * context_tables
+        - sum(penalties.values())
+    )
     return score, penalties
 
 
@@ -104,6 +120,15 @@ def snap_and_trim(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChun
             new_start = max(h_start, base_span.span[0])
             new_end = min(h_end + 400, base_span.span[1])
             trimmed = span_from_chunk_ids(chunks, chunk_ids)
+            domain_hints = _collect_domain_hints(trimmed, chunks)
+            if header_ctx.domain and domain_hints and header_ctx.domain not in domain_hints:
+                return Span(
+                    chunk_ids=[trimmed.chunk_ids[0]],
+                    text=chunks[trimmed.chunk_ids[0]].text,
+                    page=trimmed.page,
+                    span=(chunks[trimmed.chunk_ids[0]].span_char[0], chunks[trimmed.chunk_ids[0]].span_char[1]),
+                    flow_total=span.flow_total,
+                )
             return Span(
                 chunk_ids=trimmed.chunk_ids,
                 text=trimmed.text,
@@ -111,7 +136,7 @@ def snap_and_trim(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChun
                 span=(new_start, new_end),
                 flow_total=span.flow_total,
             )
-    # If no dominant header or no trimming needed, rehydrate span to ensure consistency.
+
     recomputed = span_from_chunk_ids(chunks, chunk_ids)
     return Span(
         chunk_ids=recomputed.chunk_ids,

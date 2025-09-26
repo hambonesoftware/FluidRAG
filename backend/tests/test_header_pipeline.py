@@ -79,6 +79,7 @@ def test_sequence_repair_appx_gap(tmp_path):
     assert gap_entry["series"] == "APPX"
     assert gap_entry["before"]["text"].startswith("Prior")
     assert gap_entry["after"]["text"].startswith("Closing")
+    assert gap_entry["windows"] >= 1
     assert gap_entry["result"], "Expected repair candidates logged"
     for candidate in gap_entry["result"]:
         assert candidate["confidence"] >= 0.55
@@ -154,6 +155,8 @@ def test_logging_schema(tmp_path):
     for entry in audit["final_headers"]:
         for field in ("page", "span", "span_char", "source"):
             assert field in entry
+        assert entry["source"] in {"llm", "repair", "efhg", "efhg_fallback"}
 
     candidate = next((entry for entry in audit["final_headers"] if entry["label"].startswith("A1")), None)
     assert candidate is not None
+    assert audit["config"]["entropy"]["weights"]["w1"] == 0.7

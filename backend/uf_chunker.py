@@ -4,7 +4,7 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 HEADER_PATTERN = re.compile(r"^(?:\d+\)|A\d+\.)")
@@ -20,7 +20,7 @@ DOMAIN_KEYWORDS = {
 
 @dataclass
 class UFChunk:
-    """Container for an Ultrafine chunk."""
+    """Representation of an Ultrafine (UF) chunk."""
 
     id: str
     page: int
@@ -56,11 +56,7 @@ def _embed_text(text: str, dims: int = 8) -> List[float]:
 
 
 def _extract_numbers(tokens: Sequence[str]) -> List[str]:
-    results: List[str] = []
-    for tok in tokens:
-        if re.search(r"\d", tok):
-            results.append(tok)
-    return results
+    return [tok for tok in tokens if re.search(r"\d", tok)]
 
 
 def _extract_units(tokens: Sequence[str]) -> List[str]:
@@ -99,79 +95,112 @@ def _bbox_union(tokens: Sequence[Dict[str, Any]]) -> Optional[Tuple[float, float
     return float(x0), float(y0), float(x1), float(y1)
 
 
+def _should_split(prev_token: Dict[str, Any], token: Dict[str, Any]) -> bool:
+    token_text = token.get("text", "").strip()
+    prev_text = prev_token.get("text", "").strip()
+    if HEADER_PATTERN.match(token_text):
+        return True
+    if prev_text.endswith(".") and token_text[:1].isupper():
+        return True
+    indent_delta = _compute_indent(token) - _compute_indent(prev_token)
+    return indent_delta >= 2.0
+
+
+def _collect_text(page: Dict[str, Any], tokens: Sequence[Dict[str, Any]]) -> str:
+    if not tokens:
+        return ""
+    start = int(tokens[0].get("start", 0))
+    end = int(tokens[-1].get("end", start))
+    page_text = page.get("text", "")
+    if start < end <= len(page_text):
+        text = page_text[start:end]
+        if text.strip():
+            return text
+    return "".join(tok.get("text", "") for tok in tokens)
+
+
+def _lexical_profile(text: str, tokens: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    raw_tokens = [tok.get("text", "") for tok in tokens]
+    return {
+        "has_modal": _has_modal(raw_tokens),
+        "numbers": _extract_numbers(raw_tokens),
+        "units": _extract_units(raw_tokens),
+        "citation_hints": bool(re.search(r"\[[^\]]+\]|\([^)]*\d{4}[^)]*\)", text)),
+    }
+
+
+def _style_profile(tokens: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    if not tokens:
+        return {"font_size": 0.0, "bold": False, "indent": 0.0}
+    primary = tokens[0]
+    return {
+        "font_size": float(primary.get("font_size", 0.0) or 0.0),
+        "bold": bool(primary.get("bold", False)),
+        "indent": float(primary.get("indent", 0.0) or 0.0),
+    }
+
+
+def _header_anchor(text: str) -> bool:
+    head = text.strip().splitlines()[0] if text.strip() else ""
+    return bool(HEADER_PATTERN.match(head))
+
+
+def _iter_segments(tokens: Sequence[Dict[str, Any]], max_tokens: int, overlap: int) -> Iterable[Tuple[int, int]]:
+    start_idx = 0
+    while start_idx < len(tokens):
+        end_idx = min(len(tokens), start_idx + max_tokens)
+        j = start_idx + 1
+        while j < end_idx:
+            if _should_split(tokens[j - 1], tokens[j]):
+                end_idx = j
+                break
+            j += 1
+        yield start_idx, end_idx
+        if end_idx >= len(tokens):
+            break
+        step = max(1, max_tokens - max(0, overlap))
+        # If we broke early due to header or indent, respect the boundary.
+        if end_idx - start_idx < max_tokens:
+            start_idx = end_idx
+        else:
+            start_idx = max(end_idx - step, start_idx + 1)
+
+
 def uf_chunk(doc_decomp: Dict[str, Any], max_tokens: int = 90, overlap: int = 12) -> List[UFChunk]:
-    """Chunk a decomposed document into Ultrafine chunks."""
+    """Chunk the normalized document decomposition using Ultrafine logic."""
 
     pages: List[Dict[str, Any]] = doc_decomp.get("pages", [])
     chunks: List[UFChunk] = []
-    chunk_index = 0
+    chunk_counter = 0
 
-    for page_idx, page in enumerate(pages):
+    for page_index, page in enumerate(pages):
         tokens: List[Dict[str, Any]] = page.get("tokens", [])
         if not tokens:
             continue
-        i = 0
-        while i < len(tokens):
-            start_idx = i
-            span_start = tokens[start_idx].get("start", 0)
-            j = start_idx
-            while j < len(tokens) and (j - start_idx) < max_tokens:
-                if j > start_idx:
-                    token_text = tokens[j]["text"].strip()
-                    prev_text = tokens[j - 1]["text"].strip()
-                    if HEADER_PATTERN.match(token_text):
-                        break
-                    if prev_text.endswith(".") and token_text[:1].isupper():
-                        break
-                    indent_delta = _compute_indent(tokens[j]) - _compute_indent(tokens[j - 1])
-                    if indent_delta >= 2.0:
-                        break
-                j += 1
-            if j == start_idx:
-                j += 1
-            chunk_tokens = tokens[start_idx:j]
-            span_end = chunk_tokens[-1].get("end", span_start)
-            text = page.get("text", "")[span_start:span_end]
-            if not text:
-                text = "".join(tok.get("text", "") for tok in chunk_tokens)
-            raw_tokens = [tok.get("text", "") for tok in chunk_tokens]
-            lex_numbers = _extract_numbers(raw_tokens)
-            lex_units = _extract_units(raw_tokens)
-            lex_has_modal = _has_modal(raw_tokens)
-            style = {
-                "font_size": float(chunk_tokens[0].get("font_size", 0.0) or 0.0),
-                "bold": bool(chunk_tokens[0].get("bold", False)),
-                "indent": float(chunk_tokens[0].get("indent", 0.0) or 0.0),
-            }
-            lex = {
-                "has_modal": lex_has_modal,
-                "numbers": lex_numbers,
-                "units": lex_units,
-                "citation_hints": bool(re.search(r"\[[^\]]+\]|\([^)]*\d{4}[^)]*\)", text)),
-            }
-            emb = _embed_text(text)
-            chunk_id = f"uf_{page_idx + 1:04d}_{chunk_index:05d}"
-            header_anchor = bool(HEADER_PATTERN.search(text.strip().splitlines()[0] if text.strip() else ""))
-            bbox = _bbox_union(chunk_tokens)
+        segments = list(_iter_segments(tokens, max_tokens, overlap))
+        for start_idx, end_idx in segments:
+            segment_tokens = tokens[start_idx:end_idx]
+            if not segment_tokens:
+                continue
+            text = _collect_text(page, segment_tokens)
+            span_start = int(segment_tokens[0].get("start", 0))
+            span_end = int(segment_tokens[-1].get("end", span_start))
             chunk = UFChunk(
-                id=chunk_id,
-                page=page_idx + 1,
-                span_char=(int(span_start), int(span_end)),
-                span_bbox=bbox,
+                id=f"uf_{page_index + 1:04d}_{chunk_counter:05d}",
+                page=page_index + 1,
+                span_char=(span_start, span_end),
+                span_bbox=_bbox_union(segment_tokens),
                 text=text,
-                style=style,
-                lex=lex,
-                emb=emb,
+                style=_style_profile(segment_tokens),
+                lex=_lexical_profile(text, segment_tokens),
+                emb=_embed_text(text),
                 domain_hint=_infer_domain_hint(text),
-                header_anchor=header_anchor,
+                header_anchor=_header_anchor(text),
             )
             chunks.append(chunk)
-            chunk_index += 1
-            if j >= len(tokens):
-                break
-            i = max(j - max(overlap, 0), start_idx + 1)
+            chunk_counter += 1
 
     return chunks
 
 
-__all__ = ["UFChunk", "uf_chunk"]
+__all__ = ["UFChunk", "uf_chunk", "HEADER_PATTERN"]
