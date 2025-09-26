@@ -9,7 +9,13 @@ def _units_present(text: str) -> bool:
 
 
 def _line(text: str, **kwargs):
-    base = {"page": 1, "line_idx": 1, "text_norm": text, "caps_ratio": kwargs.get("caps_ratio", 0.6)}
+    base = {
+        "page": 1,
+        "line_idx": 1,
+        "text_norm": text,
+        "caps_ratio": kwargs.get("caps_ratio", 0.6),
+    }
+    base.update({key: kwargs[key] for key in ("bold", "font_sigma_rank", "font_size", "font_size_z") if key in kwargs})
     features = compute_features({"text_norm": text, **kwargs}, [("SEC.PERFORMANCE", 0.8)])
     base["features"] = features
     return base
@@ -56,6 +62,7 @@ def test_units_penalty_not_applied_to_numeric():
     line = _line("10) Pressure (psi) Requirements", bold=True, font_sigma_rank=0.9, font_size_z=0.86)
     selected = select_headers([line], _units_present)
     assert selected[0]["partials"].get("units_penalty") is None
+    assert selected[0]["partials"].get("units_penalty_applied") is False
 
 
 def test_label_units_penalty_applies():
@@ -73,6 +80,17 @@ def test_units_penalty_skipped_for_unicode_appendix():
     selected = select_headers([line], _units_present)
     assert selected
     assert selected[0]["partials"].get("units_penalty") is None
+    assert selected[0]["partials"].get("units_penalty_applied") is False
+
+
+def test_numeric_fallback_requires_bold_or_sigma():
+    line = _line("12) Flow Requirements", bold=False, font_sigma_rank=0.6, font_size_z=0.2)
+    line["features"]["proto_sim_max"] = 0.0
+    line["features"]["p_header"] = 0.0
+    selected = select_headers([line], _units_present)
+    assert selected
+    assert selected[0]["decision"] == "selected_fallback"
+    assert selected[0]["meets_threshold"] is False
 
 
 def test_prototype_similarity_lifts_ocr_header():

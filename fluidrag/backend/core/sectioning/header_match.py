@@ -38,4 +38,4 @@ def classify_line(text_norm: str, caps_ratio: float) -> Dict[str, str]:
     return {"kind": "none"}
 
 
-__all__ = ["classify_line", "label_caps_ok"]
+__all__ = ["classify_line", "label_caps_ok", "NUMERIC_RE", "APPENDIX_RE"]

@@ -23,10 +23,11 @@ from .reporting.html_report import render as render_report
 from .retrieval.chunk_recall import recall_chunks
 from .retrieval.fuse_scores import fuse
 from .retrieval.section_filter import prefilter_sections
-from .sectioning.header_match import classify_line
+from .sectioning.header_match import APPENDIX_RE, NUMERIC_RE, classify_line
 from .sectioning.header_score import THRESHOLD, score_candidate
 from .sectioning.section_graph import build_section_graph
 from .sectioning.header_features import compute_features
+from .sectioning.text_normalize import normalize_for_headers
 from .validators.conflicts import find_conflicts
 from .validators.units import parse_units
 
@@ -51,17 +52,14 @@ DEFAULT_CONFIG: Dict[str, Mapping[str, object]] = {
         "pm": {"alpha": 0.50, "beta": 0.20, "gamma": 0.20, "delta": 0.10},
     },
     "microchunks": {
-        "window_chars": 450,
-        "stride_chars": 80,
+        "window_chars": 300,
+        "stride_chars": 240,
     },
 }
 
 
-_ALT_SPACE_CHARS = {"\u00A0", "\u2002", "\u2003", "\u202F"}
-_ALT_DOT_CHARS = {"\u2024", "\u2027", "\uFF0E"}
-_SOFT_APPENDIX_PREFIX_RX = re.compile(r"^[A-Z]\d+[.\u2024\u2027\uFF0E]")
-_SOFT_NUMERIC_PREFIX_RX = re.compile(r"^\d+\)")
 _NEIGHBOR_BONUS = 0.15
+_APPENDIX_RESCUE_RX = re.compile(r"^\s*([A-Z])(5|6)\.\s{0,2}(.*)$")
 
 
 def _caps_ratio(text: str) -> float:
@@ -75,6 +73,16 @@ def _caps_ratio(text: str) -> float:
 def _units_present(text: str) -> bool:
     parsed = parse_units(text or "")
     return bool(parsed.get("units"))
+
+
+def _style_snapshot(line: Mapping[str, object], caps_ratio: float) -> Dict[str, float | bool | None]:
+    return {
+        "font_size": line.get("font_size"),
+        "bold": bool(line.get("bold")),
+        "font_sigma_rank": float(line.get("font_sigma_rank") or 0.0),
+        "font_size_z": float(line.get("font_size_z") or 0.0),
+        "caps_ratio": float(caps_ratio),
+    }
 
 
 def _extract_appendix_number(value: object) -> Optional[int]:
@@ -93,27 +101,26 @@ def _extract_appendix_number(value: object) -> Optional[int]:
         return None
 
 
-def _normalize_soft_text(text: str) -> str:
-    if not text:
-        return ""
-    buf: List[str] = []
-    for ch in text:
-        if ch in _ALT_SPACE_CHARS:
-            buf.append(" ")
-        elif ch in _ALT_DOT_CHARS:
-            buf.append(".")
-        else:
-            buf.append(ch)
-    normalized = "".join(buf)
-    normalized = re.sub(r"\s+", " ", normalized)
-    return normalized.strip()
+def _decide_candidate(
+    meets_threshold: bool,
+    is_numeric: bool,
+    is_appendix: bool,
+    style: Mapping[str, object],
+) -> str:
+    if meets_threshold:
+        return "selected"
+    if (is_numeric or is_appendix) and (
+        style.get("bold") or float(style.get("font_sigma_rank") or 0.0) >= 0.5
+    ):
+        return "selected_fallback"
+    return "below_threshold"
 
 
 def _should_apply_units_penalty(text: str) -> bool:
-    stripped = _normalize_soft_text(text)
-    if _SOFT_NUMERIC_PREFIX_RX.match(stripped):
+    stripped = normalize_for_headers(text)
+    if NUMERIC_RE.match(stripped):
         return False
-    if _SOFT_APPENDIX_PREFIX_RX.match(stripped):
+    if APPENDIX_RE.match(stripped):
         return False
     return True
 
@@ -136,6 +143,121 @@ def _font_metrics(lines: List[Dict]) -> None:
 
 def _serialize_top3(entries: Sequence[Tuple[str, float]]) -> List[Dict[str, float]]:
     return [{"id": proto_id, "score": float(score)} for proto_id, score in entries]
+
+
+def _build_candidate_record(
+    line: Mapping[str, object],
+    norm_text: str,
+    *,
+    encoder: EmbeddingEncoder,
+    prototypes: Mapping[str, np.ndarray],
+    rescue: bool = False,
+) -> Optional[Dict]:
+    if not norm_text:
+        return None
+
+    caps_ratio = _caps_ratio(norm_text)
+    style = _style_snapshot(line, caps_ratio)
+
+    feature_line = {**line, "text_norm": norm_text, "caps_ratio": caps_ratio}
+    vector = encoder.embed_texts([norm_text])[0]
+    proto_matches = topk_header_prototypes(vector, prototypes, k=3)
+    computed = compute_features(feature_line, proto_matches, p_header=0.0)
+    kind_data = classify_line(norm_text, caps_ratio)
+    if kind_data.get("kind") == "none":
+        return None
+
+    score, parts = score_candidate(kind_data["kind"], computed)
+    parts = {key: float(val) for key, val in parts.items()}
+    parts.setdefault("units_penalty_applied", False)
+
+    is_numeric = bool(NUMERIC_RE.match(norm_text))
+    is_appendix = bool(APPENDIX_RE.match(norm_text))
+
+    if _units_present(norm_text) and _should_apply_units_penalty(norm_text):
+        if not (is_numeric or is_appendix):
+            score -= 0.6
+            parts["units_penalty"] = -0.6
+            parts["units_penalty_applied"] = True
+
+    meets_threshold = score >= THRESHOLD
+    decision = _decide_candidate(meets_threshold, is_numeric, is_appendix, style)
+
+    features = {
+        key: float(computed.get(key, 0.0))
+        for key in (
+            "bold",
+            "font_sigma",
+            "font_z",
+            "caps_ratio",
+            "len",
+            "proto_sim_max",
+            "p_header",
+        )
+    }
+
+    candidate = {
+        **line,
+        **kind_data,
+        "raw_number": kind_data.get("number"),
+        "header_norm": norm_text,
+        "score": float(score),
+        "partials": parts,
+        "features": features,
+        "proto_top3": _serialize_top3(computed.get("proto_top3", [])),
+        "meets_threshold": meets_threshold,
+        "decision": decision,
+        "is_numeric": is_numeric,
+        "is_appendix": is_appendix,
+        "style": style,
+        "rescue_applied": rescue,
+    }
+
+    candidate["number"] = _section_number(
+        kind_data["kind"], {"letter": kind_data.get("letter"), "number": kind_data.get("number")}
+    )
+
+    if candidate["proto_top3"]:
+        top_entry = candidate["proto_top3"][0]
+        if top_entry["score"] >= 0.6:
+            candidate["canonical_id"] = top_entry["id"]
+            candidate["canonical_conf"] = round(float(top_entry["score"]), 4)
+
+    if is_appendix:
+        candidate["section_letter"] = kind_data.get("letter")
+        candidate["section_number"] = _extract_appendix_number(kind_data.get("number"))
+
+    if "units_penalty_applied" not in candidate["partials"]:
+        candidate["partials"]["units_penalty_applied"] = False
+
+    return candidate
+
+
+def _candidate_debug_entry(candidate: Mapping[str, object]) -> Dict[str, object]:
+    style = candidate.get("style") or {}
+    regex_hits = "none"
+    if candidate.get("is_appendix"):
+        regex_hits = "appendix"
+    elif candidate.get("is_numeric"):
+        regex_hits = "numeric"
+
+    return {
+        "page": int(candidate.get("page") or 0),
+        "line_idx": int(candidate.get("line_idx") or 0),
+        "raw_text": candidate.get("text_raw") or candidate.get("text_norm"),
+        "norm_text_repr": repr(candidate.get("header_norm", "")),
+        "regex_hits": regex_hits,
+        "style": {
+            "font_size": style.get("font_size"),
+            "bold": style.get("bold"),
+            "font_sigma_rank": style.get("font_sigma_rank"),
+            "caps_ratio": style.get("caps_ratio"),
+        },
+        "partials": dict(candidate.get("partials", {})),
+        "score": float(candidate.get("score", 0.0)),
+        "meets_threshold": bool(candidate.get("meets_threshold", False)),
+        "decision": candidate.get("decision"),
+    }
 
 
 def _apply_appendix_sequence_bonus(candidates: Sequence[Dict]) -> None:
@@ -177,116 +299,81 @@ def _appendix_neighbor_rescue(
     encoder: EmbeddingEncoder,
     prototypes: Mapping[str, np.ndarray],
 ) -> List[Dict]:
-    groups: Dict[Tuple[int, str], List[Tuple[int, Dict]]] = defaultdict(list)
+    groups: Dict[Tuple[int, str], Set[int]] = defaultdict(set)
     existing_keys: Set[Tuple[int, str, int]] = set()
     for cand in header_candidates:
-        if cand.get("kind") == "appendix":
-            letter = str(cand.get("letter") or "").upper()
-            number = _extract_appendix_number(cand.get("raw_number") or cand.get("number"))
-            if number is None:
-                continue
-            page = int(cand.get("page") or 0)
-            groups[(page, letter)].append((number, cand))
-            existing_keys.add((page, letter, number))
+        if cand.get("kind") != "appendix":
+            continue
+        letter = str(cand.get("letter") or cand.get("section_letter") or "").upper()
+        number = _extract_appendix_number(cand.get("raw_number") or cand.get("number"))
+        if not letter or number is None:
+            continue
+        page = int(cand.get("page") or 0)
+        groups[(page, letter)].add(number)
+        existing_keys.add((page, letter, number))
 
     additions: List[Dict] = []
 
-    for (page, letter), entries in groups.items():
-        if len(entries) < 4:
+    for (page, letter), numbers in groups.items():
+        if letter != "A":
             continue
-        numbers = sorted(num for num, _ in entries)
-        number_set = set(numbers)
-        for base in numbers:
-            pattern = {base, base + 1, base + 4, base + 5}
-            if not pattern.issubset(number_set):
+        if not {3, 4, 7, 8}.issubset(numbers):
+            continue
+        needed = {num for num in (5, 6) if num not in numbers}
+        if not needed:
+            continue
+
+        page_lines = [line for line in processed if int(line.get("page") or 0) == page]
+        for idx, base_line in enumerate(page_lines):
+            norm_line = normalize_for_headers(base_line.get("header_norm") or base_line.get("text_norm", ""))
+            match = _APPENDIX_RESCUE_RX.match(norm_line)
+            if not match:
                 continue
-            missing = [base + 2, base + 3]
-            left = next((cand for num, cand in entries if num == base + 1), None)
-            right = next((cand for num, cand in entries if num == base + 4), None)
-            if left is None or right is None:
+            token_letter, token_number, tail = match.groups()
+            number_val = int(token_number)
+            key = (page, token_letter.upper(), number_val)
+            if number_val not in needed or key in existing_keys:
                 continue
-            start = int(left.get("order", 0)) + 1
-            end = int(right.get("order", 0))
-            if start >= end:
-                continue
-            for idx in range(start, min(end, len(processed))):
-                base_line = processed[idx]
-                base_text = _normalize_soft_text(base_line.get("text_norm", ""))
-                if not base_text:
-                    continue
-                combined_text = base_text
-                tokens = combined_text.split(" ", 1)
-                first_token = tokens[0] if tokens else ""
-                gap_limit = min(end, len(processed))
-                if (
-                    first_token
-                    and _SOFT_APPENDIX_PREFIX_RX.match(first_token)
-                    and (len(tokens) == 1 or not tokens[1].strip())
-                    and idx + 1 < gap_limit
-                ):
-                    follower = processed[idx + 1]
-                    follower_text = _normalize_soft_text(follower.get("text_norm", ""))
-                    if follower_text:
-                        combined_text = f"{first_token} {follower_text}".strip()
 
-                norm_text = combined_text.strip()
-                if not norm_text:
-                    continue
+            tail_clean = tail.strip()
+            prefix = f"{token_letter}{token_number}."
+            parts = [prefix]
+            if tail_clean:
+                parts.append(tail_clean)
 
-                rescue_line = dict(base_line)
-                rescue_line["text_norm"] = norm_text
-                rescue_line["caps_ratio"] = _caps_ratio(norm_text)
-
-                line_vector = encoder.embed_texts([norm_text])[0]
-                proto_matches = topk_header_prototypes(line_vector, prototypes, k=3)
-                computed = compute_features(rescue_line, proto_matches, p_header=0.0)
-                kind_data = classify_line(norm_text, rescue_line.get("caps_ratio", 0.0))
-                if kind_data.get("kind") != "appendix":
-                    continue
-                number_val = _extract_appendix_number(kind_data.get("number"))
-                if number_val is None:
-                    continue
-                if number_val not in missing:
-                    continue
-                key = (page, letter, number_val)
-                if key in existing_keys:
-                    continue
-
-                score, partials = score_candidate(kind_data["kind"], computed)
-                if kind_data["kind"] == "label" and _should_apply_units_penalty(norm_text):
-                    score -= 0.6
-                    partials = {**partials, "units_penalty": -0.6}
-
-                candidate = {
-                    **rescue_line,
-                    **kind_data,
-                    "page": rescue_line.get("page", page),
-                    "raw_number": kind_data.get("number"),
-                    "score": float(score),
-                    "partials": {key_: float(val) for key_, val in partials.items()},
-                    "features": {
-                        key_: float(computed.get(key_, 0.0))
-                        for key_ in (
-                            "bold",
-                            "font_sigma",
-                            "font_z",
-                            "caps_ratio",
-                            "len",
-                            "proto_sim_max",
-                            "p_header",
-                        )
-                    },
-                    "proto_top3": _serialize_top3(computed.get("proto_top3", [])),
-                    "meets_threshold": False,
-                    "decision": "below_threshold",
-                }
-                candidate["number"] = _section_number(
-                    kind_data["kind"], {"letter": kind_data.get("letter"), "number": kind_data.get("number")}
+            if len(tail_clean) < 6 and idx + 1 < len(page_lines):
+                next_norm = normalize_for_headers(
+                    page_lines[idx + 1].get("header_norm") or page_lines[idx + 1].get("text_norm", "")
                 )
-                candidate["rescue_applied"] = True
+                next_clean = next_norm.strip()
+                if next_clean:
+                    parts.append(next_clean)
 
-                additions.append(candidate)
-                existing_keys.add(key)
+            combined_norm = " ".join(part for part in parts if part).strip()
+            if not APPENDIX_RE.match(combined_norm):
+                continue
+
+            rescue_line = dict(base_line)
+            rescue_line.setdefault("page", page)
+            rescue_line.setdefault("line_idx", base_line.get("line_idx", idx))
+            candidate = _build_candidate_record(
+                rescue_line,
+                combined_norm,
+                encoder=encoder,
+                prototypes=prototypes,
+                rescue=True,
+            )
+            if not candidate or candidate.get("kind") != "appendix":
+                continue
+
+            candidate["page"] = rescue_line.get("page", page)
+            candidate["line_idx"] = rescue_line.get("line_idx", base_line.get("line_idx", idx))
+            additions.append(candidate)
+            existing_keys.add(key)
+            needed.discard(number_val)
+
+            if not needed:
+                break
 
     return additions
 
@@ -408,50 +495,28 @@ def run_pipeline(
     for idx, line in enumerate(processed):
         line.setdefault("page", raw_lines[0].get("page", 1) if raw_lines else 1)
         line.setdefault("line_idx", idx)
-        line["caps_ratio"] = _caps_ratio(line.get("text_norm", ""))
+        header_norm = normalize_for_headers(line.get("text_norm", ""))
+        line["header_norm"] = header_norm
+        line["caps_ratio"] = _caps_ratio(header_norm)
         line["order"] = idx
 
     encoder = EmbeddingEncoder(dim=int(cfg["embedding"].get("dim", 128)))
     prototypes = build_prototype_index(encoder)
 
     header_candidates: List[Dict] = []
+    header_debug_initial: List[Dict] = []
     for line in processed:
-        text_norm = line.get("text_norm", "")
-        line_vector = encoder.embed_texts([text_norm])[0]
-        proto_matches = topk_header_prototypes(line_vector, prototypes, k=3)
-        computed = compute_features(line, proto_matches, p_header=0.0)
-        kind_data = classify_line(text_norm, line.get("caps_ratio", 0.0))
-        if kind_data.get("kind") == "none":
-            continue
-        score, partials = score_candidate(kind_data["kind"], computed)
-        if kind_data["kind"] == "label" and _units_present(text_norm) and _should_apply_units_penalty(text_norm):
-            score -= 0.6
-            partials = {**partials, "units_penalty": -0.6}
-        meets = score >= THRESHOLD
-        raw_number = kind_data.get("number")
-        candidate = {
-            **line,
-            **kind_data,
-            "raw_number": raw_number,
-            "score": float(score),
-            "partials": {key: float(val) for key, val in partials.items()},
-            "features": {
-                key: float(computed.get(key, 0.0))
-                for key in ("bold", "font_sigma", "font_z", "caps_ratio", "len", "proto_sim_max", "p_header")
-            },
-            "proto_top3": _serialize_top3(computed.get("proto_top3", [])),
-            "meets_threshold": meets,
-            "decision": "selected" if meets else "below_threshold",
-        }
-        candidate["number"] = _section_number(
-            kind_data["kind"], {"letter": kind_data.get("letter"), "number": raw_number}
+        norm_text = line.get("header_norm") or normalize_for_headers(line.get("text_norm", ""))
+        candidate = _build_candidate_record(
+            line,
+            norm_text,
+            encoder=encoder,
+            prototypes=prototypes,
         )
-        if candidate["proto_top3"]:
-            top_entry = candidate["proto_top3"][0]
-            if top_entry["score"] >= 0.6:
-                candidate["canonical_id"] = top_entry["id"]
-                candidate["canonical_conf"] = round(float(top_entry["score"]), 4)
+        if not candidate:
+            continue
         header_candidates.append(candidate)
+        header_debug_initial.append(_candidate_debug_entry(candidate))
 
     rescue_candidates = _appendix_neighbor_rescue(processed, header_candidates, encoder, prototypes)
     if rescue_candidates:
@@ -462,9 +527,22 @@ def run_pipeline(
     for cand in header_candidates:
         meets = cand.get("score", 0.0) >= THRESHOLD
         cand["meets_threshold"] = meets
-        cand["decision"] = "selected" if meets else "below_threshold"
+        style = cand.get("style") or _style_snapshot(cand, float(cand.get("caps_ratio") or 0.0))
+        cand["style"] = style
+        cand.setdefault("partials", {})
+        cand["partials"].setdefault("units_penalty_applied", False)
+        cand["decision"] = _decide_candidate(
+            meets,
+            bool(cand.get("is_numeric")),
+            bool(cand.get("is_appendix")),
+            style,
+        )
 
-    selected_headers = [cand for cand in header_candidates if cand["decision"] == "selected"]
+    header_debug_post_rescue = [_candidate_debug_entry(cand) for cand in header_candidates]
+
+    selected_headers = [
+        cand for cand in header_candidates if cand["decision"] in {"selected", "selected_fallback"}
+    ]
     appendix_gaps = _detect_appendix_gaps(selected_headers)
 
     sections: List[Dict] = []
@@ -782,6 +860,8 @@ def run_pipeline(
         "retrieval": retrieval_results,
         "traces": {
             "preprocess": preproc_trace,
+            "header_debug_initial": header_debug_initial,
+            "header_debug_post_rescue": header_debug_post_rescue,
             "headers": header_candidates,
             "retrieval": retrieval_trace,
             "validation": validation_trace,

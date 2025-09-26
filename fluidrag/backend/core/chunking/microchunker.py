@@ -65,8 +65,8 @@ def _compute_signals(text: str) -> Tuple[float, float, float]:
 def chunk(
     section_text: str,
     *,
-    window_chars: int = 450,
-    stride_chars: int = 80,
+    window_chars: int = 300,
+    stride_chars: int = 240,
 ) -> Iterator[Chunk]:
     """Yield overlapping window chunks for ``section_text`` with E/F/H signals."""
 
@@ -128,8 +128,8 @@ def chunk(
 def microchunk(
     section_text: str,
     *,
-    window_chars: int = 450,
-    stride_chars: int = 80,
+    window_chars: int = 300,
+    stride_chars: int = 240,
 ) -> Iterator[Chunk]:
     """Backward-compatible alias for :func:`chunk`."""
 
@@ -139,8 +139,8 @@ def microchunk(
 def iter_microchunks(
     section_text: str,
     *,
-    window_chars: int = 450,
-    stride_chars: int = 80,
+    window_chars: int = 300,
+    stride_chars: int = 240,
 ) -> Iterator[Tuple[int, int, str]]:
     """Public helper returning primitive tuples for compatibility layers."""
 
