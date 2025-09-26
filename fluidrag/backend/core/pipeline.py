@@ -5,7 +5,7 @@ import json
 import math
 import re
 from collections import defaultdict
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Set
 
 import numpy as np
 
@@ -57,6 +57,13 @@ DEFAULT_CONFIG: Dict[str, Mapping[str, object]] = {
 }
 
 
+_ALT_SPACE_CHARS = {"\u00A0", "\u2002", "\u2003", "\u202F"}
+_ALT_DOT_CHARS = {"\u2024", "\u2027", "\uFF0E"}
+_SOFT_APPENDIX_PREFIX_RX = re.compile(r"^[A-Z]\d+[.\u2024\u2027\uFF0E]")
+_SOFT_NUMERIC_PREFIX_RX = re.compile(r"^\d+\)")
+_NEIGHBOR_BONUS = 0.15
+
+
 def _caps_ratio(text: str) -> float:
     letters = [ch for ch in text if ch.isalpha()]
     if not letters:
@@ -68,6 +75,47 @@ def _caps_ratio(text: str) -> float:
 def _units_present(text: str) -> bool:
     parsed = parse_units(text or "")
     return bool(parsed.get("units"))
+
+
+def _extract_appendix_number(value: object) -> Optional[int]:
+    if value is None:
+        return None
+    token = str(value).strip()
+    if not token:
+        return None
+    token = token.rstrip(".)")
+    token = token.lstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+    if not token:
+        return None
+    try:
+        return int(token)
+    except ValueError:
+        return None
+
+
+def _normalize_soft_text(text: str) -> str:
+    if not text:
+        return ""
+    buf: List[str] = []
+    for ch in text:
+        if ch in _ALT_SPACE_CHARS:
+            buf.append(" ")
+        elif ch in _ALT_DOT_CHARS:
+            buf.append(".")
+        else:
+            buf.append(ch)
+    normalized = "".join(buf)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
+def _should_apply_units_penalty(text: str) -> bool:
+    stripped = _normalize_soft_text(text)
+    if _SOFT_NUMERIC_PREFIX_RX.match(stripped):
+        return False
+    if _SOFT_APPENDIX_PREFIX_RX.match(stripped):
+        return False
+    return True
 
 
 def _font_metrics(lines: List[Dict]) -> None:
@@ -88,6 +136,159 @@ def _font_metrics(lines: List[Dict]) -> None:
 
 def _serialize_top3(entries: Sequence[Tuple[str, float]]) -> List[Dict[str, float]]:
     return [{"id": proto_id, "score": float(score)} for proto_id, score in entries]
+
+
+def _apply_appendix_sequence_bonus(candidates: Sequence[Dict]) -> None:
+    groups: Dict[Tuple[int, str], List[Tuple[int, Dict]]] = defaultdict(list)
+    for cand in candidates:
+        if cand.get("kind") != "appendix":
+            continue
+        letter = str(cand.get("letter") or "").upper()
+        if not letter:
+            continue
+        number = _extract_appendix_number(cand.get("raw_number") or cand.get("number"))
+        if number is None:
+            continue
+        page = int(cand.get("page") or 0)
+        groups[(page, letter)].append((number, cand))
+
+    for (_page, letter), entries in groups.items():
+        if not entries:
+            continue
+        number_lookup = {num: cand for num, cand in entries}
+        for num, cand in entries:
+            neighbors = []
+            for delta in (-1, 1):
+                neighbor = number_lookup.get(num + delta)
+                if not neighbor:
+                    continue
+                if abs(int(neighbor.get("order", 0)) - int(cand.get("order", 0))) <= 4:
+                    neighbors.append(neighbor)
+            if neighbors:
+                parts = dict(cand.get("partials", {}))
+                parts["neighbor_bonus"] = parts.get("neighbor_bonus", 0.0) + _NEIGHBOR_BONUS
+                cand["partials"] = parts
+                cand["score"] = float(cand.get("score", 0.0) + _NEIGHBOR_BONUS)
+
+
+def _appendix_neighbor_rescue(
+    processed: Sequence[Dict],
+    header_candidates: Sequence[Dict],
+    encoder: EmbeddingEncoder,
+    prototypes: Mapping[str, np.ndarray],
+) -> List[Dict]:
+    groups: Dict[Tuple[int, str], List[Tuple[int, Dict]]] = defaultdict(list)
+    existing_keys: Set[Tuple[int, str, int]] = set()
+    for cand in header_candidates:
+        if cand.get("kind") == "appendix":
+            letter = str(cand.get("letter") or "").upper()
+            number = _extract_appendix_number(cand.get("raw_number") or cand.get("number"))
+            if number is None:
+                continue
+            page = int(cand.get("page") or 0)
+            groups[(page, letter)].append((number, cand))
+            existing_keys.add((page, letter, number))
+
+    additions: List[Dict] = []
+
+    for (page, letter), entries in groups.items():
+        if len(entries) < 4:
+            continue
+        numbers = sorted(num for num, _ in entries)
+        number_set = set(numbers)
+        for base in numbers:
+            pattern = {base, base + 1, base + 4, base + 5}
+            if not pattern.issubset(number_set):
+                continue
+            missing = [base + 2, base + 3]
+            left = next((cand for num, cand in entries if num == base + 1), None)
+            right = next((cand for num, cand in entries if num == base + 4), None)
+            if left is None or right is None:
+                continue
+            start = int(left.get("order", 0)) + 1
+            end = int(right.get("order", 0))
+            if start >= end:
+                continue
+            for idx in range(start, min(end, len(processed))):
+                base_line = processed[idx]
+                base_text = _normalize_soft_text(base_line.get("text_norm", ""))
+                if not base_text:
+                    continue
+                combined_text = base_text
+                tokens = combined_text.split(" ", 1)
+                first_token = tokens[0] if tokens else ""
+                gap_limit = min(end, len(processed))
+                if (
+                    first_token
+                    and _SOFT_APPENDIX_PREFIX_RX.match(first_token)
+                    and (len(tokens) == 1 or not tokens[1].strip())
+                    and idx + 1 < gap_limit
+                ):
+                    follower = processed[idx + 1]
+                    follower_text = _normalize_soft_text(follower.get("text_norm", ""))
+                    if follower_text:
+                        combined_text = f"{first_token} {follower_text}".strip()
+
+                norm_text = combined_text.strip()
+                if not norm_text:
+                    continue
+
+                rescue_line = dict(base_line)
+                rescue_line["text_norm"] = norm_text
+                rescue_line["caps_ratio"] = _caps_ratio(norm_text)
+
+                line_vector = encoder.embed_texts([norm_text])[0]
+                proto_matches = topk_header_prototypes(line_vector, prototypes, k=3)
+                computed = compute_features(rescue_line, proto_matches, p_header=0.0)
+                kind_data = classify_line(norm_text, rescue_line.get("caps_ratio", 0.0))
+                if kind_data.get("kind") != "appendix":
+                    continue
+                number_val = _extract_appendix_number(kind_data.get("number"))
+                if number_val is None:
+                    continue
+                if number_val not in missing:
+                    continue
+                key = (page, letter, number_val)
+                if key in existing_keys:
+                    continue
+
+                score, partials = score_candidate(kind_data["kind"], computed)
+                if kind_data["kind"] == "label" and _should_apply_units_penalty(norm_text):
+                    score -= 0.6
+                    partials = {**partials, "units_penalty": -0.6}
+
+                candidate = {
+                    **rescue_line,
+                    **kind_data,
+                    "page": rescue_line.get("page", page),
+                    "raw_number": kind_data.get("number"),
+                    "score": float(score),
+                    "partials": {key_: float(val) for key_, val in partials.items()},
+                    "features": {
+                        key_: float(computed.get(key_, 0.0))
+                        for key_ in (
+                            "bold",
+                            "font_sigma",
+                            "font_z",
+                            "caps_ratio",
+                            "len",
+                            "proto_sim_max",
+                            "p_header",
+                        )
+                    },
+                    "proto_top3": _serialize_top3(computed.get("proto_top3", [])),
+                    "meets_threshold": False,
+                    "decision": "below_threshold",
+                }
+                candidate["number"] = _section_number(
+                    kind_data["kind"], {"letter": kind_data.get("letter"), "number": kind_data.get("number")}
+                )
+                candidate["rescue_applied"] = True
+
+                additions.append(candidate)
+                existing_keys.add(key)
+
+    return additions
 
 
 def _detect_appendix_gaps(candidates: Sequence[Dict]) -> List[Dict]:
@@ -223,7 +424,7 @@ def run_pipeline(
         if kind_data.get("kind") == "none":
             continue
         score, partials = score_candidate(kind_data["kind"], computed)
-        if kind_data["kind"] == "label" and _units_present(text_norm):
+        if kind_data["kind"] == "label" and _units_present(text_norm) and _should_apply_units_penalty(text_norm):
             score -= 0.6
             partials = {**partials, "units_penalty": -0.6}
         meets = score >= THRESHOLD
@@ -251,6 +452,17 @@ def run_pipeline(
                 candidate["canonical_id"] = top_entry["id"]
                 candidate["canonical_conf"] = round(float(top_entry["score"]), 4)
         header_candidates.append(candidate)
+
+    rescue_candidates = _appendix_neighbor_rescue(processed, header_candidates, encoder, prototypes)
+    if rescue_candidates:
+        header_candidates.extend(rescue_candidates)
+
+    _apply_appendix_sequence_bonus(header_candidates)
+
+    for cand in header_candidates:
+        meets = cand.get("score", 0.0) >= THRESHOLD
+        cand["meets_threshold"] = meets
+        cand["decision"] = "selected" if meets else "below_threshold"
 
     selected_headers = [cand for cand in header_candidates if cand["decision"] == "selected"]
     appendix_gaps = _detect_appendix_gaps(selected_headers)
