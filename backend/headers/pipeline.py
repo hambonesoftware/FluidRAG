@@ -123,6 +123,34 @@ def _dedupe_promotions(
     return selected
 
 
+def _collect_uf_anchor_candidates(
+    candidates_by_chunk: Dict[str, List[HeaderCandidate]],
+    uf_chunks: List[UFChunk],
+) -> List[Tuple[HeaderCandidate, str]]:
+    uf_promotions: List[Tuple[HeaderCandidate, str]] = []
+    for chunk in uf_chunks:
+        if not chunk.header_anchor:
+            continue
+        cand_list = candidates_by_chunk.get(chunk.id)
+        if not cand_list:
+            continue
+        uf_promotions.append((cand_list[0], "uf_anchor"))
+    return uf_promotions
+
+
+def _collect_llm_candidates(
+    candidates: List[HeaderCandidate], llm_headers: VerifiedHeaders
+) -> List[Tuple[HeaderCandidate, str]]:
+    llm_labels = {header.label for header in llm_headers.headers}
+    llm_promotions: List[Tuple[HeaderCandidate, str]] = []
+    if not llm_labels:
+        return llm_promotions
+    for candidate in candidates:
+        if candidate.label and candidate.label in llm_labels:
+            llm_promotions.append((candidate, "llm"))
+    return llm_promotions
+
+
 def _promote_raw_truth(
     candidates: List[HeaderCandidate],
     uf_chunks: List[UFChunk],
@@ -131,25 +159,20 @@ def _promote_raw_truth(
     for candidate in candidates:
         candidate.promoted = False
         candidate.promotion_reason = None
-    by_chunk: Dict[str, List[HeaderCandidate]] = {}
+
+    candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
     for candidate in candidates:
-        by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
+        candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
+
     proposals: List[Tuple[HeaderCandidate, str]] = []
-    for chunk in uf_chunks:
-        if not chunk.header_anchor:
-            continue
-        cand_list = by_chunk.get(chunk.id)
-        if cand_list:
-            proposals.append((cand_list[0], "uf_anchor"))
-    llm_labels = {header.label for header in llm_headers.headers}
-    for candidate in candidates:
-        if candidate.label and candidate.label in llm_labels:
-            proposals.append((candidate, "llm"))
-    unique = _dedupe_promotions(proposals)
-    for candidate, source in unique:
+    proposals.extend(_collect_uf_anchor_candidates(candidates_by_chunk, uf_chunks))
+    proposals.extend(_collect_llm_candidates(candidates, llm_headers))
+
+    merged = _dedupe_promotions(proposals)
+    for candidate, source in merged:
         candidate.promoted = True
         candidate.promotion_reason = source
-    return [candidate for candidate, _ in unique]
+    return [candidate for candidate, _ in merged]
 
 
 def _priority_key(record: SpanRecord, llm_labels: Set[str]) -> Tuple[float, ...]:
@@ -441,7 +464,11 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         promotion_reason = candidate.promotion_reason if candidate and candidate.promoted else None
         accepted = bool(promotion_reason)
         decision = "promoted" if promotion_reason else "rejected"
-        if not accepted and HEADER_GATE_MODE == "score_gate":
+        if (
+            not accepted
+            and HEADER_MODE != "raw_truth"
+            and HEADER_GATE_MODE == "score_gate"
+        ):
             if hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"] and final_score >= GRAPH_DEFAULTS["theta_final"]:
                 accepted = True
                 decision = "accepted"
