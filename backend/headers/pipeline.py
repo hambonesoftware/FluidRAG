@@ -101,9 +101,11 @@ def _normalize_candidate_text(candidate: HeaderCandidate) -> str:
     return re.sub(r"\s+", " ", base).strip().lower()
 
 
-def _dedupe_promotions(
+def _normalize_and_merge(
     proposals: List[Tuple[HeaderCandidate, str]]
 ) -> List[Tuple[HeaderCandidate, str]]:
+    """Collapse duplicate promotions that share text within a local span."""
+
     selected: List[Tuple[HeaderCandidate, str]] = []
     for candidate, source in proposals:
         norm_text = _normalize_candidate_text(candidate)
@@ -115,6 +117,8 @@ def _dedupe_promotions(
                 continue
             if abs(existing.start_char - candidate.start_char) <= 40:
                 matched_index = idx
+                # Prefer UF anchors when both sources agree so that the
+                # downstream stitching logic keeps the stronger anchor.
                 if existing_source != "uf_anchor" and source == "uf_anchor":
                     selected[idx] = (candidate, source)
                 break
@@ -156,6 +160,8 @@ def _promote_raw_truth(
     uf_chunks: List[UFChunk],
     llm_headers: VerifiedHeaders,
 ) -> List[HeaderCandidate]:
+    """Promote the union of UF anchors and LLM headers without score gating."""
+
     for candidate in candidates:
         candidate.promoted = False
         candidate.promotion_reason = None
@@ -165,13 +171,18 @@ def _promote_raw_truth(
         candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
 
     proposals: List[Tuple[HeaderCandidate, str]] = []
+    # 1) Gather what already works: UF anchors and LLM labels.
     proposals.extend(_collect_uf_anchor_candidates(candidates_by_chunk, uf_chunks))
     proposals.extend(_collect_llm_candidates(candidates, llm_headers))
 
-    merged = _dedupe_promotions(proposals)
+    # 2) Normalize + de-dupe (same text, nearby span → one item).
+    merged = _normalize_and_merge(proposals)
+
+    # 3) Promote everything in the merged list.
     for candidate, source in merged:
         candidate.promoted = True
         candidate.promotion_reason = source
+
     return [candidate for candidate, _ in merged]
 
 
