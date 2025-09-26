@@ -253,7 +253,8 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         cached_pre = get_preprocess_cache(file_hash)
         if cached_pre:
             payload = (
-                cached_pre.get("micro_chunks")
+                cached_pre.get("uf_chunks")
+                or cached_pre.get("micro_chunks")
                 or cached_pre.get("macro_chunks")
                 or cached_pre.get("chunks")
                 or []
