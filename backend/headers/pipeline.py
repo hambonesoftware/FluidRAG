@@ -23,7 +23,7 @@ from backend.efhg.fluid import (
 )
 from backend.efhg.graph_gate import DEFAULT_PARAMS as GRAPH_DEFAULTS, GraphContext, score_graph, snap_and_trim
 from backend.efhg.hep import DEFAULT_PARAMS as HEP_DEFAULTS, score_span_hep
-from backend.headers.config import HEADER_GATE_MODE, STRICT_CONFLICT_ONLY
+from backend.headers.config import HEADER_GATE_MODE, HEADER_MODE, STRICT_CONFLICT_ONLY
 from backend.headers.header_llm import (
     VerifiedHeader,
     VerifiedHeaders,
@@ -94,6 +94,62 @@ def _classify_pattern(label: str | None) -> str | None:
     if re.match(r"^[A-Z]\.\d{1,3}$", cleaned):
         return "appendix_sub_AlN"
     return None
+
+
+def _normalize_candidate_text(candidate: HeaderCandidate) -> str:
+    base = candidate.text or candidate.label or ""
+    return re.sub(r"\s+", " ", base).strip().lower()
+
+
+def _dedupe_promotions(
+    proposals: List[Tuple[HeaderCandidate, str]]
+) -> List[Tuple[HeaderCandidate, str]]:
+    selected: List[Tuple[HeaderCandidate, str]] = []
+    for candidate, source in proposals:
+        norm_text = _normalize_candidate_text(candidate)
+        matched_index: int | None = None
+        for idx, (existing, existing_source) in enumerate(selected):
+            if existing.page != candidate.page:
+                continue
+            if _normalize_candidate_text(existing) != norm_text:
+                continue
+            if abs(existing.start_char - candidate.start_char) <= 40:
+                matched_index = idx
+                if existing_source != "uf_anchor" and source == "uf_anchor":
+                    selected[idx] = (candidate, source)
+                break
+        if matched_index is None:
+            selected.append((candidate, source))
+    return selected
+
+
+def _promote_raw_truth(
+    candidates: List[HeaderCandidate],
+    uf_chunks: List[UFChunk],
+    llm_headers: VerifiedHeaders,
+) -> List[HeaderCandidate]:
+    for candidate in candidates:
+        candidate.promoted = False
+        candidate.promotion_reason = None
+    by_chunk: Dict[str, List[HeaderCandidate]] = {}
+    for candidate in candidates:
+        by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
+    proposals: List[Tuple[HeaderCandidate, str]] = []
+    for chunk in uf_chunks:
+        if not chunk.header_anchor:
+            continue
+        cand_list = by_chunk.get(chunk.id)
+        if cand_list:
+            proposals.append((cand_list[0], "uf_anchor"))
+    llm_labels = {header.label for header in llm_headers.headers}
+    for candidate in candidates:
+        if candidate.label and candidate.label in llm_labels:
+            proposals.append((candidate, "llm"))
+    unique = _dedupe_promotions(proposals)
+    for candidate, source in unique:
+        candidate.promoted = True
+        candidate.promotion_reason = source
+    return [candidate for candidate, _ in unique]
 
 
 def _priority_key(record: SpanRecord, llm_labels: Set[str]) -> Tuple[float, ...]:
@@ -306,12 +362,6 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
 
     uf_chunks = uf_chunk(decomp)
     candidates = scan_candidates(uf_chunks)
-    promote_candidates(candidates, HEADER_GATE_MODE)
-    candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
-    for candidate in candidates:
-        candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
-    for cand_list in candidates_by_chunk.values():
-        cand_list.sort(key=lambda c: (not c.promoted, c.line_index, c.start_char))
     compute_entropy_features(uf_chunks)
     start_scores = score_starts(uf_chunks)
     stop_scores = score_stops(uf_chunks)
@@ -330,6 +380,15 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         verified_headers = VerifiedHeaders()
 
     repaired_headers = aggressive_sequence_repair(verified_headers, pages_norm, tokens_per_page)
+    if HEADER_MODE == "raw_truth":
+        _promote_raw_truth(candidates, uf_chunks, verified_headers)
+    else:
+        promote_candidates(candidates, HEADER_GATE_MODE)
+    candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
+    for candidate in candidates:
+        candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
+    for cand_list in candidates_by_chunk.values():
+        cand_list.sort(key=lambda c: (not c.promoted, c.line_index, c.start_char))
     domain_hint = (
         decomp.get("metadata", {}).get("domain")
         or decomp.get("metadata", {}).get("domain_hint")
@@ -443,8 +502,13 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         verification = {"status": "efhg"}
         if record.promotion_reason:
             verification["promotion_reason"] = record.promotion_reason
-        source = "pattern" if record.promotion_reason else "efhg"
-        confidence = 0.95 if record.promotion_reason == "pattern" else 0.9
+        source = record.promotion_reason or "efhg"
+        if record.promotion_reason == "uf_anchor":
+            confidence = 0.95
+        elif record.promotion_reason == "llm":
+            confidence = 0.9
+        else:
+            confidence = 0.9 if record.promotion_reason else 0.9
         final_headers_map[label] = VerifiedHeader(
             label=label,
             text=canonical_text,
@@ -638,6 +702,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "graph": GRAPH_DEFAULTS,
             "domain_hint": domain_hint,
             "header_gate_mode": HEADER_GATE_MODE,
+            "header_mode": HEADER_MODE,
             "strict_conflict_only": STRICT_CONFLICT_ONLY,
         },
         "uf_chunks": [
