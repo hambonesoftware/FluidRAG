@@ -32,6 +32,14 @@ def test_sequence_repair_inserts_missing_numeric(tmp_path: Path) -> None:
     assert "9)" in headers
     assert headers["9)"]["source"] == "repair"
 
+    promoted = json.loads((output_dir / "headers_promoted.json").read_text())
+    numeric_repairs = [
+        entry
+        for entry in promoted
+        if entry.get("promotion_reason") == "sequence_repair" and entry.get("pattern") == "numeric_section"
+    ]
+    assert numeric_repairs, "Sequence repair promotion should be logged for numeric header"
+
     audit = json.loads((output_dir / "candidate_audit.json").read_text())
     repair_entries = [entry for entry in audit["sequence_repair"] if entry["series"] == "NUMERIC"]
     assert repair_entries, "Expected numeric repair entry"

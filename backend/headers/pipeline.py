@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Set, Tuple
@@ -76,6 +77,23 @@ def _pattern_rank(record: SpanRecord) -> int:
     if record.candidate:
         return _PATTERN_PRIORITY.get(record.candidate.pattern, 1)
     return 1
+
+
+def _classify_pattern(label: str | None) -> str | None:
+    if not label:
+        return None
+    cleaned = label.strip()
+    if not cleaned:
+        return None
+    if re.match(r"^\d+\)$", cleaned):
+        return "numeric_section"
+    if re.match(r"(?i)^(appendix|annex)\s+[A-Z]\b", cleaned):
+        return "appendix_top"
+    if re.match(r"^[A-Z]\d{1,3}\.$", cleaned):
+        return "appendix_sub_AN"
+    if re.match(r"^[A-Z]\.\d{1,3}$", cleaned):
+        return "appendix_sub_AlN"
+    return None
 
 
 def _priority_key(record: SpanRecord, llm_labels: Set[str]) -> Tuple[float, ...]:
@@ -493,29 +511,70 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     efhg_records = spans_audit
 
     raw_candidate_payload = [candidate.to_dict() for candidate in candidates]
-    promoted_payload = [
-        {
-            "candidate_id": record.candidate.candidate_id if record.candidate else None,
-            "text": record.candidate.text if record.candidate else record.span.text,
-            "page": record.span.page,
-            "idx": record.candidate.line_index if record.candidate else None,
-            "pattern": record.candidate.pattern if record.candidate else None,
-            "promotion_reason": record.promotion_reason,
-            "stitched_span": {
-                "uf_start": record.span.chunk_ids[0],
-                "uf_end": record.span.chunk_ids[-1],
-            },
-            "efhg": {
-                "E": {"start": record.start_score, "stop": record.stop_score},
-                "F": {"flow": record.span.flow_total},
-                "H": record.hep,
-                "G": {"score": record.graph_score, "penalties": record.graph_penalties},
-            },
-            "conflicts_resolved": list(record.conflicts_resolved),
-        }
-        for record in accepted_records
-        if record.promotion_reason
-    ]
+    promoted_payload: List[Dict[str, Any]] = []
+    for record in accepted_records:
+        if not record.promotion_reason:
+            continue
+        promoted_payload.append(
+            {
+                "candidate_id": record.candidate.candidate_id if record.candidate else None,
+                "text": record.candidate.text if record.candidate else record.span.text,
+                "page": record.span.page,
+                "idx": record.candidate.line_index if record.candidate else None,
+                "pattern": record.candidate.pattern if record.candidate else _classify_pattern(_extract_label(record.span.text)),
+                "promotion_reason": record.promotion_reason,
+                "stitched_span": {
+                    "uf_start": record.span.chunk_ids[0],
+                    "uf_end": record.span.chunk_ids[-1],
+                },
+                "efhg": {
+                    "E": {"start": record.start_score, "stop": record.stop_score},
+                    "F": {"flow": record.span.flow_total},
+                    "H": record.hep,
+                    "G": {"score": record.graph_score, "penalties": record.graph_penalties},
+                },
+                "conflicts_resolved": list(record.conflicts_resolved),
+            }
+        )
+
+    repair_lookup: Dict[Tuple[str, int, Tuple[int, int]], Dict[str, Any]] = {}
+    for entry in repaired_headers.repair_log:
+        series = entry.get("series")
+        gap = entry.get("gap")
+        for result in entry.get("result", []):
+            label = result.get("label")
+            page = int(result.get("page", 0) or 0)
+            span_raw = result.get("span")
+            if isinstance(span_raw, (list, tuple)) and len(span_raw) == 2:
+                span_tuple = (int(span_raw[0]), int(span_raw[1]))
+            else:
+                span_tuple = (0, 0)
+            repair_lookup[(label, page, span_tuple)] = {
+                "series": series,
+                "gap": gap,
+                "method": result.get("method"),
+                "confidence": result.get("confidence"),
+            }
+
+    for header in repaired_headers.headers:
+        if header.source != "repair":
+            continue
+        key = (header.label, header.page, tuple(header.span))
+        repair_meta = repair_lookup.get(key, {})
+        promoted_payload.append(
+            {
+                "candidate_id": None,
+                "text": header.text,
+                "page": header.page,
+                "idx": -1,
+                "pattern": _classify_pattern(header.label),
+                "promotion_reason": "sequence_repair",
+                "stitched_span": {"uf_start": None, "uf_end": None},
+                "efhg": {"E": {}, "F": {}, "H": {}, "G": {}},
+                "conflicts_resolved": [],
+                "repair": repair_meta,
+            }
+        )
     suppressed_payload = [
         {
             "candidate_id": record.candidate.candidate_id if record.candidate else None,
@@ -526,22 +585,44 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         for record in span_records
         if record.suppression_reason
     ]
-    summary_rows = [
-        {
-            "page": record.span.page,
-            "idx": record.candidate.line_index if record.candidate else -1,
-            "pattern": record.candidate.pattern if record.candidate else "",
-            "decision": record.decision,
-            "reason": (
-                record.promotion_reason
-                if record.promotion_reason
-                else json.dumps(record.suppression_reason)
-                if record.suppression_reason
-                else ""
-            ),
-        }
-        for record in span_records
-    ]
+    summary_rows: List[Dict[str, Any]] = []
+    for record in span_records:
+        if record.promotion_reason:
+            reason = record.promotion_reason
+        elif record.suppression_reason:
+            reason = json.dumps(record.suppression_reason)
+        else:
+            reason = ""
+        summary_rows.append(
+            {
+                "page": record.span.page,
+                "idx": record.candidate.line_index if record.candidate else -1,
+                "pattern": record.candidate.pattern if record.candidate else _classify_pattern(_extract_label(record.span.text)) or "",
+                "decision": record.decision,
+                "reason": reason,
+            }
+        )
+
+    for header in repaired_headers.headers:
+        if header.source != "repair":
+            continue
+        key = (header.label, header.page, tuple(header.span))
+        repair_meta = repair_lookup.get(key, {})
+        repair_reason_parts = ["sequence_repair"]
+        if repair_meta.get("series"):
+            repair_reason_parts.append(str(repair_meta["series"]))
+        if repair_meta.get("gap"):
+            repair_reason_parts.append(str(repair_meta["gap"]))
+        repair_reason = "|".join(repair_reason_parts)
+        summary_rows.append(
+            {
+                "page": header.page,
+                "idx": -1,
+                "pattern": _classify_pattern(header.label) or "",
+                "decision": "sequence_repair",
+                "reason": repair_reason,
+            }
+        )
 
     audit_payload = {
         "config": {
