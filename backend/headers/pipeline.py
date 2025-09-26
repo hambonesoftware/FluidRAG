@@ -24,6 +24,7 @@ from backend.efhg.fluid import (
 from backend.efhg.graph_gate import DEFAULT_PARAMS as GRAPH_DEFAULTS, GraphContext, score_graph, snap_and_trim
 from backend.efhg.hep import DEFAULT_PARAMS as HEP_DEFAULTS, score_span_hep
 from backend.headers.config import HEADER_GATE_MODE, HEADER_MODE, STRICT_CONFLICT_ONLY
+from backend.headers.gap_probe import GapProbeLogger
 from backend.headers.header_llm import (
     VerifiedHeader,
     VerifiedHeaders,
@@ -401,6 +402,17 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     stop_scores = score_stops(uf_chunks)
     edges = build_edges(uf_chunks)
 
+    gap_logger = GapProbeLogger(
+        doc_id,
+        pages_raw,
+        pages_norm,
+        tokens_per_page,
+        uf_chunks,
+        start_scores,
+        stop_scores,
+        candidates,
+    )
+
     messages = build_header_prompt(pages_norm)
     llm_raw = ""
     verified_headers: VerifiedHeaders
@@ -590,6 +602,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         for header in final_headers
     ]
 
+    gap_logger.detect_gaps(headers_payload)
+
     accepted_spans = [record.span for record in accepted_records]
     header_shards_payload = _build_header_shards(final_headers, accepted_spans, chunk_lookup)
 
@@ -768,6 +782,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         "efhg_header_spans": spans_audit,
         "final_headers": headers_payload,
         "header_shards": header_shards_payload,
+        "gap_probes": gap_logger.as_list(),
     }
 
     with (output_dir / "header_candidates_raw.json").open("w", encoding="utf-8") as handle:
@@ -789,6 +804,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         json.dump(headers_payload, handle, ensure_ascii=False, indent=2)
     with (output_dir / "header_shards.json").open("w", encoding="utf-8") as handle:
         json.dump(header_shards_payload, handle, ensure_ascii=False, indent=2)
+    gap_logger.write(output_dir)
+
     with (output_dir / "candidate_audit.json").open("w", encoding="utf-8") as handle:
         json.dump(audit_payload, handle, ensure_ascii=False, indent=2)
 
