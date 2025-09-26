@@ -14,6 +14,16 @@ def test_units_and_ops_parsed():
     assert dimension_sanity(parsed["unit"])
 
 
+def test_units_tolerance_and_range_detection():
+    tol = parse_units("Maintain 24 VDC ± 1 V")
+    assert tol["tol"] == 1.0
+    assert tol["unit"].lower() in {"vdc", "v"}
+
+    rng = parse_units("Operate between 50-60 psi under load")
+    assert rng["range"] == (50.0, 60.0)
+    assert rng["unit"].lower() == "psi"
+
+
 def test_extract_inequalities():
     ops = extract_inequalities("Pressure shall be >= 50 psi and <= 80 psi")
     assert ops == [">=", "<="]

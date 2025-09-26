@@ -18,11 +18,17 @@ class ChunkWindow:
         Exclusive end offset of the chunk relative to the section text.
     text:
         The chunk text itself.
+    window_chars:
+        Target window size used when generating the chunk.
+    stride_chars:
+        Configured stride between successive chunks.
     """
 
     start: int
     end: int
     text: str
+    window_chars: int
+    stride_chars: int
 
 
 def _split_sentences(text: str) -> List[Tuple[int, str]]:
@@ -86,7 +92,13 @@ def microchunk(
 
         last_sentence_offset = sentences[end_idx - 1][0]
         end_offset = last_sentence_offset + len(sentences[end_idx - 1][1])
-        yield ChunkWindow(start=start_offset, end=end_offset, text=chunk_text)
+        yield ChunkWindow(
+            start=start_offset,
+            end=end_offset,
+            text=chunk_text,
+            window_chars=window_chars,
+            stride_chars=stride_chars,
+        )
 
         if end_idx >= n_sentences:
             break
