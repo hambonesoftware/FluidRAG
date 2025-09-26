@@ -1,0 +1,318 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidrag.example.com/schemas/candidate_audit.schema.json",
+  "title": "Candidate Header Audit",
+  "type": "object",
+  "required": [
+    "config",
+    "uf_chunks",
+    "llm_headers",
+    "sequence_repair",
+    "efhg_header_spans",
+    "final_headers",
+    "header_shards"
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "Span": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "integer"
+      }
+    },
+    "SpanFloat": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "number"
+      }
+    },
+    "VerifiedHeader": {
+      "type": "object",
+      "required": ["label", "text", "page", "span", "verification", "source", "confidence"],
+      "additionalProperties": true,
+      "properties": {
+        "label": {"type": "string"},
+        "text": {"type": "string"},
+        "page": {"type": "integer", "minimum": 1},
+        "span": {"$ref": "#/$defs/Span"},
+        "verification": {
+          "type": "object",
+          "required": ["status"],
+          "additionalProperties": true,
+          "properties": {
+            "status": {"type": "string"},
+            "method": {"type": "string"},
+            "canonical": {"type": "string"}
+          }
+        },
+        "source": {"type": "string"},
+        "confidence": {"type": "number"},
+        "span_char": {"$ref": "#/$defs/Span"}
+      }
+    },
+    "HeaderReference": {
+      "type": "object",
+      "required": ["label", "text", "page", "span"],
+      "additionalProperties": true,
+      "properties": {
+        "label": {"type": "string"},
+        "text": {"type": "string"},
+        "page": {"type": "integer", "minimum": 1},
+        "span": {"$ref": "#/$defs/Span"}
+      }
+    }
+  },
+  "properties": {
+    "config": {
+      "type": "object",
+      "required": ["uf_max_tokens", "uf_overlap", "entropy", "fluid", "hep", "graph"],
+      "additionalProperties": true,
+      "properties": {
+        "uf_max_tokens": {"type": "integer"},
+        "uf_overlap": {"type": "integer"},
+        "entropy": {
+          "type": "object",
+          "required": ["weights", "seed_quantile", "stop_quantile"],
+          "properties": {
+            "weights": {
+              "type": "object",
+              "required": ["w1", "w2", "w3", "w4", "w5", "w6"],
+              "additionalProperties": false,
+              "properties": {
+                "w1": {"type": "number"},
+                "w2": {"type": "number"},
+                "w3": {"type": "number"},
+                "w4": {"type": "number"},
+                "w5": {"type": "number"},
+                "w6": {"type": "number"}
+              }
+            },
+            "seed_quantile": {"type": "number"},
+            "stop_quantile": {"type": "number"}
+          },
+          "additionalProperties": true
+        },
+        "fluid": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "hep": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "graph": {
+          "type": "object",
+          "additionalProperties": {"type": "number"}
+        },
+        "domain_hint": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "uf_chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "page",
+          "span",
+          "span_char",
+          "span_bbox",
+          "style",
+          "lex",
+          "entropy",
+          "header_anchor"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "string"},
+          "page": {"type": "integer", "minimum": 1},
+          "span": {"$ref": "#/$defs/Span"},
+          "span_char": {"$ref": "#/$defs/Span"},
+          "span_bbox": {"type": ["array", "null"], "minItems": 4, "maxItems": 4, "items": {"type": "number"}},
+          "text_preview": {"type": "string"},
+          "style": {
+            "type": "object",
+            "required": ["font_size", "bold", "indent"],
+            "properties": {
+              "font_size": {"type": "number"},
+              "bold": {"type": "boolean"},
+              "indent": {"type": "number"}
+            },
+            "additionalProperties": true
+          },
+          "lex": {
+            "type": "object",
+            "required": ["has_modal", "numbers", "units", "citation_hints"],
+            "properties": {
+              "has_modal": {"type": "boolean"},
+              "numbers": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "units": {
+                "type": "array",
+                "items": {"type": "string"}
+              },
+              "citation_hints": {"type": "boolean"}
+            },
+            "additionalProperties": true
+          },
+          "entropy": {
+            "type": "object",
+            "required": ["H_tkn", "H_pos", "dH_prev", "dH_next", "modal"],
+            "properties": {
+              "H_tkn": {"type": "number"},
+              "H_pos": {"type": "number"},
+              "dH_prev": {"type": "number"},
+              "dH_next": {"type": "number"},
+              "modal": {"type": "number"}
+            },
+            "additionalProperties": true
+          },
+          "header_anchor": {"type": "boolean"},
+          "domain_hint": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "llm_headers": {
+      "type": "object",
+      "required": ["raw_fenced_json", "verified"],
+      "additionalProperties": true,
+      "properties": {
+        "raw_fenced_json": {"type": "string"},
+        "verified": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/VerifiedHeader"}
+        },
+        "error": {"type": ["string", "null"]}
+      }
+    },
+    "sequence_repair": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["series", "gap", "before", "after", "windows", "result"],
+        "additionalProperties": true,
+        "properties": {
+          "series": {"type": "string"},
+          "gap": {"type": "string"},
+          "before": {"$ref": "#/$defs/VerifiedHeader"},
+          "after": {"$ref": "#/$defs/VerifiedHeader"},
+          "windows": {"type": "integer", "minimum": 0},
+          "result": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["label", "text", "page", "span", "method", "confidence"],
+              "additionalProperties": true,
+              "properties": {
+                "label": {"type": "string"},
+                "text": {"type": "string"},
+                "page": {"type": "integer", "minimum": 1},
+                "span": {"$ref": "#/$defs/Span"},
+                "method": {"type": "string"},
+                "confidence": {"type": "number"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "efhg_header_spans": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["header_label", "page", "span", "chunk_ids", "scores", "decision", "text_preview"],
+        "additionalProperties": true,
+        "properties": {
+          "header_label": {"type": ["string", "null"]},
+          "page": {"type": "integer", "minimum": 1},
+          "span": {"$ref": "#/$defs/Span"},
+          "chunk_ids": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "scores": {
+            "type": "object",
+            "required": ["entropy", "fluid", "hep", "graph", "final"],
+            "additionalProperties": true,
+            "properties": {
+              "entropy": {
+                "type": "object",
+                "required": ["S_start", "S_stop"],
+                "properties": {
+                  "S_start": {"type": "number"},
+                  "S_stop": {"type": "number"}
+                },
+                "additionalProperties": true
+              },
+              "fluid": {
+                "type": "object",
+                "required": ["Flow_total", "edges_used"],
+                "properties": {
+                  "Flow_total": {"type": "number"},
+                  "edges_used": {"type": "integer", "minimum": 0}
+                },
+                "additionalProperties": true
+              },
+              "hep": {
+                "type": "object",
+                "required": ["S_HEP"],
+                "additionalProperties": true,
+                "properties": {
+                  "S_HEP": {"type": "number"}
+                }
+              },
+              "graph": {
+                "type": "object",
+                "required": ["S_graph", "penalties"],
+                "additionalProperties": true,
+                "properties": {
+                  "S_graph": {"type": "number"},
+                  "penalties": {
+                    "type": "object",
+                    "additionalProperties": {"type": "number"}
+                  }
+                }
+              },
+              "final": {"type": "number"}
+            }
+          },
+          "decision": {"type": "string"},
+          "text_preview": {"type": "string"}
+        }
+      }
+    },
+    "final_headers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/VerifiedHeader"}
+    },
+    "header_shards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "page", "span", "span_char", "chunk_ids", "text", "source", "confidence"],
+        "additionalProperties": true,
+        "properties": {
+          "label": {"type": "string"},
+          "page": {"type": "integer", "minimum": 1},
+          "span": {"$ref": "#/$defs/Span"},
+          "span_char": {"$ref": "#/$defs/Span"},
+          "chunk_ids": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "text": {"type": "string"},
+          "source": {"type": "string"},
+          "confidence": {"type": "number"}
+        }
+      }
+    }
+  }
+}

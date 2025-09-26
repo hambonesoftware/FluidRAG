@@ -39,6 +39,7 @@ class HeaderIndex:
     headers: List[Dict[str, Any]]
     uf_chunks: List[UFChunk]
     spans: List[Dict[str, Any]]
+    header_shards: List[Dict[str, Any]]
     output_dir: Path
 
 
@@ -113,6 +114,51 @@ def _persist_jsonl(path: Path, records: List[Dict[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _build_header_shards(
+    final_headers: List[VerifiedHeader],
+    accepted_spans: List[Span],
+    chunk_lookup: Dict[str, UFChunk],
+) -> List[Dict[str, Any]]:
+    spans_by_label: Dict[str, Span] = {}
+    for span in accepted_spans:
+        label = _extract_label(span.text)
+        if label and label not in spans_by_label:
+            spans_by_label[label] = span
+
+    shards: List[Dict[str, Any]] = []
+    for header in final_headers:
+        label = header.label
+        span = spans_by_label.get(label)
+        if span:
+            chunk_ids = list(span.chunk_ids)
+            text_preview = span.text.strip()
+        else:
+            candidates = [
+                chunk
+                for chunk in chunk_lookup.values()
+                if chunk.page == header.page and label in chunk.text
+            ]
+            if candidates:
+                chunk_ids = [candidates[0].id]
+                text_preview = candidates[0].text.strip()
+            else:
+                chunk_ids = []
+                text_preview = f"{label} {header.text}".strip()
+        shards.append(
+            {
+                "label": label,
+                "page": header.page,
+                "span": header.span,
+                "span_char": header.span,
+                "chunk_ids": chunk_ids,
+                "text": text_preview,
+                "source": header.source,
+                "confidence": header.confidence,
+            }
+        )
+    return shards
 
 
 def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
@@ -222,11 +268,14 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "page": header.page,
             "span": header.span,
             "span_char": header.span,
+            "verification": header.verification,
             "source": header.source,
             "confidence": header.confidence,
         }
         for header in final_headers
     ]
+
+    header_shards_payload = _build_header_shards(final_headers, accepted_spans, chunk_lookup)
 
     uf_records = [
         {
@@ -281,12 +330,15 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         "sequence_repair": repaired_headers.repair_log,
         "efhg_header_spans": spans_audit,
         "final_headers": headers_payload,
+        "header_shards": header_shards_payload,
     }
 
     _persist_jsonl(output_dir / "uf_chunks.jsonl", uf_records)
     _persist_jsonl(output_dir / "efhg_spans.jsonl", efhg_records)
     with (output_dir / "headers.json").open("w", encoding="utf-8") as handle:
         json.dump(headers_payload, handle, ensure_ascii=False, indent=2)
+    with (output_dir / "header_shards.json").open("w", encoding="utf-8") as handle:
+        json.dump(header_shards_payload, handle, ensure_ascii=False, indent=2)
     with (output_dir / "candidate_audit.json").open("w", encoding="utf-8") as handle:
         json.dump(audit_payload, handle, ensure_ascii=False, indent=2)
 
@@ -295,6 +347,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         headers=headers_payload,
         uf_chunks=uf_chunks,
         spans=efhg_records,
+        header_shards=header_shards_payload,
         output_dir=output_dir,
     )
 
