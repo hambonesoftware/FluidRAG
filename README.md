@@ -112,6 +112,12 @@ python -m cli.run_passes --session <id> --config config/fluidrag.yaml
 python -m cli.qa_eval --gold tests/gold_specs.jsonl --pred out/specs.jsonl --report out/qa_report.json
 ```
 
+## Additional documentation
+
+- [Appendix header recovery playbook](docs/appendix_header_recovery.md) –
+  production techniques for rescuing missed Appendix A5/A6 headings across the
+  ingestion, detection, retrieval, and post-selection stages.
+
 ## License
 
 MIT
