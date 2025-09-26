@@ -3,22 +3,25 @@ from __future__ import annotations
 from pathlib import Path
 import json
 from datetime import datetime, timezone
+import logging
 
 from flask import Blueprint, request, jsonify, make_response
 import os
 
 from fluidrag.config import load_config
 
-from ..chunking.atomic_chunker import AtomicChunker
-from ..chunking.macro_chunker import MacroChunker
 from ..chunking.token_chunker import (
     MICRO_MAX_TOKENS,
     MICRO_OVERLAP_TOKENS,
     micro_chunks_by_tokens,
 )
 from ..pipeline import preprocess as pp
+from ..pipeline.uf_pipeline import run_pipeline as run_uf_pipeline
 from ..persistence import get_preprocess_cache, save_preprocess_cache
 from ..state import get_state
+
+
+log = logging.getLogger("FluidRAG.api.preprocess")
 
 
 def _chunk_debug_dir() -> Path:
@@ -126,6 +129,7 @@ def preprocess_route():
                 state.pre_chunks = cached_macro
                 state.macro_chunks = cached_macro
                 state.micro_chunks = cached_micro
+                state.uf_chunks = cached_micro
                 if isinstance(cached_debug, dict):
                     state.debug = dict(cached_debug)
             response_payload = dict(cached.get("response") or {})
@@ -144,6 +148,15 @@ def preprocess_route():
             response_payload.setdefault(
                 "chunks", response_payload.get("chunks") or len(cached_macro)
             )
+            if state is not None:
+                uf_summary = response_payload.get("uf_pipeline")
+                state.uf_pipeline = uf_summary if isinstance(uf_summary, dict) else None
+                tables_payload = response_payload.get("tables")
+                if isinstance(tables_payload, list):
+                    state.uf_tables = tables_payload
+                headers_payload = response_payload.get("headers")
+                if isinstance(headers_payload, list):
+                    state.headers = headers_payload
             try:
                 export_preprocess_debug(
                     session_id=session_id or None,
@@ -164,13 +177,8 @@ def preprocess_route():
             response.headers["Access-Control-Allow-Origin"] = "*"
             return response, 200
 
-        # Try legacy loader first, else new extractor
-        load_pages = getattr(pp, "load_document_to_text_pages", None)
-        if callable(load_pages):
-            pages_linear = load_pages(pdf_path, sidecar_dir=sidecar_dir)
-        else:
-            layout = pp.extract_pages_with_layout(pdf_path, sidecar_dir=sidecar_dir)
-            pages_linear = layout.get("pages_linear") or []
+        layout = pp.extract_pages_with_layout(pdf_path, sidecar_dir=sidecar_dir)
+        pages_linear = layout.get("pages_linear") or []
 
         cfg = load_config(Path("config") / "fluidrag.yaml")
         chunk_cfg = (cfg.get("chunking", {}) or {})
@@ -220,92 +228,72 @@ def preprocess_route():
             dict(preprocess_debug) if preprocess_debug.get("preprocess") else None
         )
 
-        header_spans = []
-        if state is not None and state.headers:
-            for page_entry in state.headers:
-                headers = page_entry.get("headers") if isinstance(page_entry, dict) else None
-                if not isinstance(headers, list):
-                    continue
-                for header in headers:
-                    if not isinstance(header, dict):
-                        continue
-                    clause = header.get("section_number") or header.get("clause")
-                    text = header.get("text") or header.get("heading")
-                    if clause and text:
-                        header_spans.append({"clause": clause, "text": text})
+        try:
+            uf_result = run_uf_pipeline(
+                pdf_path,
+                doc_id=doc_id,
+                session_id=session_id or None,
+                sidecar_dir=sidecar_dir,
+                llm_client=None,
+                pre_extracted=layout,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.exception("[preprocess] UF pipeline failed for %s: %s", doc_id, exc)
+            raise
 
-        chunker = AtomicChunker(micro_cfg)
-        micro_chunks = chunker.chunk(doc_id, page_records, header_spans)
-        for micro in micro_chunks:
-            micro.setdefault("micro_id", micro.get("id"))
-            span = micro.get("page_span") or [1, 1]
-            try:
-                page_start = int(span[0])
-            except Exception:
-                page_start = 1
-            try:
-                page_end = int(span[1])
-            except Exception:
-                page_end = page_start
-            micro.setdefault("page_start", page_start)
-            micro.setdefault("page_end", page_end)
-            micro.setdefault("pages", list(range(page_start, page_end + 1)))
-
-        macro_chunker = MacroChunker(macro_cfg)
-        raw_macros = macro_chunker.build(micro_chunks)
+        uf_summary = uf_result.summary()
+        uf_debug = {
+            "summary": uf_summary,
+            "artifacts": {key: str(path) for key, path in uf_result.artifacts.items()},
+            "efhg_preview": uf_result.efhg_spans[:10],
+            "header_repairs": uf_result.headers.repairs,
+        }
+        if preprocess_debug_payload is None:
+            preprocess_debug_payload = {"uf_pipeline": uf_debug}
+        else:
+            preprocess_debug_payload = dict(preprocess_debug_payload)
+            preprocess_debug_payload["uf_pipeline"] = uf_debug
 
         macro_chunks = []
-        for idx, macro in enumerate(raw_macros):
-            enriched = dict(macro)
-            page_span = enriched.get("page_span") or [1, 1]
-            try:
-                page_start = int(page_span[0])
-            except Exception:
-                page_start = 1
-            try:
-                page_end = int(page_span[1])
-            except Exception:
-                page_end = page_start
-            pages = enriched.get("pages") or list(range(page_start, page_end + 1))
-            hierarchy = enriched.get("hierarchy") or {}
-            heading_values = hierarchy.get("headings") or []
-            first_heading = heading_values[0] if heading_values else None
+        for idx, chunk in enumerate(uf_result.uf_chunks):
+            enriched = dict(chunk)
+            micro_id = enriched.get("micro_id")
+            if micro_id:
+                enriched.setdefault("chunk_id", micro_id)
+            enriched.setdefault("document", doc_name)
+            pages = enriched.get("pages")
+            if isinstance(pages, list) and pages:
+                try:
+                    page_start = int(pages[0])
+                except Exception:
+                    page_start = 1
+                try:
+                    page_end = int(pages[-1])
+                except Exception:
+                    page_end = page_start
+            else:
+                page_val = enriched.get("page") or 1
+                page_start = int(page_val)
+                page_end = int(enriched.get("page_end") or page_start)
+                enriched["pages"] = [page_start]
+            enriched["page_start"] = page_start
+            enriched["page_end"] = page_end
+            enriched.setdefault("section_number", enriched.get("section_id") or "")
             section_title = (
                 enriched.get("section_title")
-                or first_heading
-                or enriched.get("hier_path")
+                or enriched.get("section_name")
                 or "Document"
             )
-            section_number = enriched.get("section_id") or hierarchy.get("section")
-            enriched.update(
-                {
-                    "chunk_id": enriched.get("macro_id"),
-                    "chunk_index_in_section": idx,
-                    "page_start": page_start,
-                    "page_end": page_end,
-                    "page": page_start,
-                    "pages": pages,
-                    "section_number": section_number,
-                    "section_title": section_title,
-                    "section_name": section_title,
-                    "document": doc_name,
-                    "chunk_type": "macro",
-                }
-            )
+            enriched["section_title"] = section_title
+            enriched["section_name"] = section_title
+            enriched.setdefault("chunk_index_in_section", enriched.get("sequence_index", idx))
+            enriched.setdefault("chunk_type", "uf")
             meta = dict(enriched.get("meta") or {})
-            meta.setdefault("hierarchy", hierarchy)
-            meta.setdefault("micro_children", list(enriched.get("micro_children") or []))
+            meta.setdefault("uf_pipeline", True)
             enriched["meta"] = meta
             macro_chunks.append(enriched)
 
-        def _macro_sort_key(item):
-            return (
-                int(item.get("page_start", 1) or 1),
-                str(item.get("section_number") or ""),
-                int(item.get("chunk_index_in_section", 0) or 0),
-            )
-
-        macro_chunks.sort(key=_macro_sort_key)
+        micro_chunks = [dict(chunk) for chunk in macro_chunks]
 
         preview_list = []
         for macro in macro_chunks[:5]:
@@ -316,7 +304,7 @@ def preprocess_route():
                     "chars": len(macro.get("text") or ""),
                     "page_start": macro.get("page_start"),
                     "page_end": macro.get("page_end"),
-                    "micro_chunks": len(macro.get("micro_children") or []),
+                    "micro_chunks": 1,
                 }
             )
 
@@ -324,6 +312,10 @@ def preprocess_route():
             state.pre_chunks = macro_chunks
             state.macro_chunks = macro_chunks
             state.micro_chunks = micro_chunks
+            state.uf_chunks = micro_chunks
+            state.uf_pipeline = uf_summary
+            state.uf_tables = uf_result.tables
+            state.headers = uf_result.headers.pages
             state.debug = (
                 preprocess_debug_payload.copy()
                 if isinstance(preprocess_debug_payload, dict)
@@ -339,6 +331,9 @@ def preprocess_route():
             "macro_chunks": len(macro_chunks),
             "micro_chunks": len(micro_chunks),
             "preview": preview_list,
+            "uf_pipeline": uf_summary,
+            "headers": uf_result.headers.pages,
+            "tables": uf_result.tables,
             "cache": {"hit": False, "section": "preprocess"},
         }
         response = jsonify(resp)
