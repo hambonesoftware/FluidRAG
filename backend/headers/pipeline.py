@@ -13,7 +13,12 @@ from backend.efhg.entropy import (
     score_stops,
     select_quantile_ids,
 )
-from backend.efhg.fluid import DEFAULT_PARAMS as FLUID_DEFAULTS, Span, build_edges, grow_span_from_seed
+from backend.efhg.fluid import (
+    DEFAULT_PARAMS as FLUID_DEFAULTS,
+    Span,
+    build_edges,
+    grow_span_from_seed,
+)
 from backend.efhg.graph_gate import DEFAULT_PARAMS as GRAPH_DEFAULTS, GraphContext, score_graph, snap_and_trim
 from backend.efhg.hep import DEFAULT_PARAMS as HEP_DEFAULTS, score_span_hep
 from backend.headers.header_llm import (
@@ -46,7 +51,15 @@ def _ensure_output_dir(doc_id: str, output_dir: str | Path | None) -> Path:
     return base
 
 
-def _span_to_audit(span: Span, start_scores: Dict[str, float], stop_scores: Dict[str, float], hep_scores: Dict[str, Any], graph_score: float, graph_penalties: Dict[str, float], decision: str) -> Dict[str, Any]:
+def _span_to_audit(
+    span: Span,
+    start_scores: Dict[str, float],
+    stop_scores: Dict[str, float],
+    hep_scores: Dict[str, Any],
+    graph_score: float,
+    graph_penalties: Dict[str, float],
+    decision: str,
+) -> Dict[str, Any]:
     return {
         "header_label": _extract_label(span.text),
         "page": span.page,
@@ -128,6 +141,11 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         verified_headers = VerifiedHeaders()
 
     repaired_headers = aggressive_sequence_repair(verified_headers, pages_norm, tokens_per_page)
+    domain_hint = (
+        decomp.get("metadata", {}).get("domain")
+        or decomp.get("metadata", {}).get("domain_hint")
+        or decomp.get("domain")
+    )
     header_ctx = GraphContext(
         headers=[
             {
@@ -140,6 +158,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         ],
         references=decomp.get("references", []),
         tables=decomp.get("tables", []),
+        domain=domain_hint,
     )
 
     seed_candidates = select_quantile_ids(start_scores, DEFAULT_SEED_QUANTILE)
@@ -202,6 +221,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "text": header.text,
             "page": header.page,
             "span": header.span,
+            "span_char": header.span,
             "source": header.source,
             "confidence": header.confidence,
         }
@@ -213,11 +233,14 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "id": chunk.id,
             "page": chunk.page,
             "span": chunk.span_char,
+            "span_char": chunk.span_char,
+            "span_bbox": chunk.span_bbox,
             "text": chunk.text,
             "style": chunk.style,
             "lex": chunk.lex,
             "entropy": chunk.entropy,
             "header_anchor": chunk.header_anchor,
+            "domain_hint": chunk.domain_hint,
         }
         for chunk in uf_chunks
     ]
@@ -232,17 +255,21 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "fluid": FLUID_DEFAULTS,
             "hep": HEP_DEFAULTS,
             "graph": GRAPH_DEFAULTS,
+            "domain_hint": domain_hint,
         },
         "uf_chunks": [
             {
                 "id": chunk.id,
                 "page": chunk.page,
                 "span": chunk.span_char,
+                "span_char": chunk.span_char,
+                "span_bbox": chunk.span_bbox,
                 "text_preview": chunk.preview(),
                 "style": chunk.style,
                 "lex": chunk.lex,
                 "entropy": chunk.entropy,
                 "header_anchor": chunk.header_anchor,
+                "domain_hint": chunk.domain_hint,
             }
             for chunk in uf_chunks
         ],

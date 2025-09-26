@@ -157,47 +157,85 @@ def _window_text(page_text: str, start: int, end: int, padding: int = 120) -> Tu
     return win_start, win_end, page_text[win_start:win_end]
 
 
-def _search_methods(label: str, page_text: str, window_start: int, window_end: int) -> List[Dict[str, Any]]:
+def _search_candidates(label: str, page_text: str, window_start: int, window_end: int) -> List[Dict[str, Any]]:
     window = page_text[window_start:window_end]
-    methods: List[Dict[str, Any]] = []
+    candidates: List[Dict[str, Any]] = []
     regex_pattern = re.compile(rf"{re.escape(label)}\s*(?P<text>[^\n]+)")
     match = regex_pattern.search(window)
     if match:
-        methods.append(
+        candidates.append(
             {
                 "label": label,
                 "text": _normalize_space(match.group("text")),
                 "method": "regex",
-                "confidence": 0.65,
+                "confidence": 0.68,
             }
         )
-    if not methods:
-        lines = window.splitlines()
-        for idx, line in enumerate(lines[:-1]):
-            if label in line:
-                candidate = _normalize_space(line + " " + lines[idx + 1])
-                methods.append(
+    lines = window.splitlines()
+    for idx, line in enumerate(lines[:-1]):
+        stripped = line.strip()
+        if stripped == label.rstrip(".)") or stripped.startswith(label):
+            next_line = lines[idx + 1].strip()
+            if next_line:
+                candidates.append(
                     {
                         "label": label,
-                        "text": candidate,
-                        "method": "soft_unwrap",
-                        "confidence": 0.58,
+                        "text": _normalize_space(next_line),
+                        "method": "header_resegment",
+                        "confidence": 0.62,
                     }
                 )
-                break
-    if not methods and window:
-        # OCR window fallback: search for uppercase sequences
-        match = re.search(rf"{re.escape(label)}\s*([A-Z][A-Za-z &/]+)", window)
-        if match:
-            methods.append(
+        if label in line and idx + 1 < len(lines):
+            joined = _normalize_space(line + " " + lines[idx + 1])
+            candidates.append(
                 {
                     "label": label,
-                    "text": _normalize_space(match.group(0).replace(label, "", 1)),
+                    "text": joined.replace(label, "", 1).strip(),
+                    "method": "soft_unwrap+regex",
+                    "confidence": 0.6,
+                }
+            )
+            break
+    if window:
+        ocr_match = re.search(rf"{re.escape(label)}\s*([A-Z][A-Za-z &/]+)", window)
+        if ocr_match:
+            candidates.append(
+                {
+                    "label": label,
+                    "text": _normalize_space(ocr_match.group(0).replace(label, "", 1)),
                     "method": "ocr_window",
                     "confidence": 0.56,
                 }
             )
-    return methods
+    seen: set[Tuple[str, str]] = set()
+    unique: List[Dict[str, Any]] = []
+    for candidate in candidates:
+        key = (candidate["text"], candidate["method"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(candidate)
+    return unique
+
+
+def _verify_local_match(label: str, text: str, page_text: str, window_start: int, window_end: int) -> Optional[Tuple[int, int, str]]:
+    window = page_text[window_start:window_end]
+    pattern = re.compile(rf"{re.escape(label)}\s*{re.escape(text)}", re.IGNORECASE)
+    match = pattern.search(window)
+    if not match:
+        return None
+    start = window_start + match.start()
+    end = window_start + match.end()
+    canonical = _normalize_space(page_text[start:end])
+    return start, end, canonical
+
+
+def _series_name(prefix: str) -> str:
+    if prefix == "NUM":
+        return "NUMERIC"
+    if prefix.upper().startswith("A"):
+        return "APPX"
+    return prefix.upper()
 
 
 def aggressive_sequence_repair(
@@ -225,15 +263,17 @@ def aggressive_sequence_repair(
             before_header = entries[idx][1]
             after_header = entries[idx + 1][1]
             log_entry = {
-                "series": prefix if prefix != "NUM" else "NUMERIC",
+                "series": _series_name(prefix),
                 "gap": f"{prefix}{gap_numbers[0]}..{prefix}{gap_numbers[-1]}",
                 "before": {
                     "label": before_header.label,
+                    "text": before_header.text,
                     "page": before_header.page,
                     "span": before_header.span,
                 },
                 "after": {
                     "label": after_header.label,
+                    "text": after_header.text,
                     "page": after_header.page,
                     "span": after_header.span,
                 },
@@ -246,26 +286,31 @@ def aggressive_sequence_repair(
                 page_text = pages_norm[page_index]
                 start = before_header.span[1]
                 end = after_header.span[0] if before_header.page == after_header.page else len(page_text)
-                win_start, win_end, window = _window_text(page_text, start, end)
-                token_list = tokens[page_index] if page_index < len(tokens) else []
-                window_tokens = [t for t in token_list if win_start <= t.get("start", 0) <= win_end]
-                log_entry["windows"] += max(1, len(window_tokens))
-                candidates = _search_methods(label, page_text, win_start, win_end)
+                win_start, win_end, _ = _window_text(page_text, start, end)
+                token_window = []
+                if 0 <= page_index < len(tokens):
+                    token_window = [
+                        token
+                        for token in tokens[page_index]
+                        if win_start <= int(token.get("start", 0)) <= win_end
+                    ]
+                log_entry["windows"] += max(1, len(token_window))
+                candidates = _search_candidates(label, page_text, win_start, win_end)
                 for candidate in candidates:
-                    candidate_text = candidate["text"].replace(label, "").strip()
-                    canonical = _normalize_space(f"{label} {candidate_text}")
-                    local_idx = _normalize_space(page_text).find(canonical)
-                    if local_idx == -1:
+                    verification = _verify_local_match(label, candidate["text"], page_text, win_start, win_end)
+                    if not verification:
                         continue
+                    span_start, span_end, canonical = verification
                     confidence = candidate["confidence"]
                     if confidence < confidence_threshold:
                         continue
+                    normalized_label = label.rstrip(".)") + ("." if label.endswith(".") else ")")
                     new_header = VerifiedHeader(
-                        label=label.rstrip(".)") + ("." if label.endswith(".") else ")"),
-                        text=candidate_text,
+                        label=normalized_label,
+                        text=candidate["text"],
                         page=before_header.page,
-                        span=(local_idx, local_idx + len(canonical)),
-                        verification={"status": "matched", "method": candidate["method"]},
+                        span=(span_start, span_end),
+                        verification={"status": "matched", "method": candidate["method"], "canonical": canonical},
                         source="repair",
                         confidence=confidence,
                     )
