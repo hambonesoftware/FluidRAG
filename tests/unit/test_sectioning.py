@@ -37,10 +37,34 @@ def test_label_caps_fallback_rejects_sentences():
     assert selected == []
 
 
+def test_no_promote_under_threshold():
+    line = _line(
+        "Residual discussion",
+        bold=False,
+        font_sigma_rank=0.1,
+        font_size_z=0.1,
+        caps_ratio=0.3,
+    )
+    # Ensure prototype assist is negligible so the score remains below the gate.
+    line["features"]["proto_sim_max"] = 0.05
+    line["features"]["p_header"] = 0.0
+    selected = select_headers([line], _units_present)
+    assert selected == []
+
+
 def test_units_penalty_not_applied_to_numeric():
     line = _line("10) Pressure (psi) Requirements", bold=True, font_sigma_rank=0.9, font_size_z=0.86)
     selected = select_headers([line], _units_present)
     assert selected[0]["partials"].get("units_penalty") is None
+
+
+def test_label_units_penalty_applies():
+    line = _line("UTILITIES PRESSURE 45 PSI", bold=False, font_sigma_rank=0.4, font_size_z=0.3, caps_ratio=0.9)
+    line["features"]["proto_sim_max"] = 0.0
+    line["features"]["p_header"] = 0.0
+    selected = select_headers([line], _units_present)
+    # Label should be rejected after penalty drops score below threshold.
+    assert selected == []
 
 
 def test_prototype_similarity_lifts_ocr_header():
