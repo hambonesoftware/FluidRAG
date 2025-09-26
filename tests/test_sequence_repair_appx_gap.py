@@ -38,7 +38,7 @@ def test_sequence_repair_appx_gap(tmp_path: Path) -> None:
     audit = json.loads((output_dir / "candidate_audit.json").read_text())
     gap_entry = next((entry for entry in audit["sequence_repair"] if entry["gap"].startswith("A5")), None)
     assert gap_entry is not None
-    assert gap_entry["series"] == "APPX"
+    assert gap_entry["series"] == "A"
     assert gap_entry["before"]["text"].startswith("Prior")
     assert gap_entry["after"]["text"].startswith("Closing")
     assert gap_entry["result"], "Expected repair candidates logged"

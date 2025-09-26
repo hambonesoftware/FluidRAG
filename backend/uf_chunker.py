@@ -7,7 +7,21 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
-HEADER_PATTERN = re.compile(r"^(?:\d+\)|A\d+\.)")
+HEADER_PATTERN = re.compile(
+    r"""
+    ^
+    (?:
+        (?P<numeric_section>\d+\))
+        |
+        (?P<appendix_top>(?:Appendix|Annex)\s+[A-Z])
+        |
+        (?P<appendix_sub_AN>[A-Z]\d{1,3}\.)
+        |
+        (?P<appendix_sub_AlN>[A-Z]\.\d{1,3})
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 MODAL_WORDS = {"may", "shall", "should", "must", "will", "can", "could", "would"}
 DOMAIN_KEYWORDS = {
     "safety": {"safety", "safe", "hazard"},

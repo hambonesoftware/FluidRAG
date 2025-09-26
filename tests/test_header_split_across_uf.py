@@ -27,9 +27,9 @@ def test_header_split_across_uf(tmp_path: Path) -> None:
     accepted = [
         entry
         for entry in audit["efhg_header_spans"]
-        if entry["decision"] == "accepted" and entry.get("header_label") == "A5."
+        if entry.get("header_label") == "A5." and entry["decision"] in {"accepted", "promoted"}
     ]
-    assert accepted, "Expected accepted EFHG span for split header"
+    assert accepted, "Expected promoted EFHG span for split header"
     span_entry = accepted[0]
     assert span_entry["scores"]["fluid"]["Flow_total"] > 0
     assert span_entry["scores"]["hep"]["S_HEP"] >= HEP_DEFAULTS["theta_hep"]

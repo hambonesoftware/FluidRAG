@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Tuple
 
 from backend.efhg.entropy import (
     DEFAULT_WEIGHTS,
@@ -22,6 +22,7 @@ from backend.efhg.fluid import (
 )
 from backend.efhg.graph_gate import DEFAULT_PARAMS as GRAPH_DEFAULTS, GraphContext, score_graph, snap_and_trim
 from backend.efhg.hep import DEFAULT_PARAMS as HEP_DEFAULTS, score_span_hep
+from backend.headers.config import HEADER_GATE_MODE, STRICT_CONFLICT_ONLY
 from backend.headers.header_llm import (
     VerifiedHeader,
     VerifiedHeaders,
@@ -31,6 +32,7 @@ from backend.headers.header_llm import (
     parse_fenced_outline,
     verify_headers,
 )
+from backend.headers.header_scan import HeaderCandidate, promote_candidates, scan_candidates
 from backend.uf_chunker import HEADER_PATTERN, UFChunk, uf_chunk
 
 
@@ -43,6 +45,121 @@ class HeaderIndex:
     header_shards: List[Dict[str, Any]]
     output_dir: Path
 
+
+_PATTERN_PRIORITY = {
+    "appendix_top": 4,
+    "numeric_section": 3,
+    "appendix_sub_AN": 2,
+    "appendix_sub_AlN": 2,
+}
+
+
+@dataclass
+class SpanRecord:
+    seed_id: str
+    span: Span
+    candidate: HeaderCandidate | None
+    hep: Dict[str, Any]
+    graph_score: float
+    graph_penalties: Dict[str, float]
+    start_score: float
+    stop_score: float
+    final_score: float
+    decision: str
+    accepted: bool
+    promotion_reason: str | None = None
+    conflicts_resolved: List[Dict[str, Any]] = field(default_factory=list)
+    suppression_reason: str | None = None
+
+
+def _pattern_rank(record: SpanRecord) -> int:
+    if record.candidate:
+        return _PATTERN_PRIORITY.get(record.candidate.pattern, 1)
+    return 1
+
+
+def _priority_key(record: SpanRecord, llm_labels: Set[str]) -> Tuple[float, ...]:
+    candidate = record.candidate
+    font_size = 0.0
+    bold = 0
+    indent = 0.0
+    label = ""
+    if candidate:
+        style = candidate.style or {}
+        font_size = float(style.get("font_size") or 0.0)
+        bold = 1 if style.get("bold") else 0
+        indent = float(style.get("indent") or 0.0)
+        label = candidate.label
+    if not label:
+        label = _extract_label(record.span.text) or ""
+    llm_vote = 1 if label and label in llm_labels else 0
+    return (
+        float(_pattern_rank(record)),
+        font_size,
+        bold,
+        -indent,
+        llm_vote,
+        record.span.flow_total,
+        -float(record.span.span[0]),
+    )
+
+
+def _span_overlap(left: SpanRecord, right: SpanRecord) -> int:
+    a_start, a_end = left.span.span
+    b_start, b_end = right.span.span
+    return max(0, min(a_end, b_end) - max(a_start, b_start))
+
+
+def _resolve_conflicts(
+    records: List[SpanRecord],
+    llm_labels: Set[str],
+) -> Tuple[List[SpanRecord], List[SpanRecord]]:
+    accepted = [record for record in records if record.accepted]
+    for record in accepted:
+        record.conflicts_resolved.clear()
+        record.suppression_reason = None
+
+    sorted_records = sorted(
+        accepted,
+        key=lambda rec: _priority_key(rec, llm_labels),
+        reverse=True,
+    )
+
+    kept: List[SpanRecord] = []
+    suppressed: List[SpanRecord] = []
+    for record in sorted_records:
+        has_conflict = False
+        for winner in kept:
+            overlap = _span_overlap(winner, record)
+            if overlap <= 0:
+                continue
+            has_conflict = True
+            record.accepted = False
+            record.decision = "conflict_suppressed"
+            loser_label = record.candidate.label if record.candidate else _extract_label(record.span.text)
+            winner_label = winner.candidate.label if winner.candidate else _extract_label(winner.span.text)
+            record.suppression_reason = {
+                "reason": "span_collision",
+                "winner": winner_label,
+                "overlap": overlap,
+            }
+            winner.conflicts_resolved.append(
+                {
+                    "loser": loser_label,
+                    "overlap": overlap,
+                    "seed_id": record.seed_id,
+                }
+            )
+            suppressed.append(record)
+            break
+        if not has_conflict:
+            kept.append(record)
+
+    for winner in kept:
+        if winner.conflicts_resolved and not winner.promotion_reason:
+            winner.promotion_reason = "conflict_keep"
+
+    return kept, suppressed
 
 def _ensure_output_dir(doc_id: str, output_dir: str | Path | None) -> Path:
     if output_dir is None:
@@ -170,6 +287,13 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     output_dir = _ensure_output_dir(doc_id, decomp.get("output_dir"))
 
     uf_chunks = uf_chunk(decomp)
+    candidates = scan_candidates(uf_chunks)
+    promote_candidates(candidates, HEADER_GATE_MODE)
+    candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
+    for candidate in candidates:
+        candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
+    for cand_list in candidates_by_chunk.values():
+        cand_list.sort(key=lambda c: (not c.promoted, c.line_index, c.start_char))
     compute_entropy_features(uf_chunks)
     start_scores = score_starts(uf_chunks)
     stop_scores = score_stops(uf_chunks)
@@ -213,39 +337,109 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     seed_ids = [cid for cid in seed_candidates if chunk_lookup.get(cid) and chunk_lookup[cid].header_anchor]
     if not seed_ids:
         seed_ids = [chunk.id for chunk in uf_chunks if chunk.header_anchor]
-    spans_audit: List[Dict[str, Any]] = []
-    accepted_spans: List[Span] = []
+
+    promoted_seed_ids = [
+        cid
+        for cid, cand_list in candidates_by_chunk.items()
+        if cand_list and cand_list[0].promoted
+    ]
+    ordered = promoted_seed_ids + seed_ids
+    seen: Set[str] = set()
+    seed_ids = []
+    for cid in ordered:
+        if cid in chunk_lookup and cid not in seen:
+            seed_ids.append(cid)
+            seen.add(cid)
+
+    span_records: List[SpanRecord] = []
 
     for seed_id in seed_ids:
         span = grow_span_from_seed(seed_id, uf_chunks, edges, stop_scores)
         span = snap_and_trim(span, header_ctx, chunk_lookup)
+        candidate_list = candidates_by_chunk.get(seed_id, [])
+        candidate = candidate_list[0] if candidate_list else None
         hep_detail = score_span_hep(span, chunk_lookup)
         graph_score, graph_penalties = score_graph(span, header_ctx, chunk_lookup)
         final_score = hep_detail["S_HEP"] + span.flow_total - sum(graph_penalties.values())
-        decision = "rejected"
-        if hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"] and final_score >= GRAPH_DEFAULTS["theta_final"]:
-            decision = "accepted"
-            accepted_spans.append(span)
-        spans_audit.append(_span_to_audit(span, start_scores, stop_scores, hep_detail, graph_score, graph_penalties, decision))
+        promotion_reason = candidate.promotion_reason if candidate and candidate.promoted else None
+        accepted = bool(promotion_reason)
+        decision = "promoted" if promotion_reason else "rejected"
+        if not accepted and HEADER_GATE_MODE == "score_gate":
+            if hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"] and final_score >= GRAPH_DEFAULTS["theta_final"]:
+                accepted = True
+                decision = "accepted"
+        record = SpanRecord(
+            seed_id=seed_id,
+            span=span,
+            candidate=candidate,
+            hep=hep_detail,
+            graph_score=graph_score,
+            graph_penalties=graph_penalties,
+            start_score=start_scores.get(seed_id, 0.0),
+            stop_score=stop_scores.get(span.chunk_ids[-1], 0.0),
+            final_score=final_score,
+            decision=decision,
+            accepted=accepted,
+            promotion_reason=promotion_reason,
+        )
+        span_records.append(record)
+
+    llm_labels = {header.label for header in repaired_headers.headers}
+    if span_records:
+        _resolve_conflicts(span_records, llm_labels)
+
+    spans_audit = [
+        _span_to_audit(
+            record.span,
+            start_scores,
+            stop_scores,
+            record.hep,
+            record.graph_score,
+            record.graph_penalties,
+            record.decision,
+        )
+        for record in span_records
+    ]
+
+    accepted_records = [record for record in span_records if record.accepted]
 
     final_headers_map: Dict[str, VerifiedHeader] = {header.label: header for header in repaired_headers.headers}
-    for span in accepted_spans:
+    for record in accepted_records:
+        span = record.span
+        candidate = record.candidate
         label = _extract_label(span.text)
+        if candidate and candidate.label:
+            label = candidate.label
         if not label:
             continue
-        canonical_text = span.text.split(label, 1)[-1].strip()
+        existing = final_headers_map.get(label)
+        if existing and existing.source == "repair":
+            continue
+        if candidate:
+            remainder = candidate.text[len(candidate.label) :].lstrip("—-: \u2014 ").strip()
+            canonical_text = remainder or span.text.split(label, 1)[-1].strip()
+            span_range = (candidate.start_char, max(candidate.end_char, candidate.start_char + len(canonical_text)))
+        else:
+            canonical_text = span.text.split(label, 1)[-1].strip()
+            span_range = span.span
+        verification = {"status": "efhg"}
+        if record.promotion_reason:
+            verification["promotion_reason"] = record.promotion_reason
+        source = "pattern" if record.promotion_reason else "efhg"
+        confidence = 0.95 if record.promotion_reason == "pattern" else 0.9
         final_headers_map[label] = VerifiedHeader(
             label=label,
             text=canonical_text,
             page=span.page,
-            span=span.span,
-            verification={"status": "efhg"},
-            source="efhg",
-            confidence=0.9,
+            span=span_range,
+            verification=verification,
+            source=source,
+            confidence=confidence,
         )
 
     if llm_error and not final_headers_map:
-        for span in accepted_spans:
+        for record in accepted_records:
+            span = record.span
             label = _extract_label(span.text)
             if not label:
                 continue
@@ -276,6 +470,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         for header in final_headers
     ]
 
+    accepted_spans = [record.span for record in accepted_records]
     header_shards_payload = _build_header_shards(final_headers, accepted_spans, chunk_lookup)
 
     uf_records = [
@@ -297,19 +492,72 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
 
     efhg_records = spans_audit
 
+    raw_candidate_payload = [candidate.to_dict() for candidate in candidates]
+    promoted_payload = [
+        {
+            "candidate_id": record.candidate.candidate_id if record.candidate else None,
+            "text": record.candidate.text if record.candidate else record.span.text,
+            "page": record.span.page,
+            "idx": record.candidate.line_index if record.candidate else None,
+            "pattern": record.candidate.pattern if record.candidate else None,
+            "promotion_reason": record.promotion_reason,
+            "stitched_span": {
+                "uf_start": record.span.chunk_ids[0],
+                "uf_end": record.span.chunk_ids[-1],
+            },
+            "efhg": {
+                "E": {"start": record.start_score, "stop": record.stop_score},
+                "F": {"flow": record.span.flow_total},
+                "H": record.hep,
+                "G": {"score": record.graph_score, "penalties": record.graph_penalties},
+            },
+            "conflicts_resolved": list(record.conflicts_resolved),
+        }
+        for record in accepted_records
+        if record.promotion_reason
+    ]
+    suppressed_payload = [
+        {
+            "candidate_id": record.candidate.candidate_id if record.candidate else None,
+            "pattern": record.candidate.pattern if record.candidate else None,
+            "page": record.span.page,
+            "reason": record.suppression_reason,
+        }
+        for record in span_records
+        if record.suppression_reason
+    ]
+    summary_rows = [
+        {
+            "page": record.span.page,
+            "idx": record.candidate.line_index if record.candidate else -1,
+            "pattern": record.candidate.pattern if record.candidate else "",
+            "decision": record.decision,
+            "reason": (
+                record.promotion_reason
+                if record.promotion_reason
+                else json.dumps(record.suppression_reason)
+                if record.suppression_reason
+                else ""
+            ),
+        }
+        for record in span_records
+    ]
+
     audit_payload = {
         "config": {
             "uf_max_tokens": 90,
             "uf_overlap": 12,
-        "entropy": {
-            "weights": dict(DEFAULT_WEIGHTS),
-            "seed_quantile": DEFAULT_SEED_QUANTILE,
-            "stop_quantile": DEFAULT_STOP_QUANTILE,
-        },
+            "entropy": {
+                "weights": dict(DEFAULT_WEIGHTS),
+                "seed_quantile": DEFAULT_SEED_QUANTILE,
+                "stop_quantile": DEFAULT_STOP_QUANTILE,
+            },
             "fluid": FLUID_DEFAULTS,
             "hep": HEP_DEFAULTS,
             "graph": GRAPH_DEFAULTS,
             "domain_hint": domain_hint,
+            "header_gate_mode": HEADER_GATE_MODE,
+            "strict_conflict_only": STRICT_CONFLICT_ONLY,
         },
         "uf_chunks": [
             {
@@ -337,6 +585,19 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         "final_headers": headers_payload,
         "header_shards": header_shards_payload,
     }
+
+    with (output_dir / "header_candidates_raw.json").open("w", encoding="utf-8") as handle:
+        json.dump(raw_candidate_payload, handle, ensure_ascii=False, indent=2)
+    with (output_dir / "headers_promoted.json").open("w", encoding="utf-8") as handle:
+        json.dump(promoted_payload, handle, ensure_ascii=False, indent=2)
+    with (output_dir / "headers_suppressed.json").open("w", encoding="utf-8") as handle:
+        json.dump(suppressed_payload, handle, ensure_ascii=False, indent=2)
+    with (output_dir / "headers_summary.tsv").open("w", encoding="utf-8") as handle:
+        handle.write("page\tidx\tpattern\tdecision\treason\n")
+        for row in summary_rows:
+            handle.write(
+                f"{row['page']}\t{row['idx']}\t{row['pattern']}\t{row['decision']}\t{row['reason']}\n"
+            )
 
     _persist_jsonl(output_dir / "uf_chunks.jsonl", uf_records)
     _persist_jsonl(output_dir / "efhg_spans.jsonl", efhg_records)
