@@ -19,12 +19,19 @@ STRONG_PATTERNS = {
 }
 
 _PATTERN_CHECKS = {
-    "numeric_section": re.compile(r"^\s*\d+\)(?:\s+.*)?$"),
+    "numeric_section": re.compile(r"^\s*\d+\)\s+.+$"),
     "appendix_top": re.compile(
         r"(?i)^\s*(appendix|annex)\s+[A-Z]\b(?:\s*[—\-: ]\s*.+)?$"
     ),
-    "appendix_sub_AN": re.compile(r"^\s*[A-Z]\d{1,3}\.(?:\s+.*)?$"),
-    "appendix_sub_AlN": re.compile(r"^\s*[A-Z]\.\d{1,3}(?:\s+.*)?$"),
+    "appendix_sub_AN": re.compile(r"^\s*[A-Z]\d{1,3}\.\s+.+$"),
+    "appendix_sub_AlN": re.compile(r"^\s*[A-Z]\.\d{1,3}\s+.+$"),
+}
+
+_LABEL_ONLY_CHECKS = {
+    "numeric_section": re.compile(r"^\s*\d+\)\s*$"),
+    "appendix_top": re.compile(r"(?i)^\s*(appendix|annex)\s+[A-Z]\s*$"),
+    "appendix_sub_AN": re.compile(r"^\s*[A-Z]\d{1,3}\.?\s*$"),
+    "appendix_sub_AlN": re.compile(r"^\s*[A-Z]\.\d{1,3}\s*$"),
 }
 
 _PATTERN_FINDER = {
@@ -94,11 +101,13 @@ def _scan_line(
             seg = line[match.start() :]
             if not seg:
                 continue
-            if not check.match(seg):
-                continue
             trimmed = seg.lstrip()
             if not trimmed:
                 continue
+            if not check.match(trimmed):
+                label_only = _LABEL_ONLY_CHECKS.get(pattern)
+                if not label_only or not label_only.match(trimmed):
+                    continue
             leading_ws = len(seg) - len(trimmed)
             rel_offset = base_offset + match.start() + leading_ws
             start_char = chunk.span_char[0] + rel_offset

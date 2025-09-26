@@ -26,8 +26,18 @@ def test_appendix_and_numeric_patterns_promote(tmp_path: Path) -> None:
     promoted = json.loads((output_dir / "headers_promoted.json").read_text())
     reasons = {entry.get("promotion_reason") for entry in promoted}
     assert "pattern" in reasons
-    appendix_entries = [entry for entry in promoted if entry.get("pattern") == "appendix_top"]
+    appendix_entries = [
+        entry
+        for entry in promoted
+        if entry.get("pattern") == "appendix_top" and entry.get("promotion_reason") == "pattern"
+    ]
     assert appendix_entries, "Expected Appendix promotion to be logged"
+    numeric_entries = [
+        entry
+        for entry in promoted
+        if entry.get("pattern") == "appendix_sub_AN" and entry.get("promotion_reason") == "pattern"
+    ]
+    assert numeric_entries, "Expected subsection promotion to be logged"
 
     suppressed = json.loads((output_dir / "headers_suppressed.json").read_text())
-    assert all(entry.get("pattern") == "appendix_top" for entry in suppressed)
+    assert all(entry.get("reason", {}).get("reason") == "span_collision" for entry in suppressed)

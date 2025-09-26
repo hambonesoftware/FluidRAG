@@ -35,6 +35,14 @@ def test_sequence_repair_appx_gap(tmp_path: Path) -> None:
     assert "A5." in final_headers and final_headers["A5."]["source"] == "repair"
     assert "A6." in final_headers and final_headers["A6."]["source"] == "repair"
 
+    promoted = json.loads((output_dir / "headers_promoted.json").read_text())
+    appendix_repairs = [
+        entry
+        for entry in promoted
+        if entry.get("promotion_reason") == "sequence_repair" and entry.get("pattern") == "appendix_sub_AN"
+    ]
+    assert len(appendix_repairs) >= 2, "Expected appendix subsections to be logged as repairs"
+
     audit = json.loads((output_dir / "candidate_audit.json").read_text())
     gap_entry = next((entry for entry in audit["sequence_repair"] if entry["gap"].startswith("A5")), None)
     assert gap_entry is not None
