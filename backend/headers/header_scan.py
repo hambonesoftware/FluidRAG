@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, List, Mapping, Sequence
 
+import logging
 import re
 
 from backend.headers.config import HEADER_GATE_MODE
@@ -42,6 +43,9 @@ _PATTERN_FINDER = {
 }
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 @dataclass
 class HeaderCandidate:
     """Represents a single line (or inline segment) that resembles a header."""
@@ -60,6 +64,7 @@ class HeaderCandidate:
     promoted: bool = False
     promotion_reason: str | None = None
     total: float = 0.0
+    para_evidence: Dict[str, object] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -77,7 +82,66 @@ class HeaderCandidate:
             "promoted": self.promoted,
             "promotion_reason": self.promotion_reason,
             "score_total": self.total,
+            "para_evidence": dict(self.para_evidence),
         }
+
+
+def _build_para_evidence(line_meta: Mapping[str, object] | None) -> Dict[str, object]:
+    if not line_meta:
+        return {
+            "virtual_blank_lines_before": 0,
+            "para_start": False,
+            "y_gap": 0.0,
+            "style_jump": {"font_delta": 0.0, "bold_flip": False, "left_x_delta": 0.0},
+            "list_context": "none",
+        }
+    style_jump_raw = line_meta.get("style_jump")
+    if not isinstance(style_jump_raw, Mapping):
+        style_jump_raw = {}
+    evidence = {
+        "virtual_blank_lines_before": int(line_meta.get("virtual_blank_lines_before") or 0),
+        "para_start": bool(line_meta.get("para_start")),
+        "y_gap": float(line_meta.get("y_gap") or 0.0),
+        "style_jump": {
+            "font_delta": float(style_jump_raw.get("font_delta") or 0.0),
+            "bold_flip": bool(style_jump_raw.get("bold_flip")),
+            "left_x_delta": float(style_jump_raw.get("left_x_delta") or 0.0),
+        },
+        "list_context": str(line_meta.get("list_context") or "none"),
+    }
+    return evidence
+
+
+def _passes_prefilter(
+    pattern: str,
+    evidence: Mapping[str, object],
+    *,
+    line_meta: Mapping[str, object] | None,
+    chunk_meta: Mapping[str, object] | None,
+) -> tuple[bool, List[str]]:
+    reasons: List[str] = []
+    blank_lines = int(evidence.get("virtual_blank_lines_before") or 0)
+    if not blank_lines and chunk_meta:
+        try:
+            blank_lines = int(chunk_meta.get("blank_lines_before") or 0)
+        except Exception:
+            blank_lines = 0
+    if chunk_meta:
+        para_start = bool(evidence.get("para_start")) or bool(chunk_meta.get("para_start"))
+    else:
+        para_start = bool(evidence.get("para_start"))
+    list_ctx = str(evidence.get("list_context") or "none")
+    if list_ctx == "none" and line_meta:
+        list_ctx = str(line_meta.get("list_context") or "none")
+    if list_ctx == "none" and chunk_meta:
+        list_ctx = str(chunk_meta.get("list_context") or "none")
+
+    if pattern == "numeric_section" and not (para_start or blank_lines >= 1):
+        reasons.append("no_paragraph_break")
+    if list_ctx == "table_row":
+        reasons.append("inside_table_row?")
+
+    return (not reasons, reasons)
 
 
 def _scan_line(
@@ -86,6 +150,8 @@ def _scan_line(
     line_index: int,
     base_offset: int,
     raw_line: str,
+    line_meta: Mapping[str, object] | None,
+    chunk_meta: Mapping[str, object] | None,
 ) -> Iterable[HeaderCandidate]:
     """Yield header candidates discovered within a single chunk line."""
 
@@ -114,6 +180,22 @@ def _scan_line(
             end_char = start_char + len(trimmed)
             label_match = HEADER_PATTERN.match(trimmed)
             label = label_match.group(0).strip() if label_match else trimmed.split(" ")[0]
+            evidence = _build_para_evidence(line_meta)
+            keep, reasons = _passes_prefilter(pattern, evidence, line_meta=line_meta, chunk_meta=chunk_meta or {})
+            if not keep:
+                if reasons:
+                    LOGGER.debug(
+                        "[header_scan] %s",
+                        {
+                            "event": "candidate_skip",
+                            "chunk_id": chunk.id,
+                            "line_index": line_index,
+                            "pattern": pattern,
+                            "reason": reasons,
+                            "para_evidence": evidence,
+                        },
+                    )
+                continue
             candidate = HeaderCandidate(
                 chunk_id=chunk.id,
                 chunk_index=chunk_index,
@@ -126,6 +208,7 @@ def _scan_line(
                 end_char=int(end_char),
                 style=dict(chunk.style or {}),
             )
+            candidate.para_evidence = dict(evidence)
             results.append(candidate)
             # Avoid emitting duplicate candidates for the same segment by
             # breaking after the first anchored match per pattern.
@@ -142,8 +225,27 @@ def scan_candidates(chunks: Sequence[UFChunk]) -> List[HeaderCandidate]:
         if not text.strip():
             continue
         offset = 0
+        chunk_meta = chunk.meta if isinstance(getattr(chunk, "meta", None), Mapping) else {}
+        line_metas = []
+        if isinstance(chunk_meta.get("line_metas"), Sequence):
+            line_metas = list(chunk_meta.get("line_metas") or [])
         for line_index, line in enumerate(text.splitlines(keepends=True)):
-            found = list(_scan_line(chunk, chunk_index, line_index, offset, line))
+            line_meta = None
+            if line_metas and line_index < len(line_metas):
+                candidate_meta = line_metas[line_index]
+                if isinstance(candidate_meta, Mapping):
+                    line_meta = candidate_meta
+            found = list(
+                _scan_line(
+                    chunk,
+                    chunk_index,
+                    line_index,
+                    offset,
+                    line,
+                    line_meta,
+                    chunk_meta,
+                )
+            )
             candidates.extend(found)
             offset += len(line)
     for idx, candidate in enumerate(candidates):
