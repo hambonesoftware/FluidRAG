@@ -49,10 +49,14 @@ def build_stage_payload(
     doc_id: str,
     stage_chunks: Sequence[Mapping[str, object]],
     *,
-    token_size: int = 386,
-    overlap: int = 96,
+    token_size: int = 90,
+    overlap: int = 12,
 ) -> StageBuildResult:
-    """Return a stage payload extended with microchunks and section groups."""
+    """Return a stage payload extended with UF microchunks and section groups.
+
+    The defaults mirror the UF specification (≤90 token windows with ~12 token
+    overlap) so that stage builds are consistent with the end-to-end pipeline.
+    """
 
     enriched_chunks: List[Dict[str, object]] = []
     for chunk in stage_chunks:
