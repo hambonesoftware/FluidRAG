@@ -7,7 +7,7 @@ import os
 import re
 
 from datetime import UTC, datetime
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 from backend.persistence import get_preprocess_cache
@@ -18,8 +18,9 @@ from backend.utils.strings import s
 
 from backend.domain import PASS_DOMAIN_LEXICON, PASS_DOMAIN_THRESHOLD
 
-from ..fluid import fluid_refine_chunks  # type: ignore[import]
-from ..hep_cluster import hep_cluster_chunks  # type: ignore[import]
+from chunking.efhg import compute_chunk_scores, run_efhg
+
+from ..uf_pipeline import prepare_pass_chunk, run_pipeline as run_uf_pipeline
 from .constants import CHUNK_GROUP_TOKEN_LIMIT
 
 log = logging.getLogger("FluidRAG.chunking")
@@ -211,10 +212,7 @@ def export_pass_stage_snapshots(
 
 
 try:  # pragma: no cover - compatibility shim
-    from ..preprocess import (  # type: ignore[import]
-        approximate_tokens,
-        section_bounded_chunks_from_pdf,
-    )
+    from ..preprocess import approximate_tokens  # type: ignore[import]
 except Exception:  # pragma: no cover - compatibility shim
 
     def approximate_tokens(text: str) -> int:
@@ -224,18 +222,9 @@ except Exception:  # pragma: no cover - compatibility shim
             return 0
         return max(1, len(text) // 4)
 
-    def section_bounded_chunks_from_pdf(
-        pdf_path: str,
-        sidecar_dir: Optional[str] = None,
-        tok_budget_chars: int = 6400,
-        overlap_lines: int = 3,
-        session_id: Optional[str] = None,
-    ) -> Iterable[Dict[str, Any]]:
-        raise RuntimeError("section_bounded_chunks_from_pdf unavailable")
-
 
 def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
-    """Load or derive chunks for the provided session."""
+    """Load UF chunks for ``session_id`` and enrich them with EFHG metadata."""
 
     state = get_state(session_id)
     if state is None:
@@ -247,66 +236,150 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
     except Exception:  # pragma: no cover - defensive
         log.exception("[chunking] failed to ensure sidecar directory %s", sidecar_dir)
 
-    if state.pre_chunks is not None and state.pre_chunks:
-        chunks = [dict(chunk) for chunk in state.pre_chunks]
+    document_name = getattr(state, "filename", None) or "Document"
+    file_hash = getattr(state, "file_hash", None)
+
+    def _normalise_chunks(source: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        normalized: List[Dict[str, Any]] = []
+        for idx, entry in enumerate(source):
+            normalized.append(prepare_pass_chunk(entry, document=document_name, position=idx))
+        return normalized
+
+    chunks: List[Dict[str, Any]] = []
+
+    if getattr(state, "uf_chunks", None):
+        chunks = _normalise_chunks(state.uf_chunks)
     else:
-        cached_pre = get_preprocess_cache(getattr(state, "file_hash", None))
+        cached_pre = get_preprocess_cache(file_hash)
         if cached_pre:
-            cached_payload = cached_pre.get("macro_chunks") or cached_pre.get("chunks") or []
-            cached_chunks = [dict(chunk) for chunk in cached_payload]
-            state.pre_chunks = cached_chunks
-            chunks = cached_chunks
+            payload = (
+                cached_pre.get("micro_chunks")
+                or cached_pre.get("macro_chunks")
+                or cached_pre.get("chunks")
+                or []
+            )
+            chunks = _normalise_chunks(payload)
+            response_payload = cached_pre.get("response") or {}
+            uf_summary = response_payload.get("uf_pipeline") or cached_pre.get("uf_pipeline")
+            if isinstance(uf_summary, dict):
+                state.uf_pipeline = uf_summary
+            tables_payload = response_payload.get("tables") or cached_pre.get("tables")
+            if isinstance(tables_payload, list):
+                state.uf_tables = tables_payload
+            headers_payload = response_payload.get("headers") or cached_pre.get("headers")
+            if isinstance(headers_payload, list):
+                state.headers = headers_payload
+            debug_payload = cached_pre.get("debug")
+            if isinstance(debug_payload, dict):
+                state.debug = dict(debug_payload)
         else:
-            pdf_path = state.file_path
+            pdf_path = getattr(state, "file_path", None)
             if not pdf_path or not os.path.exists(pdf_path):
                 uploads_dir = os.getenv("UPLOAD_FOLDER", "uploads")
                 pdf_path = os.path.join(uploads_dir, f"{session_id}.pdf")
+            doc_id = os.path.splitext(os.path.basename(pdf_path or ""))[0] or session_id or "document"
+            uf_result = run_uf_pipeline(
+                pdf_path,
+                doc_id=doc_id,
+                session_id=session_id,
+                sidecar_dir=sidecar_dir,
+                llm_client=None,
+            )
             chunks = [
-                dict(chunk)
-                for chunk in section_bounded_chunks_from_pdf(
-                    pdf_path,
-                    sidecar_dir=sidecar_dir,
-                    session_id=session_id,
-                )
+                prepare_pass_chunk(chunk, document=document_name, position=idx)
+                for idx, chunk in enumerate(uf_result.uf_chunks)
             ]
+            state.uf_pipeline = uf_result.summary()
+            state.uf_tables = uf_result.tables
+            state.headers = uf_result.headers.pages
+
+    if not chunks:
+        log.warning("[chunking] UF chunk list is empty for session %s", session_id)
+        state.uf_chunks = []
+        state.standard_section_lookup = {}
+        state.chunk_stage_snapshots = {"uf_chunks": [], "uf_scored": [], "efhg_spans": []}
+        return []
+
+    scores = compute_chunk_scores(chunks)
+    spans = run_efhg(chunks)
+
+    span_membership: Dict[int, List[Dict[str, Any]]] = {}
+    for span in spans:
+        try:
+            start = int(span.get("start_index", -1))
+            end = int(span.get("end_index", -1))
+        except Exception:
+            continue
+        for idx in range(start, end + 1):
+            entry = {k: span.get(k) for k in ("score", "start_index", "end_index", "preview")}
+            entry["span_index"] = spans.index(span)
+            span_membership.setdefault(idx, []).append(entry)
+
+    for idx, (chunk, metrics) in enumerate(zip(chunks, scores)):
+        meta = dict(chunk.get("meta") or {})
+        meta["uf_scores"] = metrics
+        members = span_membership.get(idx, [])
+        if members:
+            best = max(members, key=lambda entry: entry.get("score") or 0.0)
+            meta["efhg_span"] = best
+            meta["efhg_span_memberships"] = members
+        chunk["meta"] = meta
+
+    span_snapshot: List[Dict[str, Any]] = []
+    for span in spans:
+        record = dict(span)
+        members: List[str] = []
+        try:
+            start = int(span.get("start_index", -1))
+            end = int(span.get("end_index", -1))
+        except Exception:
+            start = end = -1
+        for idx in range(start, end + 1):
+            if 0 <= idx < len(chunks):
+                micro_id = chunks[idx].get("micro_id") or chunks[idx].get("chunk_id")
+                if micro_id:
+                    members.append(str(micro_id))
+        record["micro_ids"] = members
+        span_snapshot.append(record)
 
     raw_snapshot = [dict(chunk) for chunk in chunks]
-
-    document_name = state.filename or "Document"
+    scored_snapshot = []
     for chunk in chunks:
-        chunk.setdefault("document", document_name)
-        chunk.setdefault("section_number", chunk.get("section_id") or "")
-        chunk.setdefault("section_name", chunk.get("section_title") or "")
-        chunk.setdefault("page_start", chunk.get("page_start") or chunk.get("page") or 1)
-        chunk.setdefault(
-            "page_end",
-            chunk.get("page_end") or chunk.get("page") or chunk.get("page_start") or 1,
+        score_meta = chunk.get("meta", {}).get("uf_scores", {})
+        scored_snapshot.append(
+            {
+                "chunk_id": chunk.get("chunk_id"),
+                "section_number": chunk.get("section_number"),
+                "section_name": chunk.get("section_name"),
+                "page_start": chunk.get("page_start"),
+                "page_end": chunk.get("page_end"),
+                "meta": {
+                    "uf_scores": score_meta,
+                    "efhg_span": chunk.get("meta", {}).get("efhg_span"),
+                },
+                "text": chunk.get("text"),
+            }
         )
-        chunk.setdefault("text", chunk.get("text", ""))
-        chunk.setdefault("meta", {})
 
-
-    standard_snapshot = [dict(chunk) for chunk in chunks]
-
-    refined = fluid_refine_chunks(chunks)
-    fluid_snapshot = [dict(chunk) for chunk in refined]
-
-    enriched = hep_cluster_chunks(refined)
-    hep_snapshot = [dict(chunk) for chunk in enriched]
-
-    state.refined_chunks = refined
-    state.clustered_chunks = enriched
+    state.uf_chunks = [dict(chunk) for chunk in chunks]
+    state.pre_chunks = [dict(chunk) for chunk in chunks]
+    state.refined_chunks = list(state.uf_chunks)
+    state.clustered_chunks = list(state.uf_chunks)
     state.chunk_stage_snapshots = {
+        "uf_chunks": raw_snapshot,
+        "uf_scored": scored_snapshot,
+        "efhg_spans": span_snapshot,
         "raw_chunking": raw_snapshot,
-        "standard_chunks": standard_snapshot,
-        "fluid_chunks": fluid_snapshot,
-        "hep_chunks": hep_snapshot,
+        "standard_chunks": scored_snapshot,
+        "fluid_chunks": scored_snapshot,
+        "hep_chunks": scored_snapshot,
     }
     try:
-        state.standard_section_lookup = _build_section_lookup(standard_snapshot)
+        state.standard_section_lookup = _build_section_lookup(raw_snapshot)
     except Exception:  # pragma: no cover - defensive
         log.exception("[chunking] failed to build section lookup for session %s", session_id)
-    return enriched
+        state.standard_section_lookup = {}
+    return chunks
 
 
 def chunk_token_len(chunk: Dict[str, Any]) -> int:

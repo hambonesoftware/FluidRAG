@@ -781,5 +781,76 @@ def run_pipeline(
     )
 
 
-__all__ = ["PipelineResult", "run_pipeline"]
+def prepare_pass_chunk(
+    chunk: MicroChunk,
+    *,
+    document: str,
+    position: Optional[int] = None,
+    default_section: str = "Document",
+) -> Dict[str, Any]:
+    """Return a chunk dictionary formatted for downstream passes.
+
+    The helper normalises pagination, section metadata, and ensures a ``meta``
+    container is present.  It intentionally preserves any existing metadata on
+    the source chunk while layering the UF-pipeline specific flags expected by
+    the discipline passes.
+    """
+
+    enriched: Dict[str, Any] = dict(chunk)
+
+    micro_id = enriched.get("micro_id") or enriched.get("chunk_id")
+    if micro_id:
+        enriched["chunk_id"] = str(micro_id)
+
+    enriched["document"] = document or "Document"
+    pages = enriched.get("pages")
+    page_start = page_end = None
+    if isinstance(pages, list) and pages:
+        try:
+            page_start = int(pages[0])
+            page_end = int(pages[-1])
+        except Exception:
+            page_start = page_end = None
+    if page_start is None:
+        page_value = enriched.get("page")
+        try:
+            page_start = int(page_value) if page_value is not None else 1
+        except Exception:
+            page_start = 1
+        try:
+            page_end = int(enriched.get("page_end") or page_start)
+        except Exception:
+            page_end = page_start
+        enriched.setdefault("pages", [page_start])
+    enriched["page_start"] = page_start
+    enriched["page_end"] = page_end if page_end is not None else page_start
+
+    section_number = enriched.get("section_number") or enriched.get("section_id") or ""
+    section_title = (
+        enriched.get("section_title")
+        or enriched.get("section_name")
+        or default_section
+    )
+    enriched["section_number"] = str(section_number) if section_number is not None else ""
+    enriched["section_title"] = section_title
+    enriched["section_name"] = section_title
+
+    sequence_index = enriched.get("sequence_index")
+    try:
+        sequence_index_int = int(sequence_index)
+    except Exception:
+        sequence_index_int = None
+    if sequence_index_int is None and position is not None:
+        sequence_index_int = int(position)
+    enriched["chunk_index_in_section"] = sequence_index_int or 0
+
+    meta = dict(enriched.get("meta") or {})
+    meta.setdefault("uf_pipeline", True)
+    enriched["meta"] = meta
+    enriched.setdefault("chunk_type", "uf")
+
+    return enriched
+
+
+__all__ = ["PipelineResult", "prepare_pass_chunk", "run_pipeline"]
 

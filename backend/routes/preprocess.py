@@ -16,7 +16,7 @@ from ..chunking.token_chunker import (
     micro_chunks_by_tokens,
 )
 from ..pipeline import preprocess as pp
-from ..pipeline.uf_pipeline import run_pipeline as run_uf_pipeline
+from ..pipeline.uf_pipeline import prepare_pass_chunk, run_pipeline as run_uf_pipeline
 from ..persistence import get_preprocess_cache, save_preprocess_cache
 from ..state import get_state
 
@@ -254,44 +254,10 @@ def preprocess_route():
             preprocess_debug_payload = dict(preprocess_debug_payload)
             preprocess_debug_payload["uf_pipeline"] = uf_debug
 
-        macro_chunks = []
-        for idx, chunk in enumerate(uf_result.uf_chunks):
-            enriched = dict(chunk)
-            micro_id = enriched.get("micro_id")
-            if micro_id:
-                enriched.setdefault("chunk_id", micro_id)
-            enriched.setdefault("document", doc_name)
-            pages = enriched.get("pages")
-            if isinstance(pages, list) and pages:
-                try:
-                    page_start = int(pages[0])
-                except Exception:
-                    page_start = 1
-                try:
-                    page_end = int(pages[-1])
-                except Exception:
-                    page_end = page_start
-            else:
-                page_val = enriched.get("page") or 1
-                page_start = int(page_val)
-                page_end = int(enriched.get("page_end") or page_start)
-                enriched["pages"] = [page_start]
-            enriched["page_start"] = page_start
-            enriched["page_end"] = page_end
-            enriched.setdefault("section_number", enriched.get("section_id") or "")
-            section_title = (
-                enriched.get("section_title")
-                or enriched.get("section_name")
-                or "Document"
-            )
-            enriched["section_title"] = section_title
-            enriched["section_name"] = section_title
-            enriched.setdefault("chunk_index_in_section", enriched.get("sequence_index", idx))
-            enriched.setdefault("chunk_type", "uf")
-            meta = dict(enriched.get("meta") or {})
-            meta.setdefault("uf_pipeline", True)
-            enriched["meta"] = meta
-            macro_chunks.append(enriched)
+        macro_chunks = [
+            prepare_pass_chunk(chunk, document=doc_name, position=idx)
+            for idx, chunk in enumerate(uf_result.uf_chunks)
+        ]
 
         micro_chunks = [dict(chunk) for chunk in macro_chunks]
 
