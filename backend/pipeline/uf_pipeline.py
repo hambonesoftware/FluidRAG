@@ -27,7 +27,7 @@ from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional,
 
 import regex as re
 
-from chunking.efhg import compute_chunk_scores, run_efhg
+from chunking.efhg import compute_chunk_scores, compute_fluid_neighbors, run_efhg
 from ingest.microchunker import MicroChunk, microchunk_text
 
 from ..ingest.pdf_extract import extract as pdf_extract
@@ -683,8 +683,9 @@ def _write_chunk_audit(
     spans: Sequence[Mapping[str, Any]],
 ) -> Dict[str, Path]:
     audit_dir = sidecar_dir / "uf_pipeline"
+    neighbor_info = compute_fluid_neighbors(chunks)
     chunk_rows = []
-    for chunk, score in zip(chunks, scores):
+    for idx, (chunk, score) in enumerate(zip(chunks, scores)):
         row = {
             "micro_id": chunk.get("micro_id"),
             "page": chunk.get("page"),
@@ -696,12 +697,39 @@ def _write_chunk_audit(
             "header_weight": score.get("header_weight"),
             "stop_punct": score.get("stop_punct"),
         }
+        neighbor = neighbor_info[idx] if idx < len(neighbor_info) else {}
+        if neighbor.get("prev"):
+            row["fluid_prev"] = neighbor["prev"]
+        if neighbor.get("next"):
+            row["fluid_next"] = neighbor["next"]
         chunk_rows.append(row)
     scores_path = _write_jsonl(audit_dir / "uf_scores.jsonl", chunk_rows)
     spans_path = _write_json(audit_dir / "uf_spans.json", list(spans))
+    chunk_records = []
+    for chunk in chunks:
+        chunk_records.append(
+            {
+                "micro_id": chunk.get("micro_id"),
+                "page": chunk.get("page"),
+                "pages": chunk.get("pages"),
+                "token_span": chunk.get("token_span"),
+                "char_span": chunk.get("char_span"),
+                "text": chunk.get("text"),
+                "norm_text": chunk.get("norm_text"),
+                "style": chunk.get("style"),
+                "lex": chunk.get("lex"),
+                "emb": chunk.get("emb"),
+                "domain_hint": chunk.get("domain_hint"),
+                "section_id": chunk.get("section_id"),
+                "section_title": chunk.get("section_title"),
+                "header_anchor": chunk.get("header_anchor"),
+            }
+        )
+    chunks_path = _write_jsonl(audit_dir / "uf_chunks.jsonl", chunk_records)
     return {
         "uf_scores": scores_path,
         "uf_spans": spans_path,
+        "uf_chunks": chunks_path,
     }
 
 
