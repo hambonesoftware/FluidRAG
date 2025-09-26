@@ -4,7 +4,8 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from collections.abc import Iterable as IterableABC, Mapping as MappingABC
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
 from backend.efhg.entropy import (
     DEFAULT_WEIGHTS,
@@ -51,6 +52,21 @@ class HeaderIndex:
     spans: List[Dict[str, Any]]
     header_shards: List[Dict[str, Any]]
     output_dir: Path
+    truth: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class PreprocessHeader:
+    """Normalized representation of a preprocess header entry."""
+
+    id: int
+    page: int
+    line_idx: Optional[int]
+    raw_text: str
+    label: Optional[str]
+    body: str
+    section_number: Optional[str]
+    meta: Dict[str, Any]
 
 
 _PATTERN_PRIORITY = {
@@ -59,6 +75,303 @@ _PATTERN_PRIORITY = {
     "appendix_sub_AN": 2,
     "appendix_sub_AlN": 2,
 }
+
+
+def _normalize_label_key(label: Optional[str]) -> str:
+    if not label:
+        return ""
+    return re.sub(r"[^0-9A-Za-z]+", "", label).upper()
+
+
+def _split_label_text(text: str, fallback: Optional[str] = None) -> Tuple[Optional[str], str]:
+    cleaned = (text or "").strip()
+    if not cleaned and fallback:
+        return fallback, ""
+    match = HEADER_PATTERN.match(cleaned)
+    if match:
+        label = match.group(0).strip()
+        remainder = cleaned[len(match.group(0)) :].lstrip("—-: \u2014 ").strip()
+        return label, remainder
+    if fallback:
+        return fallback.strip(), cleaned
+    return None, cleaned
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _iter_preprocess_blocks(decomp: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
+    """Yield page/header blocks from common preprocess payload shapes."""
+
+    def _maybe_iter(obj: Any) -> Iterable[Mapping[str, Any]]:
+        if isinstance(obj, MappingABC):
+            yield obj
+        elif isinstance(obj, IterableABC):
+            for item in obj:
+                if isinstance(item, MappingABC):
+                    yield item
+
+    preprocess = decomp.get("preprocess") if isinstance(decomp, MappingABC) else None
+    if isinstance(preprocess, MappingABC):
+        for key in ("headers", "headers_by_page", "pages"):
+            value = preprocess.get(key)
+            if value:
+                yield from _maybe_iter(value)
+    for key in ("preprocess_headers", "headers", "headers_by_page", "header_pages"):
+        value = decomp.get(key)
+        if value:
+            yield from _maybe_iter(value)
+
+
+def _load_preprocess_headers(decomp: Mapping[str, Any]) -> List[PreprocessHeader]:
+    headers: List[PreprocessHeader] = []
+    seen_ids: Set[Tuple[int, Optional[int], str]] = set()
+    counter = 0
+    for block in _iter_preprocess_blocks(decomp):
+        page_raw = block.get("page")
+        page = _coerce_int(page_raw) or 0
+        entries = block.get("headers") if isinstance(block, MappingABC) else None
+        if not page or not isinstance(entries, IterableABC):
+            continue
+        for entry in entries:
+            if not isinstance(entry, MappingABC):
+                continue
+            raw_text = str(entry.get("text") or entry.get("name") or "").strip()
+            if not raw_text:
+                continue
+            line_idx = _coerce_int(entry.get("line_idx"))
+            section_number = entry.get("section_number")
+            label, body = _split_label_text(raw_text, str(section_number or "") or None)
+            dedupe_key = (page, line_idx, raw_text)
+            if dedupe_key in seen_ids:
+                continue
+            seen_ids.add(dedupe_key)
+            headers.append(
+                PreprocessHeader(
+                    id=counter,
+                    page=page,
+                    line_idx=line_idx,
+                    raw_text=raw_text,
+                    label=label,
+                    body=body,
+                    section_number=str(section_number).strip() if section_number else None,
+                    meta=dict(entry),
+                )
+            )
+            counter += 1
+    headers.sort(key=lambda h: (h.page, h.line_idx if h.line_idx is not None else 10**6, h.raw_text))
+    return headers
+
+
+def _verified_from_preprocess(
+    preprocess_headers: List[PreprocessHeader],
+    pages_norm: List[str],
+    pages_raw: List[str],
+) -> VerifiedHeaders:
+    payload_entries: List[Dict[str, Any]] = []
+    lookup: Dict[Tuple[int, str, str], PreprocessHeader] = {}
+    for header in preprocess_headers:
+        label = header.label or header.section_number or header.raw_text
+        if not label:
+            continue
+        body = header.body if header.body else ""
+        payload_entries.append({"label": label, "text": body, "page": header.page})
+        lookup[(header.page, label, body)] = header
+
+    verified = verify_headers({"headers": payload_entries}, pages_norm, pages_raw)
+    results: List[VerifiedHeader] = []
+    matched_ids: Set[int] = set()
+    for header in verified.headers:
+        key = (header.page, header.label, header.text)
+        entry = lookup.get(key)
+        if entry is None:
+            norm_label = _normalize_label_key(header.label)
+            candidates = [
+                item
+                for item in preprocess_headers
+                if item.page == header.page and _normalize_label_key(item.label or item.section_number) == norm_label
+            ]
+            entry = candidates[0] if candidates else None
+        if entry is None:
+            continue
+        matched_ids.add(entry.id)
+        verification = dict(header.verification)
+        verification.update(
+            {
+                "status": verification.get("status", "preprocess"),
+                "source": "preprocess",
+                "preprocess_id": entry.id,
+                "line_idx": entry.line_idx,
+                "raw_text": entry.raw_text,
+            }
+        )
+        results.append(
+            VerifiedHeader(
+                label=header.label,
+                text=header.text,
+                page=header.page,
+                span=header.span,
+                verification=verification,
+                source="preprocess",
+                confidence=max(header.confidence, 0.95),
+            )
+        )
+
+    for entry in preprocess_headers:
+        if entry.id in matched_ids:
+            continue
+        label = entry.label or entry.section_number or entry.raw_text
+        if not label:
+            continue
+        verification = {
+            "status": "preprocess_only",
+            "source": "preprocess",
+            "preprocess_id": entry.id,
+            "line_idx": entry.line_idx,
+            "raw_text": entry.raw_text,
+        }
+        span_start = entry.line_idx if entry.line_idx is not None else 0
+        results.append(
+            VerifiedHeader(
+                label=label,
+                text=entry.body,
+                page=entry.page,
+                span=(span_start, span_start),
+                verification=verification,
+                source="preprocess",
+                confidence=0.9,
+            )
+        )
+
+    results.sort(key=lambda h: (h.page, h.verification.get("line_idx", h.span[0] if h.span else 0), h.label))
+    return VerifiedHeaders(headers=results)
+
+
+def _promote_preprocess_truth(
+    candidates: List[HeaderCandidate],
+    uf_chunks: List[UFChunk],
+    preprocess_headers: List[PreprocessHeader],
+    chunk_lookup: Mapping[str, UFChunk],
+) -> Dict[int, Dict[str, Any]]:
+    for candidate in candidates:
+        candidate.promoted = False
+        candidate.promotion_reason = None
+
+    candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
+    for candidate in candidates:
+        candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
+
+    headers_by_line: Dict[Tuple[int, int], List[PreprocessHeader]] = {}
+    headers_by_label: Dict[Tuple[int, str], List[PreprocessHeader]] = {}
+    for header in preprocess_headers:
+        if header.line_idx is not None:
+            headers_by_line.setdefault((header.page, header.line_idx), []).append(header)
+        key = _normalize_label_key(header.label or header.section_number)
+        if key:
+            headers_by_label.setdefault((header.page, key), []).append(header)
+
+    matches: Dict[int, Dict[str, Any]] = {}
+    for candidate in candidates:
+        header: Optional[PreprocessHeader] = None
+        line_key = (candidate.page, candidate.line_index)
+        candidates_for_line = headers_by_line.get(line_key)
+        if candidates_for_line:
+            header = candidates_for_line.pop(0)
+            if not candidates_for_line:
+                headers_by_line.pop(line_key, None)
+        if header is None:
+            label_key = _normalize_label_key(candidate.label)
+            label_candidates = headers_by_label.get((candidate.page, label_key))
+            if label_candidates:
+                header = label_candidates.pop(0)
+                if not label_candidates:
+                    headers_by_label.pop((candidate.page, label_key), None)
+        if header is None:
+            continue
+        candidate.promoted = True
+        candidate.promotion_reason = "preprocess"
+        chunk = chunk_lookup.get(candidate.chunk_id)
+        matches[header.id] = {
+            "candidate": candidate,
+            "uf_anchor": bool(chunk.header_anchor) if chunk else False,
+        }
+
+    uf_promotions = _collect_uf_anchor_candidates(candidates_by_chunk, uf_chunks)
+    for candidate, source in uf_promotions:
+        if not candidate.promoted:
+            candidate.promoted = True
+            candidate.promotion_reason = source
+
+    return matches
+
+
+def _apply_preprocess_matches(
+    verified_headers: VerifiedHeaders,
+    preprocess_headers: List[PreprocessHeader],
+    matches: Mapping[int, Dict[str, Any]],
+) -> None:
+    header_by_id = {header.id: header for header in preprocess_headers}
+    for header in verified_headers.headers:
+        verification = dict(header.verification)
+        preprocess_id = verification.get("preprocess_id")
+        if isinstance(preprocess_id, int) and preprocess_id in matches:
+            match_info = matches[preprocess_id]
+            candidate = match_info.get("candidate")
+            if candidate:
+                remainder = candidate.text[len(candidate.label) :].lstrip("—-: \u2014 ").strip()
+                header.span = (candidate.start_char, max(candidate.end_char, candidate.start_char + len(remainder or header.text)))
+                if remainder:
+                    header.text = remainder
+                verification["promotion_reason"] = "preprocess"
+                verification["candidate_id"] = candidate.candidate_id
+                verification["chunk_id"] = candidate.chunk_id
+            verification["uf_anchor"] = match_info.get("uf_anchor", False)
+        else:
+            verification.setdefault("uf_anchor", False)
+        if isinstance(preprocess_id, int) and preprocess_id in header_by_id:
+            entry = header_by_id[preprocess_id]
+            verification.setdefault("line_idx", entry.line_idx)
+            verification.setdefault("raw_text", entry.raw_text)
+        header.verification = verification
+        header.source = "preprocess"
+        header.confidence = max(header.confidence, 0.95)
+
+
+def _build_truth_rows(final_headers: List[VerifiedHeader]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for header in final_headers:
+        verification = header.verification or {}
+        if (verification.get("source") or header.source) != "preprocess":
+            continue
+        raw_text = str(verification.get("raw_text") or f"{header.label} {header.text}".strip())
+        line_idx_raw = verification.get("line_idx")
+        try:
+            line_idx = int(line_idx_raw)
+        except Exception:
+            line_idx = 0
+        rows.append(
+            {
+                "page": int(header.page),
+                "line_idx": line_idx,
+                "text": raw_text,
+                "provenance": {
+                    "preprocess": True,
+                    "uf_anchor": bool(verification.get("uf_anchor")),
+                },
+            }
+        )
+    rows.sort(key=lambda row: (row["page"], row["line_idx"], row["text"]))
+    return rows
+
+
+def _write_truth_rows(output_dir: Path, rows: List[Dict[str, Any]]) -> None:
+    payload = {"headers_final": rows}
+    with (output_dir / "headers_final.json").open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
 
 
 @dataclass
@@ -452,6 +765,10 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     output_dir = _ensure_output_dir(doc_id, decomp.get("output_dir"))
 
     uf_chunks = uf_chunk(decomp)
+    chunk_lookup = {chunk.id: chunk for chunk in uf_chunks}
+    preprocess_truth_active = HEADER_MODE == "preprocess_truth"
+    preprocess_headers = _load_preprocess_headers(decomp) if preprocess_truth_active else []
+    preprocess_matches: Dict[int, Dict[str, Any]] = {}
     candidates = scan_candidates(uf_chunks)
     compute_entropy_features(uf_chunks)
     start_scores = score_starts(uf_chunks)
@@ -482,7 +799,13 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         verified_headers = VerifiedHeaders()
 
     repaired_headers = aggressive_sequence_repair(verified_headers, pages_norm, tokens_per_page)
-    if HEADER_MODE == "raw_truth":
+    if preprocess_truth_active and preprocess_headers:
+        preprocess_verified = _verified_from_preprocess(preprocess_headers, pages_norm, pages_raw)
+        if preprocess_verified.headers:
+            repaired_headers = preprocess_verified
+    if preprocess_truth_active:
+        preprocess_matches = _promote_preprocess_truth(candidates, uf_chunks, preprocess_headers, chunk_lookup)
+    elif HEADER_MODE == "raw_truth":
         _promote_raw_truth(candidates, uf_chunks, verified_headers)
     else:
         promote_candidates(candidates, HEADER_GATE_MODE)
@@ -512,7 +835,6 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     )
 
     seed_candidates = select_quantile_ids(start_scores, DEFAULT_SEED_QUANTILE)
-    chunk_lookup = {chunk.id: chunk for chunk in uf_chunks}
     seed_ids = [cid for cid in seed_candidates if chunk_lookup.get(cid) and chunk_lookup[cid].header_anchor]
     if not seed_ids:
         seed_ids = [chunk.id for chunk in uf_chunks if chunk.header_anchor]
@@ -594,6 +916,9 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
 
     accepted_records = [record for record in span_records if record.accepted]
 
+    if preprocess_truth_active and preprocess_headers:
+        _apply_preprocess_matches(repaired_headers, preprocess_headers, preprocess_matches)
+
     final_headers_map: Dict[str, VerifiedHeader] = {header.label: header for header in repaired_headers.headers}
     for record in accepted_records:
         span = record.span
@@ -605,6 +930,29 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             continue
         existing = final_headers_map.get(label)
         if existing and existing.source == "repair":
+            continue
+        if (
+            preprocess_truth_active
+            and existing
+            and record.promotion_reason == "preprocess"
+        ):
+            verification = dict(existing.verification)
+            verification.update({"status": "efhg", "promotion_reason": record.promotion_reason})
+            if candidate:
+                remainder = candidate.text[len(candidate.label) :].lstrip("—-: \u2014 ").strip()
+                canonical_text = remainder or existing.text or span.text.split(label, 1)[-1].strip()
+                span_range = (candidate.start_char, max(candidate.end_char, candidate.start_char + len(canonical_text)))
+            else:
+                canonical_text = existing.text or span.text.split(label, 1)[-1].strip()
+                span_range = span.span
+            verification.setdefault("uf_anchor", existing.verification.get("uf_anchor", False))
+            verification.setdefault("preprocess_id", existing.verification.get("preprocess_id"))
+            existing.text = canonical_text
+            existing.span = span_range
+            existing.verification = verification
+            existing.source = "preprocess"
+            existing.confidence = max(existing.confidence, 0.97)
+            final_headers_map[label] = existing
             continue
         if candidate:
             remainder = candidate.text[len(candidate.label) :].lstrip("—-: \u2014 ").strip()
@@ -650,6 +998,11 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             )
 
     final_headers = sorted(final_headers_map.values(), key=lambda h: (h.page, h.span[0], h.label))
+
+    truth_rows: List[Dict[str, Any]] = []
+    if preprocess_truth_active:
+        truth_rows = _build_truth_rows(final_headers)
+        _write_truth_rows(output_dir, truth_rows)
 
     headers_payload = [
         {
@@ -851,6 +1204,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         "header_shards": header_shards_payload,
         "gap_probes": gap_logger.as_list(),
     }
+    if preprocess_truth_active:
+        audit_payload["headers_final_truth"] = truth_rows
 
     with (output_dir / "header_candidates_raw.json").open("w", encoding="utf-8") as handle:
         json.dump(raw_candidate_payload, handle, ensure_ascii=False, indent=2)
@@ -883,6 +1238,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         spans=efhg_records,
         header_shards=header_shards_payload,
         output_dir=output_dir,
+        truth=truth_rows,
     )
 
 

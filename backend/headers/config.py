@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 # Overall header mode determines the promotion strategy.
+# "preprocess_truth" => promote preprocess headers directly (with optional stitching).
 # "raw_truth" => union of UF anchors and LLM headers with EFHG used only for span stitching.
-HEADER_MODE = "raw_truth"
+HEADER_MODE = "preprocess_truth"
 
 # EFHG gate mode controls whether scoring is allowed to block promotions
 # when the pipeline relies on score-based gating.
