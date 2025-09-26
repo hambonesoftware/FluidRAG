@@ -34,7 +34,12 @@ from backend.headers.header_llm import (
     parse_fenced_outline,
     verify_headers,
 )
-from backend.headers.header_scan import HeaderCandidate, promote_candidates, scan_candidates
+from backend.headers.header_scan import (
+    STRONG_PATTERNS,
+    HeaderCandidate,
+    promote_candidates,
+    scan_candidates,
+)
 from backend.uf_chunker import HEADER_PATTERN, UFChunk, uf_chunk
 
 
@@ -72,12 +77,28 @@ class SpanRecord:
     promotion_reason: str | None = None
     conflicts_resolved: List[Dict[str, Any]] = field(default_factory=list)
     suppression_reason: str | None = None
+    demotion_reason: str | None = None
 
 
 def _pattern_rank(record: SpanRecord) -> int:
     if record.candidate:
         return _PATTERN_PRIORITY.get(record.candidate.pattern, 1)
     return 1
+
+
+def _record_pattern(record: SpanRecord) -> str | None:
+    if record.candidate and record.candidate.pattern:
+        return record.candidate.pattern
+    return _classify_pattern(_extract_label(record.span.text))
+
+
+def _record_family(record: SpanRecord) -> str:
+    pattern = _record_pattern(record) or ""
+    if pattern.startswith("appendix"):
+        return "appendix"
+    if pattern == "numeric_section":
+        return "numeric"
+    return "general"
 
 
 def _classify_pattern(label: str | None) -> str | None:
@@ -182,7 +203,10 @@ def _promote_raw_truth(
     # 3) Promote everything in the merged list.
     for candidate, source in merged:
         candidate.promoted = True
-        candidate.promotion_reason = source
+        if candidate.pattern in STRONG_PATTERNS:
+            candidate.promotion_reason = "pattern"
+        else:
+            candidate.promotion_reason = source
 
     return [candidate for candidate, _ in merged]
 
@@ -213,6 +237,24 @@ def _priority_key(record: SpanRecord, llm_labels: Set[str]) -> Tuple[float, ...]
     )
 
 
+def _ignore_conflict(record: SpanRecord, winner: SpanRecord) -> bool:
+    family = _record_family(record)
+    winner_family = _record_family(winner)
+    if "appendix" in {family, winner_family} and family != winner_family:
+        return True
+    if record.promotion_reason and winner.promotion_reason:
+        cand = record.candidate
+        win_cand = winner.candidate
+        if (
+            cand
+            and win_cand
+            and cand.chunk_id == win_cand.chunk_id
+            and cand.line_index != win_cand.line_index
+        ):
+            return True
+    return False
+
+
 def _span_overlap(left: SpanRecord, right: SpanRecord) -> int:
     a_start, a_end = left.span.span
     b_start, b_end = right.span.span
@@ -227,6 +269,7 @@ def _resolve_conflicts(
     for record in accepted:
         record.conflicts_resolved.clear()
         record.suppression_reason = None
+        record.demotion_reason = None
 
     sorted_records = sorted(
         accepted,
@@ -239,6 +282,8 @@ def _resolve_conflicts(
     for record in sorted_records:
         has_conflict = False
         for winner in kept:
+            if _ignore_conflict(record, winner):
+                continue
             overlap = _span_overlap(winner, record)
             if overlap <= 0:
                 continue
@@ -247,11 +292,20 @@ def _resolve_conflicts(
             record.decision = "conflict_suppressed"
             loser_label = record.candidate.label if record.candidate else _extract_label(record.span.text)
             winner_label = winner.candidate.label if winner.candidate else _extract_label(winner.span.text)
+            record_family = _record_family(record)
+            winner_family = _record_family(winner)
+            if record_family == "appendix" and winner_family != "appendix":
+                demotion_reason = "conflict_with_numeric"
+            elif record_family == winner_family:
+                demotion_reason = "span_collision"
+            else:
+                demotion_reason = "conflict"
             record.suppression_reason = {
                 "reason": "span_collision",
                 "winner": winner_label,
                 "overlap": overlap,
             }
+            record.demotion_reason = demotion_reason
             winner.conflicts_resolved.append(
                 {
                     "loser": loser_label,
@@ -287,6 +341,7 @@ def _span_to_audit(
     graph_score: float,
     graph_penalties: Dict[str, float],
     decision: str,
+    demotion_reason: str | None,
 ) -> Dict[str, Any]:
     return {
         "header_label": _extract_label(span.text),
@@ -310,6 +365,7 @@ def _span_to_audit(
             "final": hep_scores["S_HEP"] + span.flow_total - sum(graph_penalties.values()),
         },
         "decision": decision,
+        "demotion_reason": demotion_reason,
         "text_preview": span.text[:120],
     }
 
@@ -495,6 +551,12 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             if hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"] and final_score >= GRAPH_DEFAULTS["theta_final"]:
                 accepted = True
                 decision = "accepted"
+        demotion_reason = None
+        if not accepted:
+            if HEADER_MODE != "raw_truth" and HEADER_GATE_MODE == "score_gate":
+                demotion_reason = "score_gate"
+            else:
+                demotion_reason = "not_promoted"
         record = SpanRecord(
             seed_id=seed_id,
             span=span,
@@ -508,6 +570,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             decision=decision,
             accepted=accepted,
             promotion_reason=promotion_reason,
+            demotion_reason=demotion_reason,
         )
         span_records.append(record)
 
@@ -524,6 +587,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             record.graph_score,
             record.graph_penalties,
             record.decision,
+            record.demotion_reason,
         )
         for record in span_records
     ]
@@ -697,6 +761,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "pattern": record.candidate.pattern if record.candidate else None,
             "page": record.span.page,
             "reason": record.suppression_reason,
+            "demotion_reason": record.demotion_reason,
         }
         for record in span_records
         if record.suppression_reason
@@ -716,6 +781,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
                 "pattern": record.candidate.pattern if record.candidate else _classify_pattern(_extract_label(record.span.text)) or "",
                 "decision": record.decision,
                 "reason": reason,
+                "demotion_reason": record.demotion_reason or "",
             }
         )
 
@@ -737,6 +803,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
                 "pattern": _classify_pattern(header.label) or "",
                 "decision": "sequence_repair",
                 "reason": repair_reason,
+                "demotion_reason": "",
             }
         )
 
@@ -792,10 +859,10 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     with (output_dir / "headers_suppressed.json").open("w", encoding="utf-8") as handle:
         json.dump(suppressed_payload, handle, ensure_ascii=False, indent=2)
     with (output_dir / "headers_summary.tsv").open("w", encoding="utf-8") as handle:
-        handle.write("page\tidx\tpattern\tdecision\treason\n")
+        handle.write("page\tidx\tpattern\tdecision\treason\tdemotion_reason\n")
         for row in summary_rows:
             handle.write(
-                f"{row['page']}\t{row['idx']}\t{row['pattern']}\t{row['decision']}\t{row['reason']}\n"
+                f"{row['page']}\t{row['idx']}\t{row['pattern']}\t{row['decision']}\t{row['reason']}\t{row['demotion_reason']}\n"
             )
 
     _persist_jsonl(output_dir / "uf_chunks.jsonl", uf_records)
