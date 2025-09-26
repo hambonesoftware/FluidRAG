@@ -21,6 +21,8 @@ import inspect
 import json
 import logging
 import os
+import statistics
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
@@ -46,6 +48,40 @@ _SPACE_VARIANTS = "\u00A0\u2002\u2003\u2009\u200A\u202F\u205F\u3000"
 _ZERO_WIDTH = "\u200B\u200C\u200D\u2060\uFEFF"
 _TOKEN_RX = re.compile(r"\p{L}[\p{L}\p{Mn}\p{Mc}\p{Pd}\p{Pc}\p{Nd}]*|\p{N}+|[^\s]", re.UNICODE)
 _HEADER_MARK_RX = re.compile(r"^\s*(?:\d+\)|[A-Z]\d+\.)")
+_FILL_LINE_RX = re.compile(r"_{3,}\s*$")
+_BULLET_RX = re.compile(r"^\s*(?:[-*\u2022\u2023\u2043]|[A-Za-z]{1,3}\)|[A-Za-z]{1,3}\.)\s+")
+_NUMBERED_RX = re.compile(r"^\s*(?:\d{1,3}(?:[.)]|(?:\.\d+)*\.)|\d{1,3}\))\s+")
+_TABLE_ROW_RX = re.compile(r"(?:\t|\s{2,}\S)\s{2,}\S")
+_GUTTER_TOLERANCE = 8.0
+
+
+def _classify_trailing_punct(text: str) -> Optional[str]:
+    if not text:
+        return None
+    stripped = text.rstrip()
+    if not stripped:
+        return None
+    if _FILL_LINE_RX.search(stripped):
+        return "_FILL"
+    tail = stripped[-1]
+    if tail in {".", ",", ":", ";", ")", "]"}:
+        return tail
+    return None
+
+
+def _detect_list_context(text: str) -> str:
+    if not text:
+        return "none"
+    stripped = text.strip()
+    if not stripped:
+        return "none"
+    if _TABLE_ROW_RX.search(text):
+        return "table_row"
+    if _BULLET_RX.match(stripped):
+        return "bullet"
+    if _NUMBERED_RX.match(stripped):
+        return "numbered"
+    return "none"
 
 
 def _normalise_spaces(text: str) -> str:
@@ -92,6 +128,7 @@ class PageRecord:
     norm_text: str
     lines: List[str]
     line_styles: List[Mapping[str, Any]]
+    line_models: List[Mapping[str, Any]]
     line_offsets: List[int]
     tokens: List[Dict[str, Any]]
 
@@ -264,49 +301,220 @@ def _ingest_pdf(
     jsonl_rows: List[Dict[str, Any]] = []
 
     for page_idx, lines in enumerate(pages_lines, start=1):
-        styles = page_styles[page_idx - 1] if page_idx - 1 < len(page_styles) else [{} for _ in lines]
+        styles_src = page_styles[page_idx - 1] if page_idx - 1 < len(page_styles) else [{} for _ in lines]
         joined = "\n".join(lines)
         norm = _normalise_text(joined)
         offsets: List[int] = []
         tokens: List[Dict[str, Any]] = []
         cursor = 0
         line_entries: List[Dict[str, Any]] = []
+        line_models: List[Dict[str, Any]] = []
+        styles_out: List[Dict[str, Any]] = []
+        prev_meta: Optional[Dict[str, Any]] = None
+        median_buf: deque[float] = deque(maxlen=25)
+        prev_end_offset = 0
         for line_idx, line in enumerate(lines):
-            style = styles[line_idx] if line_idx < len(styles) else {}
-            offsets.append(cursor)
-            line_tokens = _tokenise_with_offsets(line, base_offset=cursor)
+            base_style = styles_src[line_idx] if line_idx < len(styles_src) else {}
+            style = dict(base_style or {})
+            start_offset = cursor
+            offsets.append(start_offset)
+            line_tokens = _tokenise_with_offsets(line, base_offset=start_offset)
             tokens.extend({**token, "line_idx": line_idx} for token in line_tokens)
-            line_entries.append(
+
+            bbox = style.get("bbox") if isinstance(style, Mapping) else None
+            left_x = None
+            y_top = None
+            y_bottom = None
+            if isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
+                try:
+                    left_x = float(bbox[0])
+                except Exception:  # pragma: no cover - defensive
+                    left_x = None
+                try:
+                    y_top = float(bbox[1])
+                    y_bottom = float(bbox[3])
+                except Exception:  # pragma: no cover - defensive
+                    y_top = y_bottom = None
+
+            font_pt_raw = style.get("font_pt", style.get("font_size"))
+            try:
+                font_pt = float(font_pt_raw) if font_pt_raw is not None else 0.0
+            except Exception:
+                font_pt = 0.0
+            bold_flag = bool(style.get("bold"))
+
+            line_height = 0.0
+            if y_top is not None and y_bottom is not None:
+                line_height = float(y_bottom - y_top)
+            elif prev_meta and prev_meta.get("line_height"):
+                line_height = float(prev_meta["line_height"])
+
+            if median_buf:
+                median_gap = statistics.median(median_buf)
+            else:
+                baseline = prev_meta.get("line_height") if prev_meta else None
+                median_gap = float(baseline) if baseline else (line_height if line_height > 0 else 1.0)
+            if median_gap <= 0:
+                median_gap = line_height if line_height > 0 else 1.0
+
+            prev_trailing = prev_meta.get("trailing_punct") if prev_meta else None
+            prev_font = prev_meta.get("font_pt") if prev_meta else None
+            prev_left = prev_meta.get("left_x") if prev_meta else None
+            prev_bottom = prev_meta.get("y_bottom") if prev_meta else None
+
+            if prev_font is not None:
+                try:
+                    font_delta = float(font_pt - float(prev_font))
+                except Exception:
+                    font_delta = 0.0
+            else:
+                font_delta = 0.0
+            bold_flip = bool(prev_meta and bool(prev_meta.get("bold")) != bold_flag)
+            if left_x is not None and prev_left is not None:
+                try:
+                    left_x_delta = float(left_x - float(prev_left))
+                except Exception:
+                    left_x_delta = 0.0
+            else:
+                left_x_delta = 0.0
+
+            if y_top is not None and prev_bottom is not None:
+                try:
+                    y_gap = float(y_top - float(prev_bottom))
+                except Exception:
+                    y_gap = 0.0
+            else:
+                y_gap = 0.0
+
+            big_gap = y_gap > 1.6 * median_gap if median_gap > 0 else y_gap > 0
+            hard_newline = (start_offset - prev_end_offset) >= 2 if line_idx > 0 else False
+            style_break = bool(bold_flip or abs(font_delta) >= 1.0 or abs(left_x_delta) > _GUTTER_TOLERANCE)
+
+            virtual_blanks = 1 if big_gap else 0
+            if hard_newline:
+                virtual_blanks += 1
+            if median_gap > 0:
+                huge_gap = y_gap > 2.2 * median_gap
+            else:
+                huge_gap = y_gap > 0
+            if huge_gap:
+                virtual_blanks = max(virtual_blanks, 2)
+
+            para_start = bool(
+                hard_newline
+                or big_gap
+                or style_break
+                or (prev_trailing in {".", "_FILL", ":"})
+            )
+
+            is_blank = not (line.strip())
+            list_context = _detect_list_context(line)
+            newline_count = (start_offset - prev_end_offset) if line_idx > 0 else 0
+
+            style_jump = {
+                "font_delta": font_delta,
+                "bold_flip": bold_flip,
+                "left_x_delta": left_x_delta,
+            }
+
+            style.setdefault("font_pt", font_pt)
+            if left_x is not None:
+                style.setdefault("left_x", left_x)
+            if line_height:
+                style.setdefault("line_height", line_height)
+            styles_out.append(dict(style))
+
+            line_entry = {
+                "page": page_idx,
+                "index": line_idx,
+                "text": line,
+                "norm_text": _normalise_text(line),
+                "style": style,
+                "tokens": line_tokens,
+                "break_reason": "line_break",
+                "is_blank": bool(is_blank),
+                "newline_count": int(newline_count),
+                "y_gap": float(y_gap),
+                "line_height": float(line_height),
+                "virtual_blank_lines_before": int(virtual_blanks),
+                "style_jump": dict(style_jump),
+                "para_start": bool(para_start),
+                "prev_trailing_punct": prev_trailing,
+                "list_context": list_context,
+                "left_x": float(left_x) if left_x is not None else None,
+                "font_pt": float(font_pt),
+                "bold": bool(bold_flag),
+            }
+            line_entries.append(line_entry)
+
+            line_models.append(
                 {
+                    "page": page_idx,
                     "index": line_idx,
                     "text": line,
-                    "norm_text": _normalise_text(line),
-                    "style": style,
-                    "tokens": line_tokens,
-                    "break_reason": "line_break",
+                    "norm_text": line_entry["norm_text"],
+                    "is_blank": bool(is_blank),
+                    "newline_count": int(newline_count),
+                    "y_gap": float(y_gap),
+                    "line_height": float(line_height),
+                    "virtual_blank_lines_before": int(virtual_blanks),
+                    "style_jump": dict(style_jump),
+                    "para_start": bool(para_start),
+                    "prev_trailing_punct": prev_trailing,
+                    "list_context": list_context,
+                    "left_x": float(left_x) if left_x is not None else None,
+                    "font_pt": float(font_pt),
+                    "bold": bool(bold_flag),
                 }
             )
+
             indent = None
-            bbox = style.get("bbox") if isinstance(style, Mapping) else None
-            if isinstance(bbox, (list, tuple)) and len(bbox) >= 1:
-                try:
-                    indent = float(bbox[0])
-                except Exception:  # pragma: no cover - defensive
-                    indent = None
+            if left_x is not None:
+                indent = left_x
             part = {
                 "doc_id": doc_id,
                 "text": line,
                 "page": page_idx,
                 "line_idx": line_idx,
-                "font_size": style.get("font_size"),
+                "font_size": style.get("font_size", font_pt),
+                "font_pt": font_pt,
                 "font_weight": style.get("font_weight"),
-                "bold": style.get("bold"),
+                "bold": bold_flag,
                 "indent": indent,
                 "break_reason": "line_break",
                 "header_anchor": bool(_HEADER_MARK_RX.match(line.strip())),
+                "is_blank": bool(is_blank),
+                "newline_count": int(newline_count),
+                "y_gap": float(y_gap),
+                "line_height": float(line_height),
+                "virtual_blank_lines_before": int(virtual_blanks),
+                "style_jump": dict(style_jump),
+                "para_start": bool(para_start),
+                "prev_trailing_punct": prev_trailing,
+                "list_context": list_context,
+                "left_x": float(left_x) if left_x is not None else None,
             }
             parts.append(part)
-            cursor += len(line) + 1
+
+            current_trailing = _classify_trailing_punct(line)
+            prev_meta = {
+                "font_pt": font_pt,
+                "bold": bold_flag,
+                "left_x": left_x,
+                "y_bottom": y_bottom,
+                "line_height": line_height,
+                "trailing_punct": current_trailing,
+            }
+            prev_end_offset = start_offset + len(line)
+            cursor = prev_end_offset + 1
+
+            if line_height > 0:
+                median_buf.append(float(line_height))
+            elif prev_meta.get("line_height"):
+                try:
+                    median_buf.append(float(prev_meta["line_height"]))
+                except Exception:  # pragma: no cover - defensive
+                    median_buf.append(0.0)
 
         jsonl_rows.append(
             {
@@ -322,7 +530,8 @@ def _ingest_pdf(
                 raw_text=joined,
                 norm_text=norm,
                 lines=list(lines),
-                line_styles=[dict(style) for style in styles],
+                line_styles=styles_out,
+                line_models=line_models,
                 line_offsets=offsets,
                 tokens=tokens,
             )

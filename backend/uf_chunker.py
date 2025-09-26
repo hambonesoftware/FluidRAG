@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
 HEADER_PATTERN = re.compile(
@@ -32,6 +33,20 @@ DOMAIN_KEYWORDS = {
 }
 
 
+def _majority_vote(values: Sequence[Any], default: Any = None, skip: Optional[Sequence[Any]] = None) -> Any:
+    skip_set = set(skip or [])
+    filtered = [value for value in values if value not in skip_set]
+    if not filtered:
+        return default
+    counts = Counter(filtered)
+    best = max(counts.values()) if counts else 0
+    winners = {value for value, count in counts.items() if count == best}
+    for value in filtered:
+        if value in winners:
+            return value
+    return filtered[0] if filtered else default
+
+
 @dataclass
 class UFChunk:
     """Container for an Ultrafine chunk."""
@@ -47,6 +62,7 @@ class UFChunk:
     domain_hint: Optional[str] = None
     entropy: Dict[str, float] = field(default_factory=dict)
     header_anchor: bool = False
+    meta: Dict[str, Any] = field(default_factory=dict)
 
     def preview(self, max_len: int = 80) -> str:
         text = self.text.strip().replace("\n", " ")
@@ -179,6 +195,88 @@ def uf_chunk(doc_decomp: Dict[str, Any], max_tokens: int = 90, overlap: int = 12
                 domain_hint=_infer_domain_hint(text),
                 header_anchor=header_anchor,
             )
+
+            page_lines = page.get("lines") or []
+            line_indices = sorted(
+                {
+                    int(tok.get("line_idx"))
+                    for tok in chunk_tokens
+                    if isinstance(tok.get("line_idx"), int)
+                }
+            )
+            chunk_line_meta: List[Dict[str, Any]] = []
+            blank_scores: List[int] = []
+            para_flags: List[bool] = []
+            prev_puncts: List[Any] = []
+            list_contexts: List[str] = []
+
+            for line_idx in line_indices:
+                entry = None
+                if isinstance(page_lines, Sequence) and 0 <= line_idx < len(page_lines):
+                    candidate = page_lines[line_idx]
+                    if isinstance(candidate, Mapping):
+                        entry = candidate
+                if entry is None and isinstance(page_lines, Sequence):
+                    for candidate in page_lines:
+                        if isinstance(candidate, Mapping) and int(candidate.get("index", -1)) == line_idx:
+                            entry = candidate
+                            break
+                if entry is None:
+                    continue
+
+                style_jump_raw = entry.get("style_jump") or {}
+                style_jump = {
+                    "font_delta": float(style_jump_raw.get("font_delta") or 0.0),
+                    "bold_flip": bool(style_jump_raw.get("bold_flip")),
+                    "left_x_delta": float(style_jump_raw.get("left_x_delta") or 0.0),
+                }
+                virtual_blank = int(entry.get("virtual_blank_lines_before") or 0)
+                para_flag = bool(entry.get("para_start"))
+                prev_punct = entry.get("prev_trailing_punct")
+                list_ctx = str(entry.get("list_context") or "none")
+                y_gap = float(entry.get("y_gap") or 0.0)
+                line_height = float(entry.get("line_height") or 0.0)
+                newline_count = int(entry.get("newline_count") or 0)
+                left_x_val = entry.get("left_x")
+                try:
+                    left_x = float(left_x_val) if left_x_val is not None else None
+                except Exception:
+                    left_x = None
+                font_pt_val = entry.get("font_pt")
+                try:
+                    font_pt = float(font_pt_val) if font_pt_val is not None else 0.0
+                except Exception:
+                    font_pt = 0.0
+
+                chunk_line_meta.append(
+                    {
+                        "text": entry.get("text"),
+                        "index": line_idx,
+                        "is_blank": bool(entry.get("is_blank")),
+                        "newline_count": newline_count,
+                        "y_gap": y_gap,
+                        "line_height": line_height,
+                        "virtual_blank_lines_before": virtual_blank,
+                        "style_jump": style_jump,
+                        "para_start": para_flag,
+                        "prev_trailing_punct": prev_punct,
+                        "list_context": list_ctx,
+                        "left_x": left_x,
+                        "font_pt": font_pt,
+                        "bold": bool(entry.get("bold")),
+                    }
+                )
+                blank_scores.append(virtual_blank)
+                para_flags.append(para_flag)
+                prev_puncts.append(prev_punct)
+                list_contexts.append(list_ctx)
+
+            chunk.meta["blank_lines_before"] = int(max(blank_scores) if blank_scores else 0)
+            chunk.meta["para_start"] = any(para_flags)
+            chunk.meta["prev_trailing_punct"] = _majority_vote(prev_puncts, default=None, skip={None, ""})
+            chunk.meta["list_context"] = _majority_vote(list_contexts, default="none", skip={None, ""})
+            chunk.meta["line_metas"] = chunk_line_meta
+            chunk.meta["line_indices"] = line_indices
             chunks.append(chunk)
             chunk_index += 1
             if j >= len(tokens):
