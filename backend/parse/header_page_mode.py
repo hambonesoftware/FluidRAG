@@ -21,16 +21,32 @@ from .header_detector import (
     APPENDIX_NUM_RX,
 )
 from .header_levels import map_font_sizes_to_levels, infer_heading_level
-from .patterns_rfq import APPENDIX_TOLERANT_PATTERN
+from .patterns_rfq import (
+    APPENDIX_SINGLE_LETTER_PATTERN,
+    APPENDIX_TOLERANT_PATTERN,
+    APPENDIX_WORDONLY_PATTERN,
+)
 from .header_config import CONFIG
 
 MEASURE_RX = re.compile(r'\b(?:\d{1,4}(?:\.\d+)?)(?:\s*(?:mm|cm|m|in|inch|ft|°c|°f|a|v|hz|psi|kpa|ip\d{2}))\b', re.I)
 ADDRESS_RX = re.compile(r'\b(?:Street|St\.|Road|Rd\.|Drive|Dr\.|Ave\.|Avenue|Suite|USA|Tel|Fax)\b', re.I)
 TOO_LONG_RX = re.compile(r'^\s*.{161,}\s*$')
 SAFE_COMPONENT_RX = re.compile(r"[^A-Za-z0-9._-]+")
-NUMERIC_PREFIX_RX = re.compile(r'^\s*(?:Appendix\s+[A-Z]|Annex\s+[A-Z]|[A-Z]\d+(?:\.\d+)*|\d+(?:\.\d+)*|\d+\))', re.IGNORECASE)
+NUMERIC_PREFIX_RX = re.compile(
+    r'^\s*(?:'
+    r'Appendix\s+[A-Za-z]'
+    r'|Annex\s+[A-Za-z]'
+    r'|[A-Z]\d+(?:\.\d+)*'
+    r'|\d+(?:\.\d+)*'
+    r'|\d+\)'
+    r'|[A-Z](?:\s*[-–—:]\s*|\s+[A-Z])'
+    r')',
+    re.IGNORECASE,
+)
 APPENDIX_SEQ_RX = re.compile(r'^\s*([A-Z])(\d{1,3})[.\u2024\u2027\uFF0E]\s{0,2}(.+?)\s*$')
-APPENDIX_WORD_RX = re.compile(r'^\s*(Appendix|Annex)\s+([A-Z])', re.IGNORECASE)
+APPENDIX_WORD_RX = re.compile(r'^\s*(Appendix|Annex)\s+([A-Z])(?=\s|[-–—:.]|$)', re.IGNORECASE)
+APPENDIX_SINGLE_LETTER_RX = re.compile(APPENDIX_SINGLE_LETTER_PATTERN, re.IGNORECASE)
+APPENDIX_WORDONLY_RX = re.compile(APPENDIX_WORDONLY_PATTERN, re.IGNORECASE)
 SECTION_LETTER_NUM_RX = re.compile(r'^\s*([A-Za-z]\d+(?:\.\d+)*)')
 DEBUG_DOT_CHARS = {'.', '\u2024', '\u2027', '\uFF0E'}
 _NUMERIC_REGEX_PATTERNS = {
@@ -38,7 +54,9 @@ _NUMERIC_REGEX_PATTERNS = {
     r'^\s*(\d{1,3})\)\s+(.+?)\s*$',
     r'^\s*(\d{1,3}(?:\.\d{1,3}){0,4})\s+([A-Z].{3,})\s*$',
     r'^\s*([A-Z])\.(\d{1,3})\s+(.+?)\s*$',
-    r'^\s*(Appendix|Annex)\s+([A-Z])(?:\s*[-:]\s*(.+))?\s*$',
+    r'^\s*(Appendix|Annex)\s+([A-Z])(?:\s*[-–—:]\s*(.+))?\s*$',
+    APPENDIX_SINGLE_LETTER_PATTERN,
+    APPENDIX_WORDONLY_PATTERN,
 }
 
 def _caps_ratio(s: str) -> float:
@@ -70,12 +88,22 @@ def _extract_section_number(normalized: str) -> str:
         match = rx.match(normalized)
         if match:
             return (match.group(1) or "").strip()
+    single_letter = APPENDIX_SINGLE_LETTER_RX.match(normalized)
+    if single_letter:
+        return single_letter.group(1).upper()
     match = SECTION_LETTER_NUM_RX.match(normalized)
     if match:
         return match.group(1)
     word = APPENDIX_WORD_RX.match(normalized)
     if word:
         return f"{word.group(1).title()} {word.group(2)}"
+    wordonly = APPENDIX_WORDONLY_RX.match(normalized)
+    if wordonly:
+        prefix = wordonly.group(1).title()
+        suffix = (wordonly.group(2) or "").strip().split()[0]
+        if suffix:
+            return f"{prefix} {suffix}"
+        return prefix
     return ""
 
 
@@ -444,7 +472,12 @@ def dump_appendix_audit(
         for cand in cand_list:
             txt = (cand.get("text") or "").strip()
             normalized = normalize_heading_text(txt)
-            if not (APPENDIX_NUM_RX.match(normalized) or APPENDIX_WORD_RX.match(normalized)):
+            if not (
+                APPENDIX_NUM_RX.match(normalized)
+                or APPENDIX_WORD_RX.match(normalized)
+                or APPENDIX_SINGLE_LETTER_RX.match(normalized)
+                or APPENDIX_WORDONLY_RX.match(normalized)
+            ):
                 continue
             breakdown = score_header_candidate_debug(txt, style=cand.get("style") or {})
             audit_rows.append(
