@@ -41,5 +41,23 @@ class EmbeddingEncoder:
             vectors[idx] = vec
         return vectors
 
+    # ------------------------------------------------------------------
+    # Convenience wrappers
+    # ------------------------------------------------------------------
+    def embed_lines(self, lines: Iterable[str]) -> np.ndarray:
+        """Embed individual preprocessed lines."""
+
+        return self.embed_texts(lines)
+
+    def embed_sections(self, sections: Iterable[str]) -> np.ndarray:
+        """Embed section strings (title + prefix text)."""
+
+        return self.embed_texts(sections)
+
+    def embed_chunks(self, chunks: Iterable[str]) -> np.ndarray:
+        """Embed chunk bodies for retrieval."""
+
+        return self.embed_texts(chunks)
+
 
 __all__ = ["EmbeddingEncoder"]
