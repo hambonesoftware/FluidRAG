@@ -60,6 +60,14 @@ DEFAULT_CONFIG: Dict[str, Mapping[str, object]] = {
 
 _NEIGHBOR_BONUS = 0.15
 _APPENDIX_RESCUE_RX = re.compile(r"^\s*([A-Z])(5|6)\.\s{0,2}(.*)$")
+_APPENDIX_FOCUS_RX = re.compile(r"^\s*A([4-8])([.\u2024\u2027\uFF0E]|\b)")
+_SEGMENT_REASON_KEYS = (
+    "segment_reason",
+    "line_reason",
+    "break_reason",
+    "wrap_reason",
+    "split_reason",
+)
 
 
 def _caps_ratio(text: str) -> float:
@@ -75,6 +83,37 @@ def _units_present(text: str) -> bool:
     return bool(parsed.get("units"))
 
 
+def _codepoints(text: Optional[str]) -> List[str]:
+    if not text:
+        return []
+    return [f"U+{ord(ch):04X}" for ch in text]
+
+
+def _segment_reason_for_line(line: Mapping[str, object]) -> Optional[str]:
+    for key in _SEGMENT_REASON_KEYS:
+        value = line.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _regex_probe(norm_text: str) -> Dict[str, object]:
+    numeric_match = NUMERIC_RE.search(norm_text or "")
+    appendix_match = APPENDIX_RE.search(norm_text or "")
+    match_span: Optional[Tuple[int, int]] = None
+    if appendix_match:
+        match_span = appendix_match.span()
+    elif numeric_match:
+        match_span = numeric_match.span()
+    return {
+        "numeric": bool(numeric_match),
+        "appendix": bool(appendix_match),
+        "match_span": list(match_span) if match_span else None,
+        "numeric_span": list(numeric_match.span()) if numeric_match else None,
+        "appendix_span": list(appendix_match.span()) if appendix_match else None,
+    }
+
+
 def _style_snapshot(line: Mapping[str, object], caps_ratio: float) -> Dict[str, float | bool | None]:
     return {
         "font_size": line.get("font_size"),
@@ -83,6 +122,20 @@ def _style_snapshot(line: Mapping[str, object], caps_ratio: float) -> Dict[str, 
         "font_size_z": float(line.get("font_size_z") or 0.0),
         "caps_ratio": float(caps_ratio),
     }
+
+
+_APPENDIX_PREFIX_STRICT_RX = re.compile(r"^A\d{1,3}[.\u2024\u2027\uFF0E]?$")
+
+
+def _infer_skip_reason(norm_text: str, caps_ratio: float) -> str:
+    stripped = (norm_text or "").strip()
+    if not stripped:
+        return "empty_norm"
+    if _APPENDIX_PREFIX_STRICT_RX.match(stripped):
+        return "too_short_after_prefix"
+    if stripped.endswith(".") and caps_ratio < 0.6:
+        return "disqualified_caps_ratio"
+    return "regex_fail"
 
 
 def _extract_appendix_number(value: object) -> Optional[int]:
@@ -152,19 +205,45 @@ def _build_candidate_record(
     encoder: EmbeddingEncoder,
     prototypes: Mapping[str, np.ndarray],
     rescue: bool = False,
+    gate_trace: Optional[List[Dict]] = None,
 ) -> Optional[Dict]:
-    if not norm_text:
-        return None
-
+    norm_text = norm_text or ""
     caps_ratio = _caps_ratio(norm_text)
     style = _style_snapshot(line, caps_ratio)
+    probe = _regex_probe(norm_text)
+
+    debug_entry = {
+        "page": int(line.get("page") or 0),
+        "line_idx": int(line.get("line_idx") or line.get("order") or 0),
+        "text_raw": line.get("text_raw") or line.get("text_norm") or "",
+        "text_norm": norm_text,
+        "regex_probe": probe,
+        "style": {
+            "font_size": style.get("font_size"),
+            "bold": style.get("bold"),
+            "font_sigma_rank": style.get("font_sigma_rank"),
+            "caps_ratio": style.get("caps_ratio"),
+        },
+        "rescue": rescue,
+    }
+
+    if not norm_text.strip():
+        debug_entry["skip_reason"] = "empty_norm"
+        if gate_trace is not None:
+            gate_trace.append(debug_entry)
+        return None
 
     feature_line = {**line, "text_norm": norm_text, "caps_ratio": caps_ratio}
     vector = encoder.embed_texts([norm_text])[0]
     proto_matches = topk_header_prototypes(vector, prototypes, k=3)
     computed = compute_features(feature_line, proto_matches, p_header=0.0)
     kind_data = classify_line(norm_text, caps_ratio)
+    debug_entry["kind"] = kind_data.get("kind")
+
     if kind_data.get("kind") == "none":
+        debug_entry["skip_reason"] = _infer_skip_reason(norm_text, caps_ratio)
+        if gate_trace is not None:
+            gate_trace.append(debug_entry)
         return None
 
     score, parts = score_candidate(kind_data["kind"], computed)
@@ -229,6 +308,21 @@ def _build_candidate_record(
 
     if "units_penalty_applied" not in candidate["partials"]:
         candidate["partials"]["units_penalty_applied"] = False
+
+    debug_entry.update(
+        {
+            "skip_reason": None,
+            "decision": decision,
+            "score": float(score),
+            "partials": dict(candidate.get("partials", {})),
+            "meets_threshold": meets_threshold,
+            "is_appendix": is_appendix,
+            "is_numeric": is_numeric,
+            "number": candidate.get("number"),
+        }
+    )
+    if gate_trace is not None:
+        gate_trace.append(debug_entry)
 
     return candidate
 
@@ -298,6 +392,8 @@ def _appendix_neighbor_rescue(
     header_candidates: Sequence[Dict],
     encoder: EmbeddingEncoder,
     prototypes: Mapping[str, np.ndarray],
+    *,
+    gate_trace: Optional[List[Dict]] = None,
 ) -> List[Dict]:
     groups: Dict[Tuple[int, str], Set[int]] = defaultdict(set)
     existing_keys: Set[Tuple[int, str, int]] = set()
@@ -362,6 +458,7 @@ def _appendix_neighbor_rescue(
                 encoder=encoder,
                 prototypes=prototypes,
                 rescue=True,
+                gate_trace=gate_trace,
             )
             if not candidate or candidate.get("kind") != "appendix":
                 continue
@@ -468,9 +565,13 @@ def run_pipeline(
 
     preproc_trace: List[Dict] = []
     processed: List[Dict] = []
+    segment_markers: List[Dict] = []
+    appendix_focus_orders: List[int] = []
+    appendix_focus_pages: Set[int] = set()
     for order, line in enumerate(raw_lines):
         text_raw = str(line.get("text_raw") or line.get("text") or "")
         text_norm, hex_diff = normalize_text(text_raw)
+        reason = _segment_reason_for_line(line) or "unknown"
         record = {
             **line,
             "text_raw": text_raw,
@@ -478,7 +579,10 @@ def run_pipeline(
             "hex_diff": hex_diff,
             "caps_ratio": _caps_ratio(text_norm),
             "order": order,
+            "segment_reason": reason,
         }
+        header_preview = normalize_for_headers(text_norm)
+        record["header_norm_seed"] = header_preview
         preproc_trace.append(
             {
                 "page": int(record.get("page") or 0),
@@ -486,12 +590,52 @@ def run_pipeline(
                 "text_raw": text_raw,
                 "text_norm": text_norm,
                 "hex_diff": list(hex_diff),
+                "raw_hex": _codepoints(text_raw),
+                "norm_hex": _codepoints(text_norm),
+                "segment_reason": reason,
             }
         )
+        if reason and reason != "unknown":
+            segment_markers.append(
+                {
+                    "marker": "line_start_reason",
+                    "page": int(line.get("page") or 0),
+                    "line_idx": int(line.get("line_idx") or order),
+                    "reason": reason,
+                }
+            )
+        current_idx = len(processed)
+        if _APPENDIX_FOCUS_RX.match(header_preview):
+            appendix_focus_orders.append(current_idx)
+            appendix_focus_pages.add(int(line.get("page") or 0))
         processed.append(record)
 
     _font_metrics(processed)
-    processed = join_split_lines(processed)
+    pre_join_processed = list(processed)
+    segment_debug: List[Dict] = []
+    processed = join_split_lines(processed, debug=segment_debug)
+    appendix_context_indices: Set[int] = set()
+    for idx in appendix_focus_orders:
+        for delta in range(-3, 4):
+            pos = idx + delta
+            if 0 <= pos < len(pre_join_processed):
+                appendix_context_indices.add(pos)
+    appendix_line_dump: List[Dict] = []
+    for pos in sorted(appendix_context_indices):
+        base_line = pre_join_processed[pos]
+        appendix_line_dump.append(
+            {
+                "order": int(base_line.get("order") or pos),
+                "page": int(base_line.get("page") or 0),
+                "line_idx": int(base_line.get("line_idx") or base_line.get("order") or pos),
+                "raw_text": base_line.get("text_raw") or "",
+                "raw_hex": _codepoints(base_line.get("text_raw")),
+                "norm_text": base_line.get("text_norm") or "",
+                "norm_hex": _codepoints(base_line.get("text_norm")),
+                "segment_reason": base_line.get("segment_reason"),
+            }
+        )
+
     for idx, line in enumerate(processed):
         line.setdefault("page", raw_lines[0].get("page", 1) if raw_lines else 1)
         line.setdefault("line_idx", idx)
@@ -505,6 +649,30 @@ def run_pipeline(
 
     header_candidates: List[Dict] = []
     header_debug_initial: List[Dict] = []
+    candidate_gate_trace: List[Dict] = []
+    for event in segment_debug:
+        if event.get("marker") == "line_skip":
+            text_norm = event.get("text_norm") or ""
+            header_text = normalize_for_headers(text_norm)
+            candidate_gate_trace.append(
+                {
+                    "page": int(event.get("page") or 0),
+                    "line_idx": int(event.get("line_idx") or 0),
+                    "text_raw": event.get("text_raw") or text_norm,
+                    "text_norm": header_text,
+                    "regex_probe": _regex_probe(header_text),
+                    "style": {},
+                    "skip_reason": event.get("skip_reason"),
+                    "decision": None,
+                    "score": None,
+                    "partials": {},
+                    "meets_threshold": False,
+                    "is_appendix": bool(APPENDIX_RE.match(header_text)),
+                    "is_numeric": bool(NUMERIC_RE.match(header_text)),
+                    "rescue": False,
+                }
+            )
+
     for line in processed:
         norm_text = line.get("header_norm") or normalize_for_headers(line.get("text_norm", ""))
         candidate = _build_candidate_record(
@@ -512,13 +680,20 @@ def run_pipeline(
             norm_text,
             encoder=encoder,
             prototypes=prototypes,
+            gate_trace=candidate_gate_trace,
         )
         if not candidate:
             continue
         header_candidates.append(candidate)
         header_debug_initial.append(_candidate_debug_entry(candidate))
 
-    rescue_candidates = _appendix_neighbor_rescue(processed, header_candidates, encoder, prototypes)
+    rescue_candidates = _appendix_neighbor_rescue(
+        processed,
+        header_candidates,
+        encoder,
+        prototypes,
+        gate_trace=candidate_gate_trace,
+    )
     if rescue_candidates:
         header_candidates.extend(rescue_candidates)
 
@@ -603,6 +778,7 @@ def run_pipeline(
 
     chunk_records: List[Dict] = []
     chunks_by_section: Dict[str, List[Dict]] = defaultdict(list)
+    appendix_microchunk_debug: List[Dict] = []
     for sec_idx, section in enumerate(sections):
         sec_id = section["sec_id"]
         section_text = section.get("text", "")
@@ -634,6 +810,28 @@ def run_pipeline(
             }
             chunk_records.append(chunk)
             chunks_by_section[sec_id].append(chunk)
+
+            if appendix_focus_pages and (
+                section.get("kind") == "appendix"
+                or any(int(line.get("page") or 0) in appendix_focus_pages for line in lines_for_chunk)
+            ):
+                line_indices = [
+                    int(line.get("line_idx") or line.get("order") or 0)
+                    for line in lines_for_chunk
+                ]
+                appendix_microchunk_debug.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "section_id": sec_id,
+                        "section_kind": section.get("kind"),
+                        "page": page,
+                        "line_indices": line_indices,
+                        "line_idx_range": [min(line_indices), max(line_indices)]
+                        if line_indices
+                        else None,
+                        "offsets": chunk["offsets"],
+                    }
+                )
 
     section_texts_for_embedding = [
         f"{section.get('title', '')} {section.get('text', '')[:cfg['embedding'].get('section_tokens', 128)]}"
@@ -846,6 +1044,8 @@ def run_pipeline(
         "deterministic_scores": all(payload.get("deterministic") for payload in retrieval_results.values()),
     }
 
+    segment_trace = segment_markers + segment_debug
+
     artifact = {
         "doc_id": doc_id,
         "config": {
@@ -863,6 +1063,10 @@ def run_pipeline(
             "header_debug_initial": header_debug_initial,
             "header_debug_post_rescue": header_debug_post_rescue,
             "headers": header_candidates,
+            "segmentation": segment_trace,
+            "candidate_gate": candidate_gate_trace,
+            "appendix_line_dump": appendix_line_dump,
+            "appendix_microchunks": appendix_microchunk_debug,
             "retrieval": retrieval_trace,
             "validation": validation_trace,
         },

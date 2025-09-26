@@ -37,3 +37,25 @@ def test_line_split_multiple_headers():
     assert split[1]["text_norm"].startswith("A6.")
     assert split[0]["split_of"] == 5
     assert split[1]["split_of"] == 5
+
+
+def test_soft_unwrap_short_tail_joined():
+    lines = [
+        {"line_idx": 20, "text_norm": "A6.", "text_raw": "A6.", "bbox": [0, 0, 10, 10]},
+        {"line_idx": 21, "text_norm": "Gas", "text_raw": "Gas", "bbox": [0, 10, 40, 20]},
+    ]
+    joined = join_split_lines(lines)
+    assert len(joined) == 1
+    assert joined[0]["text_norm"] == "A6. Gas"
+
+
+def test_join_split_lines_debug_markers():
+    lines = [
+        {"line_idx": 30, "text_norm": "A7.", "text_raw": "A7.", "bbox": [0, 0, 10, 10]},
+        {"line_idx": 31, "text_norm": "Drawings", "text_raw": "Drawings", "bbox": [0, 10, 40, 20]},
+    ]
+    debug: list = []
+    join_split_lines(lines, debug=debug)
+    markers = {entry.get("marker") for entry in debug}
+    assert "soft_unwrap_attempt" in markers
+    assert any(entry.get("skip_reason") == "merged_into_prev" for entry in debug if entry.get("marker") == "line_skip")
