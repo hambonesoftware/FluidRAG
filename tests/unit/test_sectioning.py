@@ -67,6 +67,14 @@ def test_label_units_penalty_applies():
     assert selected == []
 
 
+def test_units_penalty_skipped_for_unicode_appendix():
+    text = "A5․ Utilities 45 psi"
+    line = _line(text, bold=True, font_sigma_rank=0.92, font_size_z=0.88, caps_ratio=0.82)
+    selected = select_headers([line], _units_present)
+    assert selected
+    assert selected[0]["partials"].get("units_penalty") is None
+
+
 def test_prototype_similarity_lifts_ocr_header():
     line = _line("12) Acceptance", bold=False, font_sigma_rank=0.2, font_size_z=0.1)
     line["features"]["proto_sim_max"] = 0.95
