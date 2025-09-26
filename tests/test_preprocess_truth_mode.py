@@ -109,4 +109,13 @@ def test_appendix_headers_follow_preprocess_truth(tmp_path):
     assert [row["page"] for row in truth_rows[2:]] == [7] * 6
 
     assert [row["text"] for row in result.truth] == expected_sequence
-    assert len(result.headers) == len(expected_sequence)
+    assert [
+        (item["page"], f"{item['label']} {item['text']}".strip())
+        for item in result.headers
+    ] == [
+        (6, line)
+        for line in page6_lines
+    ] + [
+        (7, line)
+        for line in page7_lines
+    ]
