@@ -17,8 +17,8 @@ from ..parse.header_page_mode import (
     write_header_candidate_audit,
     write_header_debug_manifest,
     write_page_debug,
-    _sequence_sanity_promote,
 )
+from ..parse.header_sequence_repair import aggressive_sequence_repair
 from ..parse.header_detector import is_header_line
 from ..state import get_state
 
@@ -459,13 +459,14 @@ async def detect_headers_page_mode(
             except Exception:
                 pass
 
-        promoted = _sequence_sanity_promote(
-            candidates,
+        merged_headers, repairs = aggressive_sequence_repair(
             final,
-            threshold=float(CONFIG.get("accept_score_threshold", 2.25) or 2.25),
+            page_texts=pages_text,
+            tokens_by_page=pages_tokens,
         )
-        if promoted:
-            final.extend(promoted)
+        if repairs:
+            LOG.debug("sequence repair added %d appendix headers", len(repairs))
+            final = list(merged_headers)
 
         # dedup by line_idx
         seen = set()
