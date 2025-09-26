@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from pathlib import Path
 
 from backend.pipeline.uf_pipeline import run_pipeline
@@ -76,4 +75,18 @@ def test_run_pipeline_builds_chunks_and_headers(tmp_path):
 
     for key, path in result.artifacts.items():
         assert Path(path).exists(), f"artifact {key} should exist"
+
+    repeat = run_pipeline(
+        str(pdf_path),
+        doc_id="doc-1",
+        session_id="session-1",
+        sidecar_dir=tmp_path,
+        llm_client=_FakeLLM(),
+        pre_extracted=layout,
+    )
+
+    assert [chunk["micro_id"] for chunk in repeat.uf_chunks] == [
+        chunk["micro_id"] for chunk in result.uf_chunks
+    ], "UF chunk ordering should be deterministic"
+    assert repeat.summary() == summary, "Pipeline summaries should remain stable across runs"
 
