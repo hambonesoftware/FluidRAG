@@ -1,34 +1,24 @@
 """Micro-chunk generation utilities."""
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from typing import Iterator, List, Tuple
 
 
 @dataclass
-class ChunkWindow:
-    """Metadata describing a chunk emitted by :func:`microchunk`.
-
-    Attributes
-    ----------
-    start:
-        Character offset of the chunk relative to the section text.
-    end:
-        Exclusive end offset of the chunk relative to the section text.
-    text:
-        The chunk text itself.
-    window_chars:
-        Target window size used when generating the chunk.
-    stride_chars:
-        Configured stride between successive chunks.
-    """
+class Chunk:
+    """Metadata describing a micro-chunk emitted by :func:`chunk`."""
 
     start: int
     end: int
     text: str
     window_chars: int
     stride_chars: int
+    E: float
+    F: float
+    H: float
 
 
 def _split_sentences(text: str) -> List[Tuple[int, str]]:
@@ -47,18 +37,38 @@ def _split_sentences(text: str) -> List[Tuple[int, str]]:
     return sentences
 
 
-def microchunk(
+def _compute_signals(text: str) -> Tuple[float, float, float]:
+    """Compute doc-invariant entropy/flow/heuristic signals for ``text``."""
+
+    tokens = re.findall(r"\w+", text)
+    total = len(tokens) or 1
+    numeric_tokens = len(re.findall(r"\d+(?:\.\d+)?", text))
+    unit_tokens = len(
+        re.findall(
+            r"(mm|cm|m|in|ft|psi|bar|kPa|MPa|A|mA|kA|V|VAC|VDC|kV|kW|kVA|°C|°F|Hz|rpm|N|kN|lbf)",
+            text,
+        )
+    )
+    inequality_count = len(re.findall(r"(≥|<=|≤|>=|=|==|>|<|±)", text))
+    directive_hits = sum(text.lower().count(token) for token in ("shall", "must", "ensure", "provide"))
+
+    entropy_signal = min(1.0, (numeric_tokens / total) + 0.3 * unit_tokens)
+    flow_signal = min(1.0, 0.3 + 0.1 * directive_hits)
+    hep_signal = 1.0 / (1.0 + math.exp(-0.6 * (directive_hits + inequality_count + unit_tokens)))
+
+    filler = text.lower().count("lorem")
+    hep_signal = max(0.0, min(1.0, hep_signal - 0.05 * filler))
+
+    return round(entropy_signal, 4), round(flow_signal, 4), round(hep_signal, 4)
+
+
+def chunk(
     section_text: str,
     *,
     window_chars: int = 450,
     stride_chars: int = 80,
-) -> Iterator[ChunkWindow]:
-    """Yield overlapping window chunks for ``section_text``.
-
-    The implementation prefers to align boundaries to sentence (and simple
-    bullet) edges. Offsets are calculated relative to the raw section text so
-    that downstream provenance can reference the same coordinate system.
-    """
+) -> Iterator[Chunk]:
+    """Yield overlapping window chunks for ``section_text`` with E/F/H signals."""
 
     if not section_text:
         return
@@ -92,12 +102,16 @@ def microchunk(
 
         last_sentence_offset = sentences[end_idx - 1][0]
         end_offset = last_sentence_offset + len(sentences[end_idx - 1][1])
-        yield ChunkWindow(
+        entropy, flow, hep = _compute_signals(chunk_text)
+        yield Chunk(
             start=start_offset,
             end=end_offset,
             text=chunk_text,
             window_chars=window_chars,
             stride_chars=stride_chars,
+            E=entropy,
+            F=flow,
+            H=hep,
         )
 
         if end_idx >= n_sentences:
@@ -109,6 +123,17 @@ def microchunk(
 
         if start_idx == end_idx:
             start_idx += 1
+
+
+def microchunk(
+    section_text: str,
+    *,
+    window_chars: int = 450,
+    stride_chars: int = 80,
+) -> Iterator[Chunk]:
+    """Backward-compatible alias for :func:`chunk`."""
+
+    yield from chunk(section_text, window_chars=window_chars, stride_chars=stride_chars)
 
 
 def iter_microchunks(
@@ -123,4 +148,4 @@ def iter_microchunks(
         yield window.start, window.end, window.text
 
 
-__all__ = ["ChunkWindow", "iter_microchunks", "microchunk"]
+__all__ = ["Chunk", "chunk", "iter_microchunks", "microchunk"]

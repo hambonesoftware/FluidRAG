@@ -28,7 +28,6 @@ from .sectioning.header_score import THRESHOLD, score_candidate
 from .sectioning.section_graph import build_section_graph
 from .sectioning.header_features import compute_features
 from .validators.conflicts import find_conflicts
-from .validators.inequalities import extract_inequalities
 from .validators.units import parse_units
 
 DEFAULT_CONFIG: Dict[str, Mapping[str, object]] = {
@@ -143,21 +142,6 @@ def _lines_for_chunk(offset_map: Sequence[Tuple[int, int, Dict]], start: int, en
             break
         touched.append(line)
     return touched
-
-
-def _chunk_scores(text: str) -> Tuple[float, float, float]:
-    tokens = re.findall(r"\w+", text)
-    total = len(tokens) or 1
-    numeric_tokens = len(re.findall(r"\d+(?:\.\d+)?", text))
-    unit_matches = parse_units(text).get("units", [])
-    inequality_count = len(extract_inequalities(text))
-    directive_hits = sum(text.lower().count(token) for token in ("shall", "must", "ensure", "provide"))
-    entropy_signal = min(1.0, (numeric_tokens / total) + 0.3 * len(unit_matches))
-    flow_signal = min(1.0, 0.3 + 0.1 * directive_hits)
-    hep_signal = 1.0 / (1.0 + math.exp(-0.6 * (directive_hits + inequality_count + len(unit_matches))))
-    filler = text.lower().count("lorem")
-    hep_signal = max(0.0, min(1.0, hep_signal - 0.05 * filler))
-    return round(entropy_signal, 4), round(flow_signal, 4), round(hep_signal, 4)
 
 
 def _serialize_graph(graph: Graph) -> Dict[str, List[Dict]]:
@@ -342,7 +326,6 @@ def run_pipeline(
             bboxes = [line.get("bbox") for line in lines_for_chunk if line.get("bbox")]
             if not bboxes:
                 bboxes = [[0, 0, 0, 0]]
-            entropy, flow, hep = _chunk_scores(window.text)
             chunk_id = f"C-{sec_idx:04d}-{chunk_idx:03d}"
             chunk = {
                 "chunk_id": chunk_id,
@@ -354,9 +337,9 @@ def run_pipeline(
                 "text": window.text,
                 "window_chars": window_chars,
                 "stride_chars": stride_chars,
-                "E": entropy,
-                "F": flow,
-                "H": hep,
+                "E": window.E,
+                "F": window.F,
+                "H": window.H,
                 "provenance": {"bboxes": bboxes},
             }
             chunk_records.append(chunk)
