@@ -31,6 +31,9 @@ def test_boundary_alignment_respects_bullets():
     for chunk in chunks[:-1]:
         tail = chunk["text"].strip()
         assert tail.endswith(".") or tail.endswith("stations."), tail
+        assert chunk["style"] is not None
+        assert isinstance(chunk["lex"], dict)
+        assert len(chunk["emb"]) == 8
 
 
 def test_overlap_contains_numeric_phrase():
@@ -59,6 +62,7 @@ def test_section_assignment_selects_correct_section():
     assert "1.0" in mapping
     assert "2.0" in mapping
     assert any(mid for mid in mapping["1.0"] if micros[0]["micro_id"] == mid)
+    assert micros[0]["domain_hint"] in {None, "performance", "quality", "safety"}
 
 
 def test_microchunk_determinism():

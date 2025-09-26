@@ -19,13 +19,13 @@ from typing import (
 import regex as re
 
 # Default chunk configuration (matches the prompt instructions)
-DEFAULT_CHUNK_SIZE = 386
-DEFAULT_OVERLAP = 96
-BOUNDARY_WINDOW = 32
+DEFAULT_CHUNK_SIZE = 90
+DEFAULT_OVERLAP = 12
+BOUNDARY_WINDOW = 24
 
 
 class MicroChunk(TypedDict, total=False):
-    """Structured metadata emitted for every microchunk."""
+    """Structured metadata emitted for every UF-chunk."""
 
     doc_id: str
     micro_id: str
@@ -45,6 +45,10 @@ class MicroChunk(TypedDict, total=False):
     section_id: Optional[str]
     section_title: Optional[str]
     sequence_index: int
+    style: Dict[str, object]
+    lex: Dict[str, object]
+    emb: List[float]
+    domain_hint: Optional[str]
 
 
 @dataclass
@@ -62,6 +66,11 @@ _SENTENCE_END_RE = re.compile(r"""[.!?]+['")]{0,1}\s*$""")
 _BULLET_RE = re.compile(r"^\s*(?:[-*\u2022\u2023\u2043]|\d+\.|\d+\))\s+")
 _WHITESPACE_RE = re.compile(r"\s+")
 _DEHYPHEN_RE = re.compile(r"(?<=\w)[-\u2010\u2011\u2012\u2013\u2014\u2212]\n(?=\w)")
+_HEADER_MARK_RE = re.compile(r"^\s*(?:\d+\)|[A-Z]\d+\.)")
+_MODAL_TERMS = {"shall", "must", "should", "will"}
+_CITATION_RX = re.compile(r"\b(?:NFPA|ISO|IEC|EN|API|ASTM|\u00a7)\b")
+_UNIT_RX = re.compile(r"\b(?:mm|cm|m|km|in|ft|°c|°f|psi|kpa|bar|hz|rpm|kw|mw|s|ms)\b", re.IGNORECASE)
+_NUMBER_RX = re.compile(r"\b\d+(?:[.,]\d+)?(?:\s*[×x]\s*10\^\d+)?\b")
 
 
 def _normalize_text(text: str) -> str:
@@ -137,6 +146,12 @@ def _candidate_boundaries(doc_text: str, tokens: Sequence[_Token], offsets: Sequ
         if _SENTENCE_END_RE.search(prev_text[-8:]):
             boundaries.add(idx)
             continue
+        # Header markers at the start of the next line
+        line_start = doc_text.rfind("\n", 0, tokens[idx].start) + 1
+        line = doc_text[line_start : tokens[idx].start]
+        if _HEADER_MARK_RE.match(line.strip()):
+            boundaries.add(idx)
+            continue
         # Part boundary alignment
         for start, end, part_idx in offsets:
             if prev_token.end <= end <= tokens[idx].start:
@@ -189,6 +204,74 @@ def _select_metadata(parts: Sequence[Mapping[str, Any]], indices: Sequence[int],
     return ordered[0]
 
 
+def _extract_style(parts: Sequence[Mapping[str, Any]], indices: Sequence[int]) -> Dict[str, object]:
+    if not indices:
+        return {}
+    fonts: List[float] = []
+    bold_votes = 0
+    indents: List[float] = []
+    for idx in indices:
+        part = parts[idx]
+        font = part.get("font_size")
+        if isinstance(font, (int, float)):
+            fonts.append(float(font))
+        if part.get("bold") or part.get("font_weight") == "bold":
+            bold_votes += 1
+        indent = part.get("indent") or part.get("left")
+        try:
+            if indent is not None:
+                indents.append(float(indent))
+        except Exception:
+            continue
+    style: Dict[str, object] = {}
+    if fonts:
+        fonts.sort()
+        mid = len(fonts) // 2
+        style["font_size"] = fonts[mid]
+    if indents:
+        indents.sort()
+        style["indent"] = indents[0]
+    style["bold"] = bold_votes >= max(1, len(indices) // 2)
+    return style
+
+
+def _extract_lex(text: str) -> Dict[str, object]:
+    normalized = _normalize_text(text)
+    tokens = {token.lower() for token in normalized.split()}
+    modal_flags = sorted(term for term in _MODAL_TERMS if term in tokens)
+    numbers = sorted({match.group(0) for match in _NUMBER_RX.finditer(normalized)})
+    units = sorted({match.group(0).lower() for match in _UNIT_RX.finditer(normalized)})
+    citations = bool(_CITATION_RX.search(normalized))
+    return {
+        "modal_flags": modal_flags,
+        "numbers": numbers,
+        "units": units,
+        "citation_hint": citations,
+    }
+
+
+def _compute_embedding(text: str, dims: int = 8) -> List[float]:
+    if not text:
+        return [0.0] * dims
+    digest = hashlib.sha1(text.encode("utf-8")).digest()
+    vector: List[float] = []
+    for idx in range(dims):
+        raw = digest[idx]
+        vector.append(round((raw / 255.0) * 2.0 - 1.0, 6))
+    return vector
+
+
+def _infer_domain_hint(text: str) -> Optional[str]:
+    lowered = text.lower()
+    if any(term in lowered for term in ("safety", "lockout", "ppe")):
+        return "safety"
+    if any(term in lowered for term in ("performance", "efficiency", "load", "torque")):
+        return "performance"
+    if any(term in lowered for term in ("quality", "inspection", "audit")):
+        return "quality"
+    return None
+
+
 def _microchunk_from_window(
     *,
     doc_id: str,
@@ -206,7 +289,7 @@ def _microchunk_from_window(
     end_char = window_tokens[-1].end
     raw_text = doc_text[start_char:end_char]
     norm_text = _normalize_text(raw_text)
-    micro_id = hashlib.sha1(norm_text.encode("utf-8")).hexdigest()[:10]
+    micro_id = "uf-" + hashlib.sha1(norm_text.encode("utf-8")).hexdigest()[:12]
 
     part_indices = sorted({token.part_index for token in window_tokens})
     part_span: Optional[Tuple[int, int]] = None
@@ -256,6 +339,10 @@ def _microchunk_from_window(
         "section_id": _select_metadata(parts, part_indices, "section_id"),
         "section_title": _select_metadata(parts, part_indices, "section_title"),
     }
+    chunk["style"] = _extract_style(parts, part_indices)
+    chunk["lex"] = _extract_lex(raw_text)
+    chunk["emb"] = _compute_embedding(norm_text)
+    chunk["domain_hint"] = _infer_domain_hint(norm_text)
     return chunk
 
 
