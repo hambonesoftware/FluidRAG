@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 from pathlib import Path
+import json
+from datetime import datetime, timezone
 
 from flask import Blueprint, request, jsonify, make_response
 import os
@@ -17,6 +19,68 @@ from ..chunking.token_chunker import (
 from ..pipeline import preprocess as pp
 from ..persistence import get_preprocess_cache, save_preprocess_cache
 from ..state import get_state
+
+
+def _chunk_debug_dir() -> Path:
+    override = os.environ.get("FLUIDRAG_DEBUG_DIR")
+    base = Path(override) if override else Path("debug") / "chunks"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def _sanitize_filename_tag(tag: str | None) -> str:
+    if not tag:
+        return "document"
+    safe = "".join(
+        ch if ch.isalnum() or ch in {"-", "_", "."} else "-" for ch in str(tag)
+    )
+    return safe or "document"
+
+
+def export_preprocess_debug(
+    *,
+    session_id: str | None,
+    doc_id: str,
+    doc_name: str,
+    macro_chunks: list,
+    micro_chunks: list,
+    response_payload: dict,
+    preprocess_debug_payload: dict | None,
+    chunk_config: dict | None,
+    page_records: list | None,
+    cache_hit: bool,
+) -> Path:
+    """Write the preprocess output (chunks + metadata) to ``/debug/chunks``."""
+
+    debug_dir = _chunk_debug_dir()
+    tag = _sanitize_filename_tag(doc_id or session_id or doc_name)
+    outfile = debug_dir / f"{tag}.preprocess.json"
+
+    def _json_safe(value: object) -> object:
+        try:
+            return json.loads(json.dumps(value, ensure_ascii=False))
+        except Exception:
+            return value
+
+    payload: dict[str, object] = {
+        "session_id": session_id or None,
+        "doc_id": doc_id,
+        "doc_name": doc_name,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "cache_hit": bool(cache_hit),
+        "response": _json_safe(response_payload),
+        "macro_chunks": _json_safe(macro_chunks or []),
+        "micro_chunks": _json_safe(micro_chunks or []),
+        "preprocess_debug": _json_safe(preprocess_debug_payload or {}),
+        "config": _json_safe(chunk_config or {}),
+    }
+    if page_records is not None:
+        payload["pages"] = _json_safe(page_records)
+
+    with outfile.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+
+    return outfile
 
 bp = Blueprint("preprocess", __name__)
 
@@ -43,6 +107,15 @@ def preprocess_route():
         state = get_state(session_id) if session_id else None
         file_hash = getattr(state, "file_hash", None) if state else None
         force_refresh = bool(data.get("force_refresh"))
+
+        raw_doc_name = (
+            (state.filename if state and getattr(state, "filename", None) else None)
+            or os.path.splitext(os.path.basename(pdf_path or ""))[0]
+            or session_id
+            or "document"
+        )
+        doc_name = str(raw_doc_name)
+        doc_id = Path(doc_name).stem or "document"
 
         cached = get_preprocess_cache(file_hash) if not force_refresh else None
         if cached:
@@ -71,6 +144,22 @@ def preprocess_route():
             response_payload.setdefault(
                 "chunks", response_payload.get("chunks") or len(cached_macro)
             )
+            try:
+                export_preprocess_debug(
+                    session_id=session_id or None,
+                    doc_id=doc_id,
+                    doc_name=doc_name,
+                    macro_chunks=cached_macro,
+                    micro_chunks=cached_micro,
+                    response_payload=response_payload,
+                    preprocess_debug_payload=cached_debug if isinstance(cached_debug, dict) else None,
+                    chunk_config=None,
+                    page_records=None,
+                    cache_hit=True,
+                )
+            except Exception:
+                pass
+
             response = jsonify(response_payload)
             response.headers["Access-Control-Allow-Origin"] = "*"
             return response, 200
@@ -88,8 +177,6 @@ def preprocess_route():
         micro_cfg = chunk_cfg.get("micro", {})
         macro_cfg = chunk_cfg.get("macro", {})
 
-        doc_name = (state.filename if state and getattr(state, "filename", None) else None) or os.path.splitext(os.path.basename(pdf_path or ""))[0] or session_id or "document"
-        doc_id = Path(doc_name).stem or "document"
         page_records = [
             {"page": idx + 1, "text": text}
             for idx, text in enumerate(pages_linear)
@@ -268,6 +355,31 @@ def preprocess_route():
             micro_chunks,
             preprocess_debug_payload,
         )
+
+        chunk_config_export = {
+            "micro": dict(micro_cfg) if isinstance(micro_cfg, dict) else micro_cfg,
+            "macro": dict(macro_cfg) if isinstance(macro_cfg, dict) else macro_cfg,
+            "token_chunker": {
+                "micro_max_tokens": MICRO_MAX_TOKENS,
+                "micro_overlap_tokens": MICRO_OVERLAP_TOKENS,
+            },
+        }
+
+        try:
+            export_preprocess_debug(
+                session_id=session_id or None,
+                doc_id=doc_id,
+                doc_name=doc_name,
+                macro_chunks=macro_chunks,
+                micro_chunks=micro_chunks,
+                response_payload=resp,
+                preprocess_debug_payload=preprocess_debug_payload,
+                chunk_config=chunk_config_export,
+                page_records=page_records,
+                cache_hit=False,
+            )
+        except Exception:
+            pass
 
         return response, 200
 
