@@ -59,3 +59,25 @@ def test_repair_skips_when_text_missing():
     merged, repairs = aggressive_sequence_repair(verified, page_texts)
     assert merged == verified
     assert repairs == []
+
+
+def test_soft_unwrap_repairs_wrapped_header():
+    page_texts = [
+        "", "", "", "", "",
+        "A3. Instrumentation\nA4. Control Panels\nA5.\nUtilities & Consumption\nA6. Performance",
+        "A7. Warranty\nA8. Training",
+    ]
+    verified = [
+        _header("A3.", "Instrumentation", 6, page_texts),
+        _header("A4.", "Control Panels", 6, page_texts),
+        _header("A7.", "Warranty", 7, page_texts),
+        _header("A8.", "Training", 7, page_texts),
+    ]
+
+    merged, repairs = aggressive_sequence_repair(verified, page_texts)
+
+    labels = [header["label"] for header in merged]
+    assert "A5." in labels
+    wrapped = next(rep for rep in repairs if rep["label"] == "A5.")
+    assert wrapped["text"].lower() == "utilities & consumption"
+    assert wrapped["provenance"]["search"] == "soft_unwrap"
