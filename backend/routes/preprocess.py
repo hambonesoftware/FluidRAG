@@ -45,8 +45,7 @@ def export_preprocess_debug(
     session_id: str | None,
     doc_id: str,
     doc_name: str,
-    macro_chunks: list,
-    micro_chunks: list,
+    uf_chunks: list,
     response_payload: dict,
     preprocess_debug_payload: dict | None,
     chunk_config: dict | None,
@@ -72,8 +71,7 @@ def export_preprocess_debug(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "cache_hit": bool(cache_hit),
         "response": _json_safe(response_payload),
-        "macro_chunks": _json_safe(macro_chunks or []),
-        "micro_chunks": _json_safe(micro_chunks or []),
+        "uf_chunks": _json_safe(uf_chunks or []),
         "preprocess_debug": _json_safe(preprocess_debug_payload or {}),
         "config": _json_safe(chunk_config or {}),
     }
@@ -122,14 +120,22 @@ def preprocess_route():
 
         cached = get_preprocess_cache(file_hash) if not force_refresh else None
         if cached:
-            cached_macro = [dict(chunk) for chunk in cached.get("macro_chunks") or cached.get("chunks", [])]
-            cached_micro = [dict(chunk) for chunk in cached.get("micro_chunks", [])]
+            cached_chunks = [
+                dict(chunk)
+                for chunk in (
+                    cached.get("uf_chunks")
+                    or cached.get("micro_chunks")
+                    or cached.get("macro_chunks")
+                    or cached.get("chunks")
+                    or []
+                )
+            ]
             cached_debug = cached.get("debug") if isinstance(cached, dict) else None
             if state is not None:
-                state.pre_chunks = cached_macro
-                state.macro_chunks = cached_macro
-                state.micro_chunks = cached_micro
-                state.uf_chunks = cached_micro
+                state.pre_chunks = cached_chunks
+                state.macro_chunks = cached_chunks
+                state.micro_chunks = cached_chunks
+                state.uf_chunks = cached_chunks
                 if isinstance(cached_debug, dict):
                     state.debug = dict(cached_debug)
             response_payload = dict(cached.get("response") or {})
@@ -137,16 +143,17 @@ def preprocess_route():
                 {
                     "ok": True,
                     "httpStatus": 200,
-                    "macro_chunks": len(cached_macro),
-                    "micro_chunks": len(cached_micro),
-                    "pre_chunks": len(cached_macro),
+                    "macro_chunks": len(cached_chunks),
+                    "micro_chunks": len(cached_chunks),
+                    "uf_chunks": len(cached_chunks),
+                    "pre_chunks": len(cached_chunks),
                     "cache": {"hit": True, "section": "preprocess"},
                     "from_cache": True,
                 }
             )
             response_payload.setdefault("pages", response_payload.get("pages") or 0)
             response_payload.setdefault(
-                "chunks", response_payload.get("chunks") or len(cached_macro)
+                "chunks", response_payload.get("chunks") or len(cached_chunks)
             )
             if state is not None:
                 uf_summary = response_payload.get("uf_pipeline")
@@ -162,8 +169,7 @@ def preprocess_route():
                     session_id=session_id or None,
                     doc_id=doc_id,
                     doc_name=doc_name,
-                    macro_chunks=cached_macro,
-                    micro_chunks=cached_micro,
+                    uf_chunks=cached_chunks,
                     response_payload=response_payload,
                     preprocess_debug_payload=cached_debug if isinstance(cached_debug, dict) else None,
                     chunk_config=None,
@@ -254,31 +260,30 @@ def preprocess_route():
             preprocess_debug_payload = dict(preprocess_debug_payload)
             preprocess_debug_payload["uf_pipeline"] = uf_debug
 
-        macro_chunks = [
+        pass_chunks = [
             prepare_pass_chunk(chunk, document=doc_name, position=idx)
             for idx, chunk in enumerate(uf_result.uf_chunks)
         ]
-
-        micro_chunks = [dict(chunk) for chunk in macro_chunks]
+        uf_chunks = [dict(chunk) for chunk in pass_chunks]
 
         preview_list = []
-        for macro in macro_chunks[:5]:
+        for chunk in uf_chunks[:5]:
             preview_list.append(
                 {
-                    "section_number": macro.get("section_number") or "",
-                    "section_name": macro.get("section_title") or "Document",
-                    "chars": len(macro.get("text") or ""),
-                    "page_start": macro.get("page_start"),
-                    "page_end": macro.get("page_end"),
+                    "section_number": chunk.get("section_number") or "",
+                    "section_name": chunk.get("section_title") or "Document",
+                    "chars": len(chunk.get("text") or ""),
+                    "page_start": chunk.get("page_start"),
+                    "page_end": chunk.get("page_end"),
                     "micro_chunks": 1,
                 }
             )
 
         if state is not None:
-            state.pre_chunks = macro_chunks
-            state.macro_chunks = macro_chunks
-            state.micro_chunks = micro_chunks
-            state.uf_chunks = micro_chunks
+            state.pre_chunks = pass_chunks
+            state.macro_chunks = pass_chunks
+            state.micro_chunks = pass_chunks
+            state.uf_chunks = pass_chunks
             state.uf_pipeline = uf_summary
             state.uf_tables = uf_result.tables
             state.headers = uf_result.headers.pages
@@ -292,10 +297,11 @@ def preprocess_route():
             "ok": True,
             "httpStatus": 200,
             "pages": len(pages_linear),
-            "chunks": len(macro_chunks),
-            "pre_chunks": len(macro_chunks),
-            "macro_chunks": len(macro_chunks),
-            "micro_chunks": len(micro_chunks),
+            "chunks": len(uf_chunks),
+            "pre_chunks": len(uf_chunks),
+            "macro_chunks": len(uf_chunks),
+            "micro_chunks": len(uf_chunks),
+            "uf_chunks": len(uf_chunks),
             "preview": preview_list,
             "uf_pipeline": uf_summary,
             "headers": uf_result.headers.pages,
@@ -312,9 +318,10 @@ def preprocess_route():
             file_hash,
             getattr(state, "filename", None),
             store_resp,
-            macro_chunks,
-            micro_chunks,
+            uf_chunks,
+            uf_chunks,
             preprocess_debug_payload,
+            uf_chunks=uf_chunks,
         )
 
         chunk_config_export = {
@@ -331,8 +338,7 @@ def preprocess_route():
                 session_id=session_id or None,
                 doc_id=doc_id,
                 doc_name=doc_name,
-                macro_chunks=macro_chunks,
-                micro_chunks=micro_chunks,
+                uf_chunks=uf_chunks,
                 response_payload=resp,
                 preprocess_debug_payload=preprocess_debug_payload,
                 chunk_config=chunk_config_export,

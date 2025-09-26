@@ -87,16 +87,20 @@ def save_preprocess_cache(
     macro_chunks: Optional[list],
     micro_chunks: Optional[list],
     debug: Optional[Dict[str, Any]] = None,
+    *,
+    uf_chunks: Optional[list] = None,
 ) -> None:
     if not file_hash:
         return
     payload = _load_payload(file_hash)
     payload.setdefault("passes", {})
+    unified_chunks = uf_chunks or macro_chunks or micro_chunks or []
     entry = {
         "response": response,
-        "chunks": macro_chunks or [],
-        "macro_chunks": macro_chunks or [],
-        "micro_chunks": micro_chunks or [],
+        "chunks": list(unified_chunks),
+        "macro_chunks": list(unified_chunks),
+        "micro_chunks": list(unified_chunks),
+        "uf_chunks": list(unified_chunks),
         "stored_at": time.time(),
     }
     if debug:
@@ -109,7 +113,8 @@ def get_preprocess_cache(file_hash: Optional[str]) -> Optional[Dict[str, Any]]:
     payload = _load_payload(file_hash)
     entry = payload.get("preprocess") if isinstance(payload, dict) else None
     if isinstance(entry, dict) and (
-        entry.get("macro_chunks")
+        entry.get("uf_chunks")
+        or entry.get("macro_chunks")
         or entry.get("micro_chunks")
         or entry.get("chunks")
     ):
