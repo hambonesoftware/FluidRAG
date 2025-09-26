@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-# EFHG gate mode controls whether scoring is allowed to block promotions.
+# Overall header mode determines the promotion strategy.
+# "raw_truth" => union of UF anchors and LLM headers with EFHG used only for span stitching.
+HEADER_MODE = "raw_truth"
+
+# EFHG gate mode controls whether scoring is allowed to block promotions
+# when the pipeline relies on score-based gating.
 # "bypass" => strong patterns auto-promote, scores only inform logging.
 # "score_gate" => legacy behaviour where EFHG scores gate weaker patterns.
 HEADER_GATE_MODE = "bypass"
@@ -13,4 +18,4 @@ HEADER_GATE_MODE = "bypass"
 STRICT_CONFLICT_ONLY = True
 
 
-__all__ = ["HEADER_GATE_MODE", "STRICT_CONFLICT_ONLY"]
+__all__ = ["HEADER_MODE", "HEADER_GATE_MODE", "STRICT_CONFLICT_ONLY"]
