@@ -68,6 +68,8 @@ _SEGMENT_REASON_KEYS = (
     "wrap_reason",
     "split_reason",
 )
+_APPENDIX_A56_PREFIX_RX = re.compile(r"^\s*A([56])[.\u2024\u2027\uFF0E]\s*(?P<tail>.*)$")
+_APPENDIX_BOUNDARY_ANCHOR_RX = re.compile(r"^\s*A\d{1,3}[.\u2024\u2027\uFF0E]")
 
 
 def _caps_ratio(text: str) -> float:
@@ -87,6 +89,19 @@ def _codepoints(text: Optional[str]) -> List[str]:
     if not text:
         return []
     return [f"U+{ord(ch):04X}" for ch in text]
+
+
+def _union_bbox(a: Optional[Sequence[float]], b: Optional[Sequence[float]]):
+    if not a:
+        return b
+    if not b:
+        return a
+    return [
+        min(a[0], b[0]),
+        min(a[1], b[1]),
+        max(a[2], b[2]),
+        max(a[3], b[3]),
+    ]
 
 
 def _segment_reason_for_line(line: Mapping[str, object]) -> Optional[str]:
@@ -475,6 +490,81 @@ def _appendix_neighbor_rescue(
     return additions
 
 
+def _appendix_soft_unwrap_lines(
+    lines: Sequence[Dict],
+    appendix_pages: Set[int],
+    *,
+    debug: Optional[List[Dict]] = None,
+) -> List[Dict]:
+    if not appendix_pages:
+        return list(lines)
+
+    output: List[Dict] = []
+    idx = 0
+    total = len(lines)
+
+    while idx < total:
+        line = dict(lines[idx])
+        page = int(line.get("page") or 0)
+        text_norm = line.get("text_norm", "")
+        header_norm = normalize_for_headers(text_norm)
+        consumed_next = False
+
+        if page in appendix_pages:
+            match = _APPENDIX_A56_PREFIX_RX.match(header_norm)
+            if match:
+                tail = (match.group("tail") or "").strip()
+                tail_tokens = len(tail.split()) if tail else 0
+                if tail_tokens < 6 and idx + 1 < total:
+                    nxt = dict(lines[idx + 1])
+                    next_norm = nxt.get("text_norm", "")
+                    combined_norm = f"{text_norm.rstrip()} {next_norm.lstrip()}".strip()
+                    combined_header = normalize_for_headers(combined_norm)
+                    if APPENDIX_RE.match(combined_header):
+                        combined_raw = f"{(line.get('text_raw') or '').rstrip()} {(nxt.get('text_raw') or '').lstrip()}".strip()
+                        line["text_norm"] = combined_norm
+                        if combined_raw:
+                            line["text_raw"] = combined_raw
+                        line["header_norm_seed"] = combined_header
+                        line.setdefault("join_from", [])
+                        join_from = list(dict.fromkeys(line["join_from"] + [line.get("line_idx"), nxt.get("line_idx")]))
+                        line["join_from"] = [val for val in join_from if val is not None]
+                        line["bbox"] = _union_bbox(line.get("bbox"), nxt.get("bbox"))
+                        consumed_next = True
+                        if debug is not None:
+                            debug.append(
+                                {
+                                    "marker": "appendix_soft_unwrap",
+                                    "page": page,
+                                    "line_idx": line.get("line_idx"),
+                                    "next_line_idx": nxt.get("line_idx"),
+                                    "prefix_text": header_norm,
+                                    "next_text": normalize_for_headers(next_norm),
+                                    "tail_tokens": tail_tokens,
+                                    "joined_text": combined_header,
+                                }
+                            )
+                            debug.append(
+                                {
+                                    "marker": "line_skip",
+                                    "skip_reason": "appendix_soft_unwrap",
+                                    "line_idx": nxt.get("line_idx")
+                                    if nxt.get("line_idx") is not None
+                                    else nxt.get("order")
+                                    if nxt.get("order") is not None
+                                    else idx + 1,
+                                    "page": int(nxt.get("page") or page),
+                                    "text_norm": nxt.get("text_norm"),
+                                    "text_raw": nxt.get("text_raw"),
+                                }
+                            )
+
+        output.append(line)
+        idx += 2 if consumed_next else 1
+
+    return output
+
+
 def _detect_appendix_gaps(candidates: Sequence[Dict]) -> List[Dict]:
     issues: List[Dict] = []
     by_page: Dict[int, List[int]] = defaultdict(list)
@@ -583,6 +673,19 @@ def run_pipeline(
         }
         header_preview = normalize_for_headers(text_norm)
         record["header_norm_seed"] = header_preview
+        if _APPENDIX_BOUNDARY_ANCHOR_RX.match(header_preview):
+            if record["segment_reason"] and record["segment_reason"] != "unknown":
+                record["segment_reason"] = f"{record['segment_reason']}|appendix_hard_boundary"
+            else:
+                record["segment_reason"] = "appendix_hard_boundary"
+            segment_markers.append(
+                {
+                    "marker": "appendix_hard_boundary",
+                    "page": int(record.get("page") or 0),
+                    "line_idx": int(record.get("line_idx") or order),
+                    "reason": "appendix_hard_boundary",
+                }
+            )
         preproc_trace.append(
             {
                 "page": int(record.get("page") or 0),
@@ -614,6 +717,7 @@ def run_pipeline(
     pre_join_processed = list(processed)
     segment_debug: List[Dict] = []
     processed = join_split_lines(processed, debug=segment_debug)
+    processed = _appendix_soft_unwrap_lines(processed, appendix_focus_pages, debug=segment_debug)
     appendix_context_indices: Set[int] = set()
     for idx in appendix_focus_orders:
         for delta in range(-3, 4):
@@ -623,6 +727,7 @@ def run_pipeline(
     appendix_line_dump: List[Dict] = []
     for pos in sorted(appendix_context_indices):
         base_line = pre_join_processed[pos]
+        header_norm = normalize_for_headers(base_line.get("text_norm") or "")
         appendix_line_dump.append(
             {
                 "order": int(base_line.get("order") or pos),
@@ -630,9 +735,13 @@ def run_pipeline(
                 "line_idx": int(base_line.get("line_idx") or base_line.get("order") or pos),
                 "raw_text": base_line.get("text_raw") or "",
                 "raw_hex": _codepoints(base_line.get("text_raw")),
-                "norm_text": base_line.get("text_norm") or "",
-                "norm_hex": _codepoints(base_line.get("text_norm")),
-                "segment_reason": base_line.get("segment_reason"),
+                "text_norm_raw": base_line.get("text_norm") or "",
+                "norm_text": header_norm,
+                "norm_hex": _codepoints(header_norm),
+                "segment_reason": base_line.get("segment_reason") or "unknown",
+                "seg_reason": base_line.get("segment_reason") or "unknown",
+                "regex_probe": _regex_probe(header_norm),
+                "skip_reason": None,
             }
         )
 
@@ -714,6 +823,32 @@ def run_pipeline(
         )
 
     header_debug_post_rescue = [_candidate_debug_entry(cand) for cand in header_candidates]
+
+    gate_lookup: Dict[Tuple[int, int], Dict] = {}
+    for entry in candidate_gate_trace:
+        key = (int(entry.get("page") or 0), int(entry.get("line_idx") or 0))
+        existing = gate_lookup.get(key)
+        if existing is None:
+            gate_lookup[key] = entry
+        else:
+            if (not existing.get("skip_reason")) and entry.get("skip_reason"):
+                gate_lookup[key] = entry
+    for dump_entry in appendix_line_dump:
+        key = (int(dump_entry.get("page") or 0), int(dump_entry.get("line_idx") or 0))
+        gate_entry = gate_lookup.get(key)
+        if not gate_entry:
+            continue
+        if gate_entry.get("skip_reason") is not None or dump_entry.get("skip_reason") is None:
+            dump_entry["skip_reason"] = gate_entry.get("skip_reason")
+        if gate_entry.get("decision") is not None:
+            dump_entry["decision"] = gate_entry.get("decision")
+        if gate_entry.get("score") is not None:
+            try:
+                dump_entry["score"] = float(gate_entry.get("score"))
+            except Exception:
+                dump_entry["score"] = gate_entry.get("score")
+        if not dump_entry.get("regex_probe") and gate_entry.get("regex_probe"):
+            dump_entry["regex_probe"] = gate_entry.get("regex_probe")
 
     selected_headers = [
         cand for cand in header_candidates if cand["decision"] in {"selected", "selected_fallback"}
