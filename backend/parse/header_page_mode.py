@@ -470,6 +470,7 @@ def write_header_candidate_audit(
     results: Iterable[Dict[str, Any]],
     *,
     output_root: Optional[str] = None,
+    debug: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Persist a machine-readable snapshot of header candidate scoring.
 
@@ -599,11 +600,20 @@ def write_header_candidate_audit(
 
         pages_payload.append(page_record)
 
-    report = {
+    report: Dict[str, Any] = {
         "doc": doc_component,
         "threshold": threshold,
         "pages": pages_payload,
     }
+    chunking_debug = None
+    if isinstance(debug, dict):
+        preprocess_debug = debug.get("preprocess")
+        if isinstance(preprocess_debug, dict):
+            chunking_debug = preprocess_debug.get("chunking")
+    if isinstance(chunking_debug, dict):
+        report.setdefault("preprocess", {})["chunking"] = json.loads(
+            json.dumps(chunking_debug, ensure_ascii=False)
+        )
 
     with open(os.path.join(out_dir, "candidate_audit.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, ensure_ascii=False, indent=2)
