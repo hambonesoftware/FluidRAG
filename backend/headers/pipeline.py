@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from backend.efhg.entropy import (
+    DEFAULT_WEIGHTS,
     DEFAULT_SEED_QUANTILE,
     DEFAULT_STOP_QUANTILE,
     compute_entropy_features,
@@ -59,6 +60,7 @@ def _span_to_audit(
     graph_score: float,
     graph_penalties: Dict[str, float],
     decision: str,
+    final_score: float,
 ) -> Dict[str, Any]:
     return {
         "header_label": _extract_label(span.text),
@@ -79,7 +81,7 @@ def _span_to_audit(
                 "S_graph": graph_score,
                 "penalties": graph_penalties,
             },
-            "final": hep_scores["S_HEP"] + span.flow_total - sum(graph_penalties.values()),
+            "final": final_score,
         },
         "decision": decision,
         "text_preview": span.text[:120],
@@ -115,6 +117,24 @@ def _persist_jsonl(path: Path, records: List[Dict[str, Any]]) -> None:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _overlap(a: Tuple[int, int], b: Tuple[int, int]) -> int:
+    return max(0, min(a[1], b[1]) - max(a[0], b[0]))
+
+
+def _build_header_shards(headers: List[VerifiedHeader], uf_chunks: List[UFChunk]) -> Dict[str, List[str]]:
+    shards: Dict[str, List[str]] = {}
+    for header in headers:
+        shard_ids: List[str] = []
+        for chunk in uf_chunks:
+            if chunk.page != header.page:
+                continue
+            if _overlap(chunk.span_char, header.span) > 0:
+                shard_ids.append(chunk.id)
+        if shard_ids:
+            shards[header.label] = shard_ids
+    return shards
+
+
 def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     pages = decomp.get("pages", [])
     pages_norm = [page.get("text", "") for page in pages]
@@ -130,7 +150,6 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
 
     messages = build_header_prompt(pages_norm)
     llm_raw = ""
-    verified_headers: VerifiedHeaders
     llm_error: str | None = None
     try:
         llm_raw = call_llm(messages)
@@ -141,6 +160,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         verified_headers = VerifiedHeaders()
 
     repaired_headers = aggressive_sequence_repair(verified_headers, pages_norm, tokens_per_page)
+    header_shards = _build_header_shards(repaired_headers.headers, uf_chunks)
+
     domain_hint = (
         decomp.get("metadata", {}).get("domain")
         or decomp.get("metadata", {}).get("domain_hint")
@@ -153,6 +174,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
                 "text": header.text,
                 "page": header.page,
                 "span": header.span,
+                "chunks": header_shards.get(header.label, []),
             }
             for header in repaired_headers.headers
         ],
@@ -161,55 +183,76 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         domain=domain_hint,
     )
 
-    seed_candidates = select_quantile_ids(start_scores, DEFAULT_SEED_QUANTILE)
     chunk_lookup = {chunk.id: chunk for chunk in uf_chunks}
-    seed_ids = [cid for cid in seed_candidates if chunk_lookup.get(cid) and chunk_lookup[cid].header_anchor]
+    ordered_ids = [chunk.id for chunk in uf_chunks]
+    seed_candidates = select_quantile_ids(start_scores, DEFAULT_SEED_QUANTILE)
+    seed_ids = [cid for cid in ordered_ids if cid in seed_candidates and chunk_lookup[cid].header_anchor]
     if not seed_ids:
-        seed_ids = [chunk.id for chunk in uf_chunks if chunk.header_anchor]
+        seed_ids = [cid for cid in ordered_ids if chunk_lookup[cid].header_anchor]
+    seed_ids = list(dict.fromkeys(seed_ids))
+
     spans_audit: List[Dict[str, Any]] = []
     accepted_spans: List[Span] = []
 
     for seed_id in seed_ids:
-        span = grow_span_from_seed(seed_id, uf_chunks, edges, stop_scores)
+        try:
+            span = grow_span_from_seed(seed_id, uf_chunks, edges, stop_scores)
+        except ValueError:
+            continue
         span = snap_and_trim(span, header_ctx, chunk_lookup)
         hep_detail = score_span_hep(span, chunk_lookup)
         graph_score, graph_penalties = score_graph(span, header_ctx, chunk_lookup)
         final_score = hep_detail["S_HEP"] + span.flow_total - sum(graph_penalties.values())
-        decision = "rejected"
-        if hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"] and final_score >= GRAPH_DEFAULTS["theta_final"]:
-            decision = "accepted"
+        decision = "accepted" if (
+            hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"]
+            and final_score >= GRAPH_DEFAULTS["theta_final"]
+        ) else "rejected"
+        if decision == "accepted":
             accepted_spans.append(span)
-        spans_audit.append(_span_to_audit(span, start_scores, stop_scores, hep_detail, graph_score, graph_penalties, decision))
-
-    final_headers_map: Dict[str, VerifiedHeader] = {header.label: header for header in repaired_headers.headers}
-    for span in accepted_spans:
-        label = _extract_label(span.text)
-        if not label:
-            continue
-        canonical_text = span.text.split(label, 1)[-1].strip()
-        final_headers_map[label] = VerifiedHeader(
-            label=label,
-            text=canonical_text,
-            page=span.page,
-            span=span.span,
-            verification={"status": "efhg"},
-            source="efhg",
-            confidence=0.9,
+        spans_audit.append(
+            _span_to_audit(
+                span,
+                start_scores,
+                stop_scores,
+                hep_detail,
+                graph_score,
+                graph_penalties,
+                decision,
+                final_score,
+            )
         )
 
-    if llm_error and not final_headers_map:
+    if llm_error:
+        final_headers_map: Dict[str, VerifiedHeader] = {}
         for span in accepted_spans:
             label = _extract_label(span.text)
             if not label:
                 continue
+            body = span.text.split(label, 1)[-1].strip()
             final_headers_map[label] = VerifiedHeader(
                 label=label,
-                text=span.text.split(label, 1)[-1].strip(),
+                text=body,
                 page=span.page,
                 span=span.span,
-                verification={"status": "efhg_fallback"},
+                verification={"status": "efhg_fallback", "chunks": span.chunk_ids},
                 source="efhg_fallback",
-                confidence=0.75,
+                confidence=0.8,
+            )
+    else:
+        final_headers_map = {header.label: header for header in repaired_headers.headers}
+        for span in accepted_spans:
+            label = _extract_label(span.text)
+            if not label:
+                continue
+            body = span.text.split(label, 1)[-1].strip()
+            final_headers_map[label] = VerifiedHeader(
+                label=label,
+                text=body,
+                page=span.page,
+                span=span.span,
+                verification={"status": "efhg", "chunks": span.chunk_ids},
+                source="efhg",
+                confidence=0.9,
             )
 
     final_headers = sorted(final_headers_map.values(), key=lambda h: (h.page, h.span[0], h.label))
@@ -245,13 +288,11 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         for chunk in uf_chunks
     ]
 
-    efhg_records = spans_audit
-
     audit_payload = {
         "config": {
             "uf_max_tokens": 90,
             "uf_overlap": 12,
-            "entropy": {"weights": {"w1": 0.7, "w2": 0.2, "w3": 0.1, "w4": 0.6, "w5": 0.25, "w6": 0.15}, "seed_quantile": DEFAULT_SEED_QUANTILE, "stop_quantile": DEFAULT_STOP_QUANTILE},
+            "entropy": {"weights": dict(DEFAULT_WEIGHTS), "seed_quantile": DEFAULT_SEED_QUANTILE, "stop_quantile": DEFAULT_STOP_QUANTILE},
             "fluid": FLUID_DEFAULTS,
             "hep": HEP_DEFAULTS,
             "graph": GRAPH_DEFAULTS,
@@ -284,7 +325,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     }
 
     _persist_jsonl(output_dir / "uf_chunks.jsonl", uf_records)
-    _persist_jsonl(output_dir / "efhg_spans.jsonl", efhg_records)
+    _persist_jsonl(output_dir / "efhg_spans.jsonl", spans_audit)
     with (output_dir / "headers.json").open("w", encoding="utf-8") as handle:
         json.dump(headers_payload, handle, ensure_ascii=False, indent=2)
     with (output_dir / "candidate_audit.json").open("w", encoding="utf-8") as handle:
@@ -294,7 +335,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         doc_id=doc_id,
         headers=headers_payload,
         uf_chunks=uf_chunks,
-        spans=efhg_records,
+        spans=spans_audit,
         output_dir=output_dir,
     )
 

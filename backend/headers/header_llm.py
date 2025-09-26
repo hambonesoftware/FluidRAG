@@ -44,9 +44,13 @@ def build_header_prompt(pages_norm: List[str]) -> List[Dict[str, str]]:
     for idx, page in enumerate(pages_norm, start=1):
         sections.append(f"Page {idx}:\n{page}")
     prompt = "\n\n".join(sections)
+    instructions = (
+        "Extract every numbered or appendix header. Respond with a single fenced JSON payload containing "
+        '{"headers": [{"label": "A1.", "text": "Heading", "page": 1}, ...]}. Include all sequence members.'
+    )
     return [
         {"role": "system", "content": "You are a diligent header extraction assistant."},
-        {"role": "user", "content": prompt},
+        {"role": "user", "content": instructions + "\n\n" + prompt},
     ]
 
 
@@ -109,21 +113,20 @@ def verify_headers(headers_json: Dict[str, Any], pages_norm: List[str], pages_ra
         page = int(entry.get("page", 1))
         if not label or page < 1 or page > len(pages_norm):
             continue
-        canonical = _normalize_space(f"{label} {text}")
+        pattern = re.compile(rf"{re.escape(label)}\s+(?P<body>[^\n]+)")
         page_text = pages_norm[page - 1]
-        page_compact = _normalize_space(page_text)
-        idx = page_compact.find(canonical)
+        match = pattern.search(page_text)
         verification: Dict[str, Any]
         span: Tuple[int, int]
-        if idx != -1:
+        if match and _normalize_space(match.group("body")).startswith(_normalize_space(text)[:50]):
             verification = {"status": "matched", "method": "normalized"}
-            span = (idx, idx + len(canonical))
+            span = (match.start(), match.end())
         else:
             raw_text = pages_raw[page - 1] if pages_raw and page - 1 < len(pages_raw) else page_text
-            raw_idx = raw_text.find(label)
-            if raw_idx != -1:
+            raw_match = pattern.search(raw_text)
+            if raw_match:
                 verification = {"status": "matched", "method": "raw"}
-                span = (raw_idx, raw_idx + len(label) + len(text) + 1)
+                span = (raw_match.start(), raw_match.end())
             else:
                 verification = {"status": "not_found"}
                 span = (0, 0)
@@ -135,7 +138,7 @@ def verify_headers(headers_json: Dict[str, Any], pages_norm: List[str], pages_ra
                 span=span,
                 verification=verification,
                 source="llm",
-                confidence=0.8 if verification.get("status") == "matched" else 0.4,
+                confidence=0.85 if verification.get("status") == "matched" else 0.4,
             )
         )
     return verified
@@ -286,15 +289,9 @@ def aggressive_sequence_repair(
                 page_text = pages_norm[page_index]
                 start = before_header.span[1]
                 end = after_header.span[0] if before_header.page == after_header.page else len(page_text)
-                win_start, win_end, _ = _window_text(page_text, start, end)
-                token_window = []
-                if 0 <= page_index < len(tokens):
-                    token_window = [
-                        token
-                        for token in tokens[page_index]
-                        if win_start <= int(token.get("start", 0)) <= win_end
-                    ]
-                log_entry["windows"] += max(1, len(token_window))
+                win_start, win_end, window_text = _window_text(page_text, start, end)
+                window_line_count = max(1, len(window_text.splitlines()))
+                log_entry["windows"] += window_line_count
                 candidates = _search_candidates(label, page_text, win_start, win_end)
                 for candidate in candidates:
                     verification = _verify_local_match(label, candidate["text"], page_text, win_start, win_end)
@@ -305,6 +302,8 @@ def aggressive_sequence_repair(
                     if confidence < confidence_threshold:
                         continue
                     normalized_label = label.rstrip(".)") + ("." if label.endswith(".") else ")")
+                    if any(h.label == normalized_label for h in repaired.headers):
+                        continue
                     new_header = VerifiedHeader(
                         label=normalized_label,
                         text=candidate["text"],
