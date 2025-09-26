@@ -8,8 +8,8 @@ from typing import Dict, List, Tuple
 
 from tokens import encode
 
-MICRO_MAX_TOKENS = 386
-MICRO_OVERLAP_TOKENS = 64
+MICRO_MAX_TOKENS = 90
+MICRO_OVERLAP_TOKENS = 12
 
 _SENT_SPLIT = re.compile(r"(?<=[\.!\?])\s+(?=[A-Z0-9])")
 
@@ -47,7 +47,7 @@ def _window_hard_wrap(tokens: List[int], max_tokens: int) -> List[Tuple[int, int
 
 
 def micro_chunks_by_tokens(doc_text: str) -> List[Dict[str, object]]:
-    """Split ``doc_text`` into <=386 token micro chunks with overlap.
+    """Split ``doc_text`` into <=90 token UF micro-chunks with overlap.
 
     The function first groups sentences until the budget would be exceeded and
     falls back to a hard token window when an individual sentence (or merged

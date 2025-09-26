@@ -70,8 +70,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build microchunk artifacts from stage JSON files")
     parser.add_argument("--docs", type=Path, required=True, help="Directory containing staged JSON files")
     parser.add_argument("--out-dir", type=Path, required=True, help="Directory to write cache artifacts")
-    parser.add_argument("--token-size", type=int, default=386, help="Target microchunk token size")
-    parser.add_argument("--overlap", type=int, default=96, help="Token overlap between adjacent microchunks")
+    parser.add_argument(
+        "--token-size",
+        type=int,
+        default=90,
+        help="Target UF microchunk token size (default: 90)",
+    )
+    parser.add_argument(
+        "--overlap",
+        type=int,
+        default=12,
+        help="Token overlap between adjacent UF microchunks (default: 12)",
+    )
     return parser.parse_args(argv)
 
 
