@@ -489,5 +489,6 @@ async def detect_headers_page_mode(
         doc_tag,
         debug_snapshots,
         results,
+        debug=None,
     )
     return results

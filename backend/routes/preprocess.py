@@ -9,6 +9,11 @@ from fluidrag.config import load_config
 
 from ..chunking.atomic_chunker import AtomicChunker
 from ..chunking.macro_chunker import MacroChunker
+from ..chunking.token_chunker import (
+    MICRO_MAX_TOKENS,
+    MICRO_OVERLAP_TOKENS,
+    micro_chunks_by_tokens,
+)
 from ..pipeline import preprocess as pp
 from ..persistence import get_preprocess_cache, save_preprocess_cache
 from ..state import get_state
@@ -43,10 +48,13 @@ def preprocess_route():
         if cached:
             cached_macro = [dict(chunk) for chunk in cached.get("macro_chunks") or cached.get("chunks", [])]
             cached_micro = [dict(chunk) for chunk in cached.get("micro_chunks", [])]
+            cached_debug = cached.get("debug") if isinstance(cached, dict) else None
             if state is not None:
                 state.pre_chunks = cached_macro
                 state.macro_chunks = cached_macro
                 state.micro_chunks = cached_micro
+                if isinstance(cached_debug, dict):
+                    state.debug = dict(cached_debug)
             response_payload = dict(cached.get("response") or {})
             response_payload.update(
                 {
@@ -86,6 +94,44 @@ def preprocess_route():
             {"page": idx + 1, "text": text}
             for idx, text in enumerate(pages_linear)
         ]
+
+        joined_text_parts = [
+            str(page.get("text") or "").strip()
+            for page in page_records
+            if page.get("text")
+        ]
+        preprocess_debug: dict = {"preprocess": {}}
+        if joined_text_parts:
+            doc_text = "\n\n".join(joined_text_parts)
+            token_chunks = micro_chunks_by_tokens(doc_text)
+            chunking_payload = {
+                "config": {
+                    "micro_max_tokens": MICRO_MAX_TOKENS,
+                    "micro_overlap_tokens": MICRO_OVERLAP_TOKENS,
+                    "tokenizer": "tiktoken/cl100k_base (fallback est. if unavailable)",
+                },
+                "summary": {
+                    "micro_chunk_count": len(token_chunks),
+                    "total_micro_tokens": sum(
+                        chunk.get("token_count", 0) for chunk in token_chunks
+                    ),
+                },
+                "micro_chunks": [
+                    {
+                        "idx": idx,
+                        "token_count": chunk.get("token_count", 0),
+                        "note": chunk.get("note", ""),
+                        "token_span": chunk.get("token_span"),
+                        "text_preview": chunk.get("text_preview", ""),
+                        "text_hash": chunk.get("text_hash"),
+                    }
+                    for idx, chunk in enumerate(token_chunks)
+                ],
+            }
+            preprocess_debug["preprocess"]["chunking"] = chunking_payload
+        preprocess_debug_payload = (
+            dict(preprocess_debug) if preprocess_debug.get("preprocess") else None
+        )
 
         header_spans = []
         if state is not None and state.headers:
@@ -191,6 +237,11 @@ def preprocess_route():
             state.pre_chunks = macro_chunks
             state.macro_chunks = macro_chunks
             state.micro_chunks = micro_chunks
+            state.debug = (
+                preprocess_debug_payload.copy()
+                if isinstance(preprocess_debug_payload, dict)
+                else None
+            )
 
         resp = {
             "ok": True,
@@ -215,6 +266,7 @@ def preprocess_route():
             store_resp,
             macro_chunks,
             micro_chunks,
+            preprocess_debug_payload,
         )
 
         return response, 200

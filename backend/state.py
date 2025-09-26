@@ -18,6 +18,7 @@ class PipelineState:
     model: Optional[str] = None
     provider: Optional[str] = None
     headers: Optional[List[Dict[str, Any]]] = None
+    debug: Optional[Dict[str, Any]] = None
     file_hash: Optional[str] = None
 
 PIPELINE_STATES: Dict[str, PipelineState] = {}

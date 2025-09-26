@@ -496,6 +496,7 @@ def determine_headers():
                 doc_tag,
                 page_debug_snapshots,
                 results,
+                debug=getattr(session_state, "debug", None),
             )
 
             response_payload = {

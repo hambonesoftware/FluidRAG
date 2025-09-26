@@ -4,6 +4,11 @@ from pathlib import Path
 
 import pytest
 
+from backend.chunking.token_chunker import (
+    MICRO_MAX_TOKENS,
+    MICRO_OVERLAP_TOKENS,
+    micro_chunks_by_tokens,
+)
 from backend.parse.header_config import CONFIG
 from backend.parse.header_page_mode import (
     write_page_debug,
@@ -107,11 +112,37 @@ def test_header_candidate_audit_written_without_debug(tmp_path):
         }
     ]
 
+    text = "Sentence body." * 50
+    token_chunks = micro_chunks_by_tokens(text)
+    chunk_debug = {
+        "config": {
+            "micro_max_tokens": MICRO_MAX_TOKENS,
+            "micro_overlap_tokens": MICRO_OVERLAP_TOKENS,
+            "tokenizer": "unit-test",
+        },
+        "summary": {
+            "micro_chunk_count": len(token_chunks),
+            "total_micro_tokens": sum(chunk["token_count"] for chunk in token_chunks),
+        },
+        "micro_chunks": [
+            {
+                "idx": idx,
+                "token_count": chunk["token_count"],
+                "note": chunk.get("note", ""),
+                "token_span": chunk.get("token_span"),
+                "text_preview": chunk.get("text_preview"),
+                "text_hash": chunk.get("text_hash"),
+            }
+            for idx, chunk in enumerate(token_chunks)
+        ],
+    }
+
     write_header_candidate_audit(
         "Doc Name",
         snapshots,
         results,
         output_root=str(tmp_path),
+        debug={"preprocess": {"chunking": chunk_debug}},
     )
 
     audit_path = Path(tmp_path) / "Doc_Name" / "candidate_audit.json"
@@ -126,3 +157,7 @@ def test_header_candidate_audit_written_without_debug(tmp_path):
     assert any(item.get("selected") for item in candidates)
     ranks = [c.get("rank") for c in candidates]
     assert ranks == sorted(ranks)
+    chunking = data.get("preprocess", {}).get("chunking")
+    assert chunking is not None
+    assert chunking["config"]["micro_max_tokens"] == MICRO_MAX_TOKENS
+    assert chunking["summary"]["micro_chunk_count"] > 0
