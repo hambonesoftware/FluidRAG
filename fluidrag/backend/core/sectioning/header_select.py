@@ -1,40 +1,46 @@
 """Selection helpers for section headers."""
 from __future__ import annotations
 
-import re
 from typing import Callable, Dict, Iterable, List
 
-from .header_match import classify_line
+from .header_match import APPENDIX_RE, NUMERIC_RE, classify_line
 from .header_score import THRESHOLD, score_candidate
+from .text_normalize import normalize_for_headers
 
 
-_ALT_SPACE_CHARS = {"\u00A0", "\u2002", "\u2003", "\u202F"}
-_ALT_DOT_CHARS = {"\u2024", "\u2027", "\uFF0E"}
-_SOFT_APPENDIX_PREFIX_RX = re.compile(r"^[A-Z]\d+[.\u2024\u2027\uFF0E]")
-_SOFT_NUMERIC_PREFIX_RX = re.compile(r"^\d+\)")
-
-
-def _normalize_soft_text(text: str) -> str:
-    buf: List[str] = []
-    for ch in text or "":
-        if ch in _ALT_SPACE_CHARS:
-            buf.append(" ")
-        elif ch in _ALT_DOT_CHARS:
-            buf.append(".")
-        else:
-            buf.append(ch)
-    normalized = "".join(buf)
-    normalized = re.sub(r"\s+", " ", normalized)
-    return normalized.strip()
+def _caps_ratio(text: str) -> float:
+    letters = [ch for ch in text if ch.isalpha()]
+    if not letters:
+        return 0.0
+    return sum(1 for ch in letters if ch.isupper()) / len(letters)
 
 
 def _should_apply_units_penalty(text: str) -> bool:
-    stripped = _normalize_soft_text(text)
-    if _SOFT_NUMERIC_PREFIX_RX.match(stripped):
+    stripped = normalize_for_headers(text)
+    if NUMERIC_RE.match(stripped):
         return False
-    if _SOFT_APPENDIX_PREFIX_RX.match(stripped):
+    if APPENDIX_RE.match(stripped):
         return False
     return True
+
+
+def _style_snapshot(line: Dict, caps_ratio: float) -> Dict[str, float | bool | None]:
+    return {
+        "font_size": line.get("font_size"),
+        "bold": bool(line.get("bold")),
+        "font_sigma_rank": float(line.get("font_sigma_rank") or 0.0),
+        "caps_ratio": float(caps_ratio),
+    }
+
+
+def _decide(meets_threshold: bool, is_numeric: bool, is_appendix: bool, style: Dict) -> str:
+    if meets_threshold:
+        return "selected"
+    if (is_numeric or is_appendix) and (
+        style.get("bold") or float(style.get("font_sigma_rank") or 0.0) >= 0.5
+    ):
+        return "selected_fallback"
+    return "below_threshold"
 
 
 def select_headers(
@@ -46,33 +52,47 @@ def select_headers(
     selections: List[Dict] = []
 
     for line in lines:
-        text = line.get("text_norm", "")
-        classification = classify_line(text, line.get("caps_ratio", 0.0))
+        raw_text = line.get("text_norm", "")
+        norm_text = normalize_for_headers(raw_text)
+        caps_ratio = line.get("caps_ratio") or _caps_ratio(norm_text)
+        classification = classify_line(norm_text, caps_ratio)
         if classification["kind"] == "none":
             continue
 
         features = line.get("features", {})
         score, parts = score_candidate(classification["kind"], features)
 
-        if (
-            classification["kind"] == "label"
-            and units_present_fn(text)
-            and _should_apply_units_penalty(text)
-        ):
-            score -= 0.6
-            parts["units_penalty"] = -0.6
+        is_numeric = bool(NUMERIC_RE.match(norm_text))
+        is_appendix = bool(APPENDIX_RE.match(norm_text))
+
+        parts = {key: float(val) for key, val in parts.items()}
+        parts["units_penalty_applied"] = False
+
+        if units_present_fn(norm_text) and _should_apply_units_penalty(norm_text):
+            if not (is_numeric or is_appendix):
+                score -= 0.6
+                parts["units_penalty"] = -0.6
+                parts["units_penalty_applied"] = True
 
         meets_threshold = score >= THRESHOLD
+        style = _style_snapshot(line, caps_ratio)
+        decision = _decide(meets_threshold, is_numeric, is_appendix, style)
         record = {
             **line,
             **classification,
-            "score": score,
+            "header_norm": norm_text,
+            "score": float(score),
             "partials": parts,
             "meets_threshold": meets_threshold,
+            "decision": decision,
+            "is_numeric": is_numeric,
+            "is_appendix": is_appendix,
+            "style": style,
+            "caps_ratio": caps_ratio,
         }
         selections.append(record)
 
-    return [record for record in selections if record["meets_threshold"]]
+    return [record for record in selections if record["decision"].startswith("selected")]
 
 
 __all__ = ["select_headers"]
