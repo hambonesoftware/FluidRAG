@@ -33,7 +33,8 @@ class _DocFixture:
     def __init__(self, base_dir: Path) -> None:
         headers = [
             {"page": 6, "line_idx": 19, "text": "A1. Robot & EOAT"},
-            {"page": 6, "line_idx": 20, "text": "A2. Vision/Sensing"},
+            # String ``line_idx`` ensures normalization coerces to integers.
+            {"page": 6, "line_idx": "20", "text": "A2. Vision/Sensing"},
             {"page": 7, "line_idx": 1, "text": "A3. Conveyors & Pallet Handling"},
             {"page": 7, "line_idx": 2, "text": "A4. Controls & Electrical"},
             {"page": 7, "line_idx": 3, "text": "A5. Utilities & Consumption"},
@@ -90,4 +91,17 @@ def test_appendix_a_from_preprocess_only(doc_loaded_from_fixtures: _DocFixture, 
     assert final_path.exists(), "final headers artifact not written"
     payload = json.loads(final_path.read_text(encoding="utf-8"))
     assert payload.get("headers_final"), "headers_final.json should contain data"
+
+    # Order should be stable by (page, line_idx) with numeric comparison.
+    sorted_headers = sorted(
+        headers,
+        key=lambda item: (
+            item["page"],
+            item.get("line_idx") if item.get("line_idx") is not None else 1_000_000,
+        ),
+    )
+    assert headers == sorted_headers, "Headers must retain preprocess ordering"
+
+    tsv_path = doc_loaded_from_fixtures.artifacts.base_dir / "headers_final.tsv"
+    assert tsv_path.exists(), "headers_final.tsv should be written for inspection"
 
