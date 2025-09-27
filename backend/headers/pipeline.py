@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from collections.abc import Iterable as IterableABC, Mapping as MappingABC
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Set, Tuple
 
@@ -24,7 +25,8 @@ from backend.efhg.fluid import (
 )
 from backend.efhg.graph_gate import DEFAULT_PARAMS as GRAPH_DEFAULTS, GraphContext, score_graph, snap_and_trim
 from backend.efhg.hep import DEFAULT_PARAMS as HEP_DEFAULTS, score_span_hep
-from backend.headers.config import HEADER_GATE_MODE, HEADER_MODE, STRICT_CONFLICT_ONLY
+from backend.headers import config as cfg
+from backend.headers.header_finalize import finalize_headers_preprocess_only
 from backend.headers.gap_probe import GapProbeLogger
 from backend.headers.header_llm import (
     VerifiedHeader,
@@ -53,6 +55,48 @@ class HeaderIndex:
     header_shards: List[Dict[str, Any]]
     output_dir: Path
     truth: List[Dict[str, Any]] = field(default_factory=list)
+
+
+class _ArtifactAdapter:
+    """Minimal artifact writer used in preprocess-only mode."""
+
+    def __init__(self, base_dir: Path) -> None:
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def write_json(self, name: str, payload: Mapping[str, Any]) -> Path:
+        path = self.base_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+        return path
+
+    def write_text(self, name: str, text: str) -> Path:
+        path = self.base_dir / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
+
+
+class _DocProxy(SimpleNamespace):
+    """Adapter that exposes preprocess headers + artifact writers."""
+
+    def __init__(self, doc_id: str, decomp: Mapping[str, Any], output_dir: Path) -> None:
+        preprocess_payload = {}
+        if isinstance(decomp, MappingABC):
+            preprocess_payload = decomp.get("preprocess") or {}
+        headers_by_page = None
+        if isinstance(preprocess_payload, MappingABC):
+            headers_by_page = (
+                preprocess_payload.get("headers_by_page")
+                or preprocess_payload.get("headers")
+                or preprocess_payload.get("pages")
+            )
+        super().__init__(
+            doc_id=doc_id,
+            preprocess=SimpleNamespace(headers_by_page=headers_by_page or []),
+            artifacts=_ArtifactAdapter(output_dir),
+        )
 
 
 @dataclass
@@ -758,15 +802,56 @@ def _build_header_shards(
 
 
 def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
+    output_dir = _ensure_output_dir(doc_id, decomp.get("output_dir"))
+
+    if cfg.HEADER_MODE == "preprocess_only":
+        doc_proxy = _DocProxy(doc_id, decomp, output_dir)
+        final_headers = finalize_headers_preprocess_only(doc_proxy)
+        truth_rows = [
+            {
+                "page": entry["page"],
+                "line_idx": entry.get("line_idx"),
+                "text": entry["text"],
+                "provenance": "preprocess",
+            }
+            for entry in final_headers
+        ]
+        headers_payload = [
+            {
+                "label": entry["text"],
+                "text": entry["text"],
+                "page": entry["page"],
+                "span": None,
+                "source": "preprocess",
+                "confidence": 1.0,
+            }
+            for entry in final_headers
+        ]
+        return HeaderIndex(
+            doc_id=doc_id,
+            headers=headers_payload,
+            uf_chunks=[],
+            spans=[],
+            header_shards=[],
+            output_dir=output_dir,
+            truth=truth_rows,
+        )
+
+    assert (
+        cfg.HEADER_MODE != "preprocess_only"
+    ), "Post-process must not run in preprocess_only mode"
+
     pages = decomp.get("pages", [])
     pages_norm = [page.get("text", "") for page in pages]
     pages_raw = [page.get("raw_text", page.get("text", "")) for page in pages]
     tokens_per_page = [page.get("tokens", []) for page in pages]
-    output_dir = _ensure_output_dir(doc_id, decomp.get("output_dir"))
 
     uf_chunks = uf_chunk(decomp)
     chunk_lookup = {chunk.id: chunk for chunk in uf_chunks}
-    preprocess_truth_active = HEADER_MODE == "preprocess_truth"
+    legacy_profile = getattr(cfg, "HEADER_LEGACY_PROFILE", "preprocess_truth")
+    legacy_mode = cfg.HEADER_MODE == "legacy"
+    preprocess_truth_active = legacy_mode and legacy_profile == "preprocess_truth"
+    raw_truth_active = legacy_mode and legacy_profile == "raw_truth"
     preprocess_headers = _load_preprocess_headers(decomp) if preprocess_truth_active else []
     preprocess_matches: Dict[int, Dict[str, Any]] = {}
     candidates = scan_candidates(uf_chunks)
@@ -805,10 +890,10 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             repaired_headers = preprocess_verified
     if preprocess_truth_active:
         preprocess_matches = _promote_preprocess_truth(candidates, uf_chunks, preprocess_headers, chunk_lookup)
-    elif HEADER_MODE == "raw_truth":
+    elif raw_truth_active:
         _promote_raw_truth(candidates, uf_chunks, verified_headers)
     else:
-        promote_candidates(candidates, HEADER_GATE_MODE)
+        promote_candidates(candidates, cfg.HEADER_GATE_MODE)
     candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
     for candidate in candidates:
         candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
@@ -867,15 +952,15 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         decision = "promoted" if promotion_reason else "rejected"
         if (
             not accepted
-            and HEADER_MODE != "raw_truth"
-            and HEADER_GATE_MODE == "score_gate"
+            and not raw_truth_active
+            and cfg.HEADER_GATE_MODE == "score_gate"
         ):
             if hep_detail["S_HEP"] >= HEP_DEFAULTS["theta_hep"] and final_score >= GRAPH_DEFAULTS["theta_final"]:
                 accepted = True
                 decision = "accepted"
         demotion_reason = None
         if not accepted:
-            if HEADER_MODE != "raw_truth" and HEADER_GATE_MODE == "score_gate":
+            if not raw_truth_active and cfg.HEADER_GATE_MODE == "score_gate":
                 demotion_reason = "score_gate"
             else:
                 demotion_reason = "not_promoted"
@@ -1173,9 +1258,10 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             "hep": HEP_DEFAULTS,
             "graph": GRAPH_DEFAULTS,
             "domain_hint": domain_hint,
-            "header_gate_mode": HEADER_GATE_MODE,
-            "header_mode": HEADER_MODE,
-            "strict_conflict_only": STRICT_CONFLICT_ONLY,
+            "header_gate_mode": cfg.HEADER_GATE_MODE,
+            "header_mode": cfg.HEADER_MODE,
+            "strict_conflict_only": cfg.STRICT_CONFLICT_ONLY,
+            "legacy_profile": getattr(cfg, "HEADER_LEGACY_PROFILE", None),
         },
         "uf_chunks": [
             {
@@ -1242,4 +1328,38 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     )
 
 
-__all__ = ["run_headers", "HeaderIndex"]
+def _doc_id_from_obj(doc: object) -> str:
+    for attr in ("doc_id", "document_id", "id"):
+        value = getattr(doc, attr, None)
+        if value:
+            return str(value)
+    return "document"
+
+
+def _decomp_from_doc(doc: object) -> Mapping[str, Any]:
+    if isinstance(doc, MappingABC):
+        return doc
+    for attr in ("decomp", "payload", "data"):
+        value = getattr(doc, attr, None)
+        if isinstance(value, MappingABC):
+            return value
+    raise AttributeError("Document object does not expose a header decomposition payload")
+
+
+def run_headers_stage(doc: object) -> List[Dict[str, Any]]:
+    """Return the finalized headers list for ``doc`` based on configuration."""
+
+    if cfg.HEADER_MODE == "preprocess_only":
+        return finalize_headers_preprocess_only(doc)
+
+    assert (
+        cfg.HEADER_MODE != "preprocess_only"
+    ), "Post-process must not run in preprocess_only mode"
+
+    doc_id = _doc_id_from_obj(doc)
+    decomp = _decomp_from_doc(doc)
+    result = run_headers(doc_id, dict(decomp))
+    return result.truth
+
+
+__all__ = ["run_headers", "run_headers_stage", "HeaderIndex"]
