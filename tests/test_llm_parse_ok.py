@@ -10,4 +10,7 @@ def test_coerce_llm_candidates_from_json():
     assert candidate.title == "Introduction"
     assert candidate.page == 1
     assert candidate.level == 1
+    assert candidate.section_id == "1"
     assert candidate.judging.llm_confidence == 0.92
+    # Arbitrary keys from the JSON payload should be preserved for auditing.
+    assert candidate.judging.llm_raw_fields == {}

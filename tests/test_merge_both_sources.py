@@ -60,3 +60,17 @@ def test_merge_candidates_collects_reason_metadata():
     assert "heuristic:numeric_pattern" in final.reasons
     assert "heuristic:bold_text" in final.reasons
     assert "llm:high_confidence" in final.reasons
+
+
+def test_merge_candidates_normalises_titles():
+    heur = _candidate("heuristic", "1 Introduction", "1", 0.6, 1)
+    llm = _candidate("llm", "Introduction", "1", 0.7, 1)
+
+    merged = merge_candidates([llm], [heur])
+    assert len(merged) == 1
+    final = merged[0]
+
+    # Title is de-duplicated to remove the numbering prefix.
+    assert final.title == "Introduction"
+    assert final.section_id == "1"
+    assert final.sources == ["heuristic", "llm"]
