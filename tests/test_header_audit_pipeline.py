@@ -47,3 +47,37 @@ def test_pipeline_writes_audit(tmp_path, monkeypatch):
     final = result["final_headers"]
     assert len(final) == 1
     assert final[0].title.lower().startswith("introduction")
+
+
+def test_pipeline_handles_llm_parse_error(tmp_path, monkeypatch):
+    heuristics = [
+        {
+            "text": "1 Scope",
+            "page": 1,
+            "font_size": 13.5,
+            "is_bold": True,
+            "level": 1,
+            "level_numbering": 1,
+            "level_font": 1,
+        }
+    ]
+
+    monkeypatch.setattr(llm_header_pass, "call_llm", lambda _text: "not json")
+
+    audit_path = tmp_path / "Epf_Co.preprocess.json"
+    result = run_header_pipeline(
+        "1 Scope\nBody text",
+        heuristics,
+        doc_meta={"doc_id": "doc-parse-error"},
+        audit_path=str(audit_path),
+    )
+
+    assert audit_path.exists()
+    data = json.loads(audit_path.read_text(encoding="utf-8"))
+    llm_block = data["header_pass"]["llm"]
+    assert llm_block["raw_response"] == "not json"
+    assert llm_block["parse_error"]
+
+    final_headers = result["final_headers"]
+    assert len(final_headers) == 1
+    assert final_headers[0].sources == ["heuristic"]
