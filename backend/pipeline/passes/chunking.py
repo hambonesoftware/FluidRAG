@@ -20,6 +20,8 @@ from backend.domain import PASS_DOMAIN_LEXICON, PASS_DOMAIN_THRESHOLD
 
 from chunking.efhg import compute_chunk_scores, run_efhg
 
+from ...headers import config as header_cfg
+
 from ..uf_pipeline import prepare_pass_chunk, run_pipeline as run_uf_pipeline
 from .constants import CHUNK_GROUP_TOKEN_LIMIT
 
@@ -302,7 +304,9 @@ def ensure_chunks(session_id: str) -> List[Dict[str, Any]]:
         return []
 
     scores = compute_chunk_scores(chunks)
-    spans = run_efhg(chunks)
+    spans: List[Dict[str, Any]] = []
+    if header_cfg.HEADER_MODE != "preprocess_only":
+        spans = run_efhg(chunks)
 
     span_membership: Dict[int, List[Dict[str, Any]]] = {}
     for span in spans:
