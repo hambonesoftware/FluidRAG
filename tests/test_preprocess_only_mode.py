@@ -40,6 +40,8 @@ class _DocFixture:
             {"page": 7, "line_idx": 4, "text": "A6. Performance"},
             {"page": 7, "line_idx": 5, "text": "A7. Layout"},
             {"page": 7, "line_idx": 6, "text": "A8. Options (pricing separate)"},
+            # Duplicate entry that should be de-duplicated by the finalizer.
+            {"page": 7, "line_idx": 4, "text": "A6. Performance"},
         ]
         self.doc_id = "doc-fixture"
         self.preprocess = SimpleNamespace(headers_by_page=headers)
@@ -78,6 +80,11 @@ def test_appendix_a_from_preprocess_only(doc_loaded_from_fixtures: _DocFixture, 
         (7, "A8. Options (pricing separate)"),
     }
     assert want.issubset(got), f"Missing headers: {want - got}"
+
+    unique_keys = {
+        (header["page"], header.get("line_idx"), header["text"]) for header in headers
+    }
+    assert len(headers) == len(unique_keys), "Duplicate headers should be removed"
 
     final_path = doc_loaded_from_fixtures.artifacts.base_dir / "headers_final.json"
     assert final_path.exists(), "final headers artifact not written"
