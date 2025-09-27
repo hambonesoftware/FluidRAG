@@ -785,21 +785,24 @@ def _run_header_pass(
         "repairs": repairs,
         "prompt_char_length": len(prompt),
     }
-    audit_path = _write_json(sidecar_dir / "uf_pipeline" / "header_audit.json", audit_payload)
+    audit_path: Optional[Path] = None
+    if header_cfg.HEADER_MODE != "preprocess_only":
+        audit_path = _write_json(sidecar_dir / "uf_pipeline" / "header_audit.json", audit_payload)
 
     artifacts = {
         "headers": header_path,
         "headers_by_page": page_path,
         "header_shards": shards_path,
-        "header_audit": audit_path,
     }
+    if audit_path is not None:
+        artifacts["header_audit"] = audit_path
     return HeaderResult(
         headers=merged,
         pages=page_headers,
         repairs=repairs,
         header_shards=shards,
         artifacts=artifacts,
-        audit=audit_payload,
+        audit=audit_payload if audit_path is not None else {},
     )
 
 
@@ -1006,7 +1009,12 @@ def _build_retrieval(
 
     header_doc_path = _write_json(sidecar_dir / "uf_pipeline" / "header_docs.json", header_docs)
     table_doc_path = _write_json(sidecar_dir / "uf_pipeline" / "table_docs.json", table_docs)
-    span_index_path = _write_json(sidecar_dir / "uf_pipeline" / "efhg_span_index.json", span_records)
+    span_index_path: Optional[Path] = None
+    if header_cfg.HEADER_MODE != "preprocess_only" and span_records:
+        span_index_path = _write_json(
+            sidecar_dir / "uf_pipeline" / "efhg_span_index.json",
+            span_records,
+        )
 
     return RetrievalSummary(
         micro_index_size=len(chunks),
@@ -1036,6 +1044,9 @@ def _write_chunk_audit(
     spans: Sequence[Mapping[str, Any]],
 ) -> Dict[str, Path]:
     audit_dir = sidecar_dir / "uf_pipeline"
+    if header_cfg.HEADER_MODE == "preprocess_only":
+        return {}
+
     neighbor_info = compute_fluid_neighbors(chunks)
     chunk_rows = []
     for idx, (chunk, score) in enumerate(zip(chunks, scores)):
