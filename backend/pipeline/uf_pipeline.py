@@ -16,8 +16,6 @@ paths to all generated sidecar files.
 
 from __future__ import annotations
 
-import asyncio
-import inspect
 import json
 import logging
 import os
@@ -151,7 +149,6 @@ class HeaderResult:
     repairs: List[Dict[str, Any]]
     header_shards: List[Dict[str, Any]]
     artifacts: Dict[str, Path]
-    audit: Dict[str, Any]
 
 
 @dataclass
@@ -560,48 +557,6 @@ def _ingest_pdf(
 # ---------------------------------------------------------------------------
 
 
-HEADER_USER_PROMPT = (
-    "List every section and subsection header in the document. Include numbered "
-    "clauses (e.g. `1)`), appendix headers (`A1.` etc.) and any roman numeral "
-    "sections. Return one ```json fenced object with an array named `headers`. "
-    "Each header entry must provide: level (int), label (string), text (string), "
-    "page (1-indexed int), confidence (0-1 float). No additional prose."
-)
-
-
-def _call_llm(llm_client: Any, messages: List[Dict[str, str]], *, temperature: float = 0.0, max_tokens: int = 1024) -> Optional[Any]:
-    if llm_client is None:
-        return None
-    chat = getattr(llm_client, "chat", None)
-    if chat is None:
-        raise TypeError("llm_client must expose a chat(messages, **kwargs) method")
-    result = chat(messages, temperature=temperature, max_tokens=max_tokens)
-    if inspect.isawaitable(result):  # pragma: no cover - exercised in integration
-        return asyncio.run(result)
-    return result
-
-
-def _extract_json_payload(response: Any) -> Optional[Any]:
-    if response is None:
-        return None
-    if isinstance(response, Mapping):
-        for key in ("json", "data", "payload", "text"):
-            if key in response and response[key]:
-                candidate = response[key]
-                if isinstance(candidate, str):
-                    return _extract_json_payload(candidate)
-                return candidate
-        return response
-    if isinstance(response, str):
-        fenced = re.search(r"```json\s*(\{.*?\})\s*```", response, flags=re.DOTALL)
-        text = fenced.group(1) if fenced else response
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-    return None
-
-
 def _fallback_headers(pages: Sequence[PageRecord]) -> List[Dict[str, Any]]:
     """Heuristic header extraction when no LLM client is provided."""
 
@@ -744,29 +699,10 @@ def _run_header_pass(
     llm_client: Any,
     sidecar_dir: Path,
 ) -> HeaderResult:
-    pages_text = []
-    for page in ingest.pages:
-        pages_text.append(f"=== PAGE {page.page_number} ===\n{page.norm_text}")
-    prompt = "\n\n".join(pages_text)
-    messages = [
-        {"role": "system", "content": "You extract structured headers from PDFs."},
-        {"role": "user", "content": HEADER_USER_PROMPT + "\n\n" + prompt},
-    ]
-    response = _call_llm(llm_client, messages, temperature=0.0, max_tokens=1200)
-    payload = _extract_json_payload(response)
-    entries: List[Dict[str, Any]] = []
-    if isinstance(payload, Mapping) and "headers" in payload:
-        headers = payload.get("headers")
-        if isinstance(headers, list):
-            entries = [dict(item) for item in headers if isinstance(item, Mapping)]
-    elif isinstance(payload, list):
-        entries = [dict(item) for item in payload if isinstance(item, Mapping)]
+    LOGGER.debug("[UF pipeline] header LLM call disabled; using fallback heuristics")
+    entries = _fallback_headers(ingest.pages)
 
-    if not entries:
-        LOGGER.debug("[UF pipeline] LLM header pass returned no entries, using fallback heuristics")
-        entries = _fallback_headers(ingest.pages)
-
-    verified, discarded = _verify_headers(entries, ingest.pages)
+    verified, _ = _verify_headers(entries, ingest.pages)
     merged, repairs = aggressive_sequence_repair(
         verified,
         [page.raw_text for page in ingest.pages],
@@ -779,30 +715,17 @@ def _run_header_pass(
     page_path = _write_json(sidecar_dir / "uf_pipeline" / "headers_by_page.json", page_headers)
     shards_path = _write_json(sidecar_dir / "uf_pipeline" / "header_shards.json", shards)
 
-    audit_payload = {
-        "llm_response": payload,
-        "discarded": discarded,
-        "repairs": repairs,
-        "prompt_char_length": len(prompt),
-    }
-    audit_path: Optional[Path] = None
-    if header_cfg.HEADER_MODE != "preprocess_only":
-        audit_path = _write_json(sidecar_dir / "uf_pipeline" / "header_audit.json", audit_payload)
-
     artifacts = {
         "headers": header_path,
         "headers_by_page": page_path,
         "header_shards": shards_path,
     }
-    if audit_path is not None:
-        artifacts["header_audit"] = audit_path
     return HeaderResult(
         headers=merged,
         pages=page_headers,
         repairs=repairs,
         header_shards=shards,
         artifacts=artifacts,
-        audit=audit_payload if audit_path is not None else {},
     )
 
 
@@ -1171,7 +1094,7 @@ def run_pipeline(
     if retrieval_summary.span_index_path:
         artifacts["efhg_span_index"] = retrieval_summary.span_index_path
     audits = {
-        "headers": header_result.audit,
+        "headers": {},
         "tables": table_records,
     }
 
