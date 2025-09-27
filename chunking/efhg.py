@@ -229,6 +229,8 @@ def _graph_penalty(span: Sequence[_ChunkView]) -> Tuple[float, Dict[str, object]
 def compute_fluid_neighbors(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
     """Return adjacency summaries for each chunk using the Fluid capacity metric."""
 
+    _assert_efhg_enabled()
+
     prepared = _prepare_chunks(chunks)
     if not prepared:
         return []
