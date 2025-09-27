@@ -32,6 +32,10 @@ from backend.headers.header_llm import (
     VerifiedHeader,
     VerifiedHeaders,
     aggressive_sequence_repair,
+    build_header_prompt,
+    call_llm as _default_call_llm,
+    parse_fenced_outline,
+    verify_headers,
 )
 from backend.headers.header_scan import (
     STRONG_PATTERNS,
@@ -925,7 +929,17 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     )
 
     llm_error: str | None = None
+    llm_raw_fenced: str = ""
     verified_headers = VerifiedHeaders()
+    if raw_truth_active:
+        try:
+            messages = build_header_prompt(pages_norm)
+            llm_raw_fenced = call_llm(messages)
+            payload = parse_fenced_outline(llm_raw_fenced)
+            verified_headers = verify_headers(payload, pages_norm, pages_raw)
+        except Exception as exc:
+            llm_error = str(exc)
+            verified_headers = VerifiedHeaders()
 
     repaired_headers = aggressive_sequence_repair(verified_headers, pages_norm, tokens_per_page)
     if preprocess_truth_active and preprocess_headers:
@@ -1332,8 +1346,10 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             for chunk in uf_chunks
         ],
         "llm_headers": {
-            "enabled": False,
+            "enabled": bool(getattr(verified_headers, "headers", [])),
+            "raw_fenced_json": llm_raw_fenced,
             "verified": _serialize_verified(verified_headers),
+            "error": llm_error,
         },
         "sequence_repair": repaired_headers.repair_log,
         "efhg_header_spans": spans_audit,
@@ -1421,3 +1437,5 @@ def run_headers_stage(doc: object) -> List[Dict[str, Any]]:
 
 
 __all__ = ["run_headers", "run_headers_stage", "HeaderIndex"]
+call_llm = _default_call_llm
+
