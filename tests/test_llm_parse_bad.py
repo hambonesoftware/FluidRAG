@@ -9,5 +9,6 @@ def test_run_llm_header_pass_invalid_json(monkeypatch):
 
     result = llm_header_pass.run_llm_header_pass("sample text")
     assert result["parse_error"] is not None
+    assert "EXPECTING" in result["parse_error"].upper()
     assert result["candidates"] == []
     assert isinstance(result["raw_response"], str)

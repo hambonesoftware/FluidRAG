@@ -43,10 +43,17 @@ def test_pipeline_writes_audit(tmp_path, monkeypatch):
     assert data["header_pass"]["llm"]["candidates"], "LLM candidates missing"
     assert data["header_pass"]["heuristic"]["candidates"], "heuristic candidates missing"
     assert data["header_pass"]["final"]["headers"], "final headers missing"
+    assert data["doc_meta"]["doc_id"] == "doc-1"
+    assert (
+        data["header_pass"]["llm"]["prompt_used"]
+        == "Please list all header sections of this document and provide the results in a json format"
+    )
+    assert data["header_pass"]["llm"]["parse_error"] is None
 
     final = result["final_headers"]
     assert len(final) == 1
     assert final[0].title.lower().startswith("introduction")
+    assert final[0].sources == ["heuristic", "llm"]
 
 
 def test_pipeline_handles_llm_parse_error(tmp_path, monkeypatch):
@@ -77,6 +84,7 @@ def test_pipeline_handles_llm_parse_error(tmp_path, monkeypatch):
     llm_block = data["header_pass"]["llm"]
     assert llm_block["raw_response"] == "not json"
     assert llm_block["parse_error"]
+    assert llm_block["prompt_used"] == "Please list all header sections of this document and provide the results in a json format"
 
     final_headers = result["final_headers"]
     assert len(final_headers) == 1
