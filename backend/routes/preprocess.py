@@ -254,6 +254,9 @@ def preprocess_route():
             "artifacts": {key: str(path) for key, path in uf_result.artifacts.items()},
             "header_repairs": uf_result.headers.repairs,
         }
+        header_audit = uf_result.audits.get("headers") if isinstance(uf_result.audits, dict) else None
+        if header_audit:
+            uf_debug["header_audit"] = header_audit
         if header_cfg.HEADER_MODE != "preprocess_only":
             uf_debug["efhg_preview"] = uf_result.efhg_spans[:10]
         if preprocess_debug_payload is None:

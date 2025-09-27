@@ -16,6 +16,7 @@ paths to all generated sidecar files.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -33,6 +34,12 @@ from ingest.microchunker import MicroChunk, microchunk_text
 from ..ingest.pdf_extract import extract as pdf_extract
 from ..parse.header_sequence_repair import aggressive_sequence_repair
 from ..headers import config as header_cfg
+from ..headers.header_llm import (
+    VerifiedHeaders,
+    build_header_prompt,
+    parse_fenced_outline,
+    verify_headers,
+)
 from index import BM25Store, EmbeddingStore
 
 LOGGER = logging.getLogger(__name__)
@@ -101,6 +108,24 @@ def _normalise_text(text: str) -> str:
     return _collapse_ws(_normalise_spaces(text or ""))
 
 
+def _json_sanitise(value: Any, *, depth: int = 0) -> Any:
+    """Return ``value`` in a JSON-serialisable form."""
+
+    if depth > 8:
+        return repr(value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_sanitise(val, depth=depth + 1) for key, val in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_sanitise(item, depth=depth + 1) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        return repr(value)
+
+
 def _tokenise_with_offsets(text: str, *, base_offset: int = 0) -> List[Dict[str, Any]]:
     tokens: List[Dict[str, Any]] = []
     for match in _TOKEN_RX.finditer(text or ""):
@@ -149,6 +174,7 @@ class HeaderResult:
     repairs: List[Dict[str, Any]]
     header_shards: List[Dict[str, Any]]
     artifacts: Dict[str, Path]
+    audit: Dict[str, Any]
 
 
 @dataclass
@@ -574,9 +600,132 @@ def _fallback_headers(pages: Sequence[PageRecord]) -> List[Dict[str, Any]]:
                     "page": page.page_number,
                     "confidence": 0.35,
                     "line_idx": line_idx,
+                    "source": "heuristic",
                 }
             )
     return headers
+
+
+def _run_chat_sync(llm_client: Any, messages: Sequence[Mapping[str, Any]], **kwargs: Any) -> Any:
+    """Execute ``llm_client.chat`` in a synchronous context."""
+
+    async def _invoke() -> Any:
+        return await llm_client.chat(messages, **kwargs)
+
+    try:
+        return asyncio.run(_invoke())
+    except RuntimeError as exc:
+        if "asyncio.run() cannot be called" not in str(exc):
+            raise
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(_invoke())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+
+def _extract_llm_payload(response: Any) -> Dict[str, Any]:
+    """Best-effort extraction of a header payload from ``response``."""
+
+    if isinstance(response, Mapping):
+        for key in ("json", "data", "payload", "body", "response", "text"):
+            value = response.get(key)
+            if value is not None:
+                return _extract_llm_payload(value)
+        choices = response.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            message = first.get("message") if isinstance(first, Mapping) else None
+            if isinstance(message, Mapping):
+                return _extract_llm_payload(message.get("content"))
+        return dict(response)
+    if isinstance(response, str):
+        try:
+            return json.loads(response)
+        except json.JSONDecodeError:
+            try:
+                return parse_fenced_outline(response)
+            except ValueError:
+                return {}
+    if isinstance(response, list):
+        return {"headers": response}
+    return {}
+
+
+def _llm_headers(
+    ingest: IngestResult,
+    llm_client: Any,
+) -> tuple[VerifiedHeaders, Optional[str], List[Dict[str, Any]], Dict[str, Any]]:
+    """Invoke the header LLM pass and return verified headers and raw rows."""
+
+    pages_norm = [page.norm_text for page in ingest.pages]
+    pages_raw = [page.raw_text for page in ingest.pages]
+    if not pages_norm:
+        return VerifiedHeaders(), None, []
+
+    messages = build_header_prompt(pages_norm)
+    try:
+        response = _run_chat_sync(
+            llm_client,
+            messages,
+            temperature=0.0,
+            max_tokens=1024,
+        )
+    except Exception as exc:  # pragma: no cover - defensive logging
+        LOGGER.warning("[UF pipeline] header LLM call failed: %s", exc)
+        return VerifiedHeaders(), str(exc), [], {}
+
+    payload = _extract_llm_payload(response)
+    try:
+        verified = verify_headers(payload, pages_norm, pages_raw)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        LOGGER.warning("[UF pipeline] failed to verify LLM headers: %s", exc)
+        return VerifiedHeaders(), str(exc), [], {
+            "payload": _json_sanitise(payload),
+            "raw_response": _json_sanitise(response),
+        }
+
+    rows = [
+        {
+            "label": header.label,
+            "text": header.text,
+            "page": header.page,
+            "span": header.span,
+            "verification": header.verification,
+            "confidence": header.confidence,
+            "source": header.source,
+        }
+        for header in verified.sorted()
+    ]
+    return (
+        verified,
+        None,
+        rows,
+        {
+            "payload": _json_sanitise(payload),
+            "raw_response": _json_sanitise(response),
+        },
+    )
+
+
+def _llm_candidates_from_verified(verified: VerifiedHeaders) -> List[Dict[str, Any]]:
+    """Convert verified LLM headers into candidate entries for verification."""
+
+    candidates: List[Dict[str, Any]] = []
+    for header in verified.sorted():
+        candidates.append(
+            {
+                "level": None,
+                "label": header.label,
+                "text": header.text,
+                "page": header.page,
+                "confidence": header.confidence,
+                "source": header.source,
+            }
+        )
+    return candidates
 
 
 def _split_header_line(line: str) -> Tuple[str, str]:
@@ -590,26 +739,73 @@ def _split_header_line(line: str) -> Tuple[str, str]:
     return stripped, ""
 
 
+def _finalise_header_audit_entry(
+    entry: Dict[str, Any],
+    checks: Mapping[str, bool],
+) -> Dict[str, Any]:
+    score_breakdown = {name: 1.0 if bool(result) else 0.0 for name, result in checks.items()}
+    entry["checks"] = {name: bool(result) for name, result in checks.items()}
+    entry["score_breakdown"] = score_breakdown
+    entry["score_total"] = float(sum(score_breakdown.values()))
+    return entry
+
+
 def _verify_headers(
     candidates: Sequence[Mapping[str, Any]],
     pages: Sequence[PageRecord],
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     verified: List[Dict[str, Any]] = []
     discarded: List[Dict[str, Any]] = []
+    audits: List[Dict[str, Any]] = []
     for candidate in candidates:
+        raw_candidate = dict(candidate)
         try:
             page_num = int(candidate.get("page") or 0)
         except Exception:
             page_num = 0
-        if page_num <= 0 or page_num > len(pages):
-            discarded.append(dict(candidate, reason="invalid_page"))
-            continue
-        page = pages[page_num - 1]
         label = str(candidate.get("label") or "").strip()
         text = str(candidate.get("text") or "").strip()
-        if not label or not text:
-            discarded.append(dict(candidate, reason="missing_fields"))
+        confidence_value_raw = candidate.get("confidence")
+        if confidence_value_raw is None:
+            confidence_float = 1.0
+        else:
+            try:
+                confidence_float = float(confidence_value_raw)
+            except (TypeError, ValueError):  # pragma: no cover - defensive casting
+                confidence_float = 1.0
+        checks = {
+            "page_valid": 1 <= page_num <= len(pages),
+            "label_present": bool(label),
+            "text_present": bool(text),
+            "raw_hit": False,
+            "norm_match": False,
+            "line_match": False,
+        }
+        audit_entry: Dict[str, Any] = {
+            "label": label,
+            "text": text,
+            "page": page_num,
+            "source": candidate.get("source", "heuristic"),
+            "raw_candidate": raw_candidate,
+            "checks": {},
+            "score_breakdown": {},
+            "score_total": 0.0,
+            "result": "discarded",
+            "confidence": confidence_float,
+        }
+        if not checks["page_valid"]:
+            reason = "invalid_page"
+            audit_entry["reason"] = reason
+            discarded.append(dict(candidate, reason=reason))
+            audits.append(_finalise_header_audit_entry(audit_entry, checks))
             continue
+        if not checks["label_present"] or not checks["text_present"]:
+            reason = "missing_fields"
+            audit_entry["reason"] = reason
+            discarded.append(dict(candidate, reason=reason))
+            audits.append(_finalise_header_audit_entry(audit_entry, checks))
+            continue
+        page = pages[page_num - 1]
         search_variants = [f"{label} {text}", f"{label}{text}", f"{label}  {text}"]
         raw_hit: Optional[Tuple[int, int]] = None
         for variant in search_variants:
@@ -617,33 +813,52 @@ def _verify_headers(
             if idx >= 0:
                 raw_hit = (idx, idx + len(variant))
                 break
-        verification = "exact" if raw_hit else "normalized"
-        if raw_hit is None:
-            norm_variant = _normalise_text(f"{label} {text}")
-            if norm_variant not in page.norm_text:
-                discarded.append(dict(candidate, reason="not_found"))
-                continue
+        if raw_hit is not None:
+            checks["raw_hit"] = True
+        norm_variant = _normalise_text(f"{label} {text}")
+        if norm_variant in page.norm_text:
+            checks["norm_match"] = True
+        if not checks["raw_hit"] and not checks["norm_match"]:
+            reason = "not_found"
+            audit_entry["reason"] = reason
+            discarded.append(dict(candidate, reason=reason))
+            audits.append(_finalise_header_audit_entry(audit_entry, checks))
+            continue
         line_idx = None
         for idx, line in enumerate(page.lines):
             normalized_line = _normalise_text(line)
             if normalized_line.startswith(_normalise_text(label)):
                 line_idx = idx
                 break
+        if line_idx is not None:
+            checks["line_match"] = True
         style = page.line_styles[line_idx] if (line_idx is not None and line_idx < len(page.line_styles)) else {}
+        verification = "exact" if raw_hit else "normalized"
         record = {
             "level": candidate.get("level"),
             "label": label,
             "text": text,
             "page": page_num,
-            "confidence": float(candidate.get("confidence", 1.0)),
+            "confidence": confidence_float,
             "span": raw_hit,
             "verification": verification,
             "line_idx": line_idx,
             "style": style,
         }
         verified.append(record)
+        audit_entry.update(
+            {
+                "line_idx": line_idx,
+                "span": raw_hit,
+                "verification": verification,
+                "style": style,
+                "result": "verified",
+                "confidence": confidence_float,
+            }
+        )
+        audits.append(_finalise_header_audit_entry(audit_entry, checks))
     verified.sort(key=lambda item: (int(item.get("page") or 0), item.get("span", (0, 0))[0]))
-    return verified, discarded
+    return verified, discarded, audits
 
 
 def _build_page_headers(headers: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
@@ -699,15 +914,67 @@ def _run_header_pass(
     llm_client: Any,
     sidecar_dir: Path,
 ) -> HeaderResult:
-    LOGGER.debug("[UF pipeline] header LLM call disabled; using fallback heuristics")
-    entries = _fallback_headers(ingest.pages)
+    heuristic_entries = _fallback_headers(ingest.pages)
 
-    verified, _ = _verify_headers(entries, ingest.pages)
+    llm_verified = VerifiedHeaders()
+    llm_rows: List[Dict[str, Any]] = []
+    llm_error: Optional[str] = None
+    llm_payload: Dict[str, Any] = {}
+    if llm_client is not None:
+        LOGGER.debug("[UF pipeline] invoking header LLM pass")
+        llm_verified, llm_error, llm_rows, llm_payload = _llm_headers(ingest, llm_client)
+        if llm_error:
+            LOGGER.warning("[UF pipeline] header LLM error: %s", llm_error)
+    else:
+        LOGGER.debug("[UF pipeline] header LLM client not provided; using heuristics only")
+
+    entries = list(heuristic_entries)
+    meta_lookup: Dict[Tuple[int, str], Dict[str, Any]] = {}
+    for candidate in heuristic_entries:
+        key = (int(candidate.get("page") or 0), str(candidate.get("label") or ""))
+        meta_lookup[key] = {
+            "source": candidate.get("source", "heuristic"),
+            "confidence": candidate.get("confidence"),
+        }
+
+    if llm_verified.headers:
+        entries.extend(_llm_candidates_from_verified(llm_verified))
+        for header in llm_verified.sorted():
+            key = (header.page, header.label)
+            meta_lookup[key] = {
+                "source": header.source or "llm",
+                "confidence": header.confidence,
+                "span": header.span,
+                "verification": header.verification,
+            }
+
+    verified, discarded, verification_audit = _verify_headers(entries, ingest.pages)
+    for record in verified:
+        key = (int(record.get("page") or 0), str(record.get("label") or ""))
+        meta = meta_lookup.get(key)
+        if meta:
+            record["source"] = meta.get("source", record.get("source", "heuristic"))
+            if meta.get("confidence") is not None:
+                record["confidence"] = float(meta["confidence"])
+            span = meta.get("span")
+            if span and (not record.get("span") or record.get("span") == (0, 0)):
+                record["span"] = tuple(span)
+            verification = meta.get("verification")
+            if verification:
+                record["verification"] = verification
+        else:
+            record.setdefault("source", "heuristic")
+
     merged, repairs = aggressive_sequence_repair(
         verified,
         [page.raw_text for page in ingest.pages],
         [page.tokens for page in ingest.pages],
     )
+    for repair in repairs:
+        repair["source"] = "repair"
+    for entry in merged:
+        entry.setdefault("source", "heuristic")
+
     page_headers = _build_page_headers(merged)
     shards = _build_header_shards(merged, chunks)
 
@@ -720,12 +987,29 @@ def _run_header_pass(
         "headers_by_page": page_path,
         "header_shards": shards_path,
     }
+    if llm_rows:
+        llm_path = _write_json(sidecar_dir / "uf_pipeline" / "headers_llm.json", llm_rows)
+        artifacts["headers_llm"] = llm_path
+
+    header_audit = {
+        "heuristic_candidates": _json_sanitise(heuristic_entries),
+        "llm": {
+            "error": llm_error,
+            "rows": _json_sanitise(llm_rows),
+            "payload": llm_payload.get("payload") if llm_payload else None,
+            "raw_response": llm_payload.get("raw_response") if llm_payload else None,
+        },
+        "verification": _json_sanitise(verification_audit),
+        "discarded_candidates": _json_sanitise(discarded),
+    }
+
     return HeaderResult(
         headers=merged,
         pages=page_headers,
         repairs=repairs,
         header_shards=shards,
         artifacts=artifacts,
+        audit=header_audit,
     )
 
 
@@ -1094,7 +1378,7 @@ def run_pipeline(
     if retrieval_summary.span_index_path:
         artifacts["efhg_span_index"] = retrieval_summary.span_index_path
     audits = {
-        "headers": {},
+        "headers": header_result.audit,
         "tables": table_records,
     }
 
