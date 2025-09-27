@@ -92,9 +92,24 @@ def merge_candidates(
         all_scores = [_candidate_score(cand) for cand in group]
         merged_conf = sum(all_scores) / len(all_scores) if all_scores else 0.5
         reasons: List[str] = []
+
+        def add_reason(value: str | None) -> None:
+            if not value:
+                return
+            if value not in reasons:
+                reasons.append(value)
+
+        for source in sources:
+            add_reason(f"source:{source}")
+
+        for cand in group:
+            cand_reasons = getattr(cand.judging, "reasons", None) or []
+            for reason in cand_reasons:
+                add_reason(f"{cand.source}:{reason}")
+
         if len(sources) > 1:
             merged_conf = min(1.0, merged_conf + 0.1)
-            reasons.append("supported_by_both_sources")
+            add_reason("supported_by_both_sources")
 
         finals.append(
             FinalHeader(
