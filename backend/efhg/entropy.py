@@ -3,7 +3,12 @@ from __future__ import annotations
 import math
 from typing import Dict, Iterable, List
 
-from backend.uf_chunker import UFChunk, HEADER_PATTERN
+from backend.headers import config as cfg
+from backend.uf_chunker import HEADER_PATTERN, UFChunk
+
+
+def _assert_efhg_enabled() -> None:
+    assert cfg.HEADER_MODE != "preprocess_only", "EFHG disabled for headers"
 
 DEFAULT_WEIGHTS = {
     "w1": 0.7,
@@ -36,6 +41,8 @@ def _entropy(values: Iterable[float]) -> float:
 
 def compute_entropy_features(uf_chunks: List[UFChunk]) -> None:
     """Annotate chunks with entropy-based features."""
+
+    _assert_efhg_enabled()
 
     for idx, chunk in enumerate(uf_chunks):
         tokens = _tokenize(chunk.text)
@@ -74,6 +81,7 @@ def _no_new_params_ahead(chunk: UFChunk) -> float:
 
 
 def score_starts(uf_chunks: List[UFChunk], weights: Dict[str, float] | None = None) -> Dict[str, float]:
+    _assert_efhg_enabled()
     weights = weights or DEFAULT_WEIGHTS
     scores: Dict[str, float] = {}
     for chunk in uf_chunks:
@@ -90,6 +98,7 @@ def score_starts(uf_chunks: List[UFChunk], weights: Dict[str, float] | None = No
 
 
 def score_stops(uf_chunks: List[UFChunk], weights: Dict[str, float] | None = None) -> Dict[str, float]:
+    _assert_efhg_enabled()
     weights = weights or DEFAULT_WEIGHTS
     scores: Dict[str, float] = {}
     for chunk in uf_chunks:
@@ -106,6 +115,7 @@ def score_stops(uf_chunks: List[UFChunk], weights: Dict[str, float] | None = Non
 
 
 def select_quantile_ids(scores: Dict[str, float], quantile: float) -> List[str]:
+    _assert_efhg_enabled()
     if not scores:
         return []
     values = sorted(scores.values())
