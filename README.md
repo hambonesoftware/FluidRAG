@@ -70,8 +70,8 @@ Artifacts are written under `fluidrag/data/artifacts/` and include chunk JSONL f
    Choose an LLM provider (OpenRouter cloud or a local llama.cpp endpoint) and select a model. Upload `.pdf`, `.docx`, or `.txt` files; the backend stores them in a session-specific temp directory. Use the **Test LLM** button to verify connectivity with the provider using the legacy concatenated role/message prompt format.
 2. **Preprocess (standard chunking)**  
    Split the document into overlapping ~4k-token coarse chunks while persisting per-page strings for subsequent stages.
-3. **Determine headers**  
-   Run hybrid heading detection (regex + LLM confirmation) in ≤120k-token batches to produce section/subsection spans. The API returns an outline preview and full LLM debug logs for DevTools inspection.
+3. **Determine headers**
+   Run heuristic-only heading detection (regex + scoring) to promote the top-ranked candidates per page without invoking an LLM adjudication step. The API returns an outline preview together with heuristic debug stats for DevTools inspection.
 4. **Fluid → HEP refinement**  
    Refine the section chunks toward ~1–2k tokens with Fluid and attach entropy/cluster metadata via HEP to inform downstream weighting.
 5. **Async passes & merge**
