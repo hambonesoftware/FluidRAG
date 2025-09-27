@@ -90,3 +90,13 @@ def test_run_pipeline_builds_chunks_and_headers(tmp_path):
     ], "UF chunk ordering should be deterministic"
     assert repeat.summary() == summary, "Pipeline summaries should remain stable across runs"
 
+    header_audit = result.audits.get("headers")
+    assert header_audit, "Header audit payload should be populated"
+    assert header_audit.get("heuristic_candidates"), "Heuristic candidates should be recorded"
+    assert header_audit.get("llm", {}).get("payload"), "LLM payload should include raw response data"
+    verification_rows = header_audit.get("verification") or []
+    verified_rows = [row for row in verification_rows if row.get("result") == "verified"]
+    assert verified_rows, "Verification audit should include verified rows"
+    for row in verified_rows:
+        assert "score_breakdown" in row and "score_total" in row, "Verified rows must include scoring details"
+
