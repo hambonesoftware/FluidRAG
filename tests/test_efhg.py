@@ -3,6 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from backend.headers import config as header_cfg
 from chunking.efhg import compute_chunk_scores, run_efhg
 
 
@@ -38,7 +39,12 @@ def test_run_efhg_returns_scored_spans():
         _chunk("Sensors must report diagnostics every 10 s."),
         _chunk("Narrative paragraph without obligations.", modal=False),
     ]
-    spans = run_efhg(chunks)
+    original_mode = header_cfg.HEADER_MODE
+    header_cfg.HEADER_MODE = "legacy"
+    try:
+        spans = run_efhg(chunks)
+    finally:
+        header_cfg.HEADER_MODE = original_mode
     assert spans, "EFHG should return at least one span"
     top = spans[0]
     assert top["score"] >= top["H"]

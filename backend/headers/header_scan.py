@@ -120,6 +120,10 @@ def _passes_prefilter(
     chunk_meta: Mapping[str, object] | None,
 ) -> tuple[bool, List[str]]:
     reasons: List[str] = []
+
+    if cfg.HEADER_MODE == "preprocess_only":
+        return True, reasons
+
     blank_lines = int(evidence.get("virtual_blank_lines_before") or 0)
     if not blank_lines and chunk_meta:
         try:

@@ -19,6 +19,7 @@ from ..pipeline import preprocess as pp
 from ..pipeline.uf_pipeline import prepare_pass_chunk, run_pipeline as run_uf_pipeline
 from ..persistence import get_preprocess_cache, save_preprocess_cache
 from ..state import get_state
+from ..headers import config as header_cfg
 
 
 log = logging.getLogger("FluidRAG.api.preprocess")
@@ -251,9 +252,10 @@ def preprocess_route():
         uf_debug = {
             "summary": uf_summary,
             "artifacts": {key: str(path) for key, path in uf_result.artifacts.items()},
-            "efhg_preview": uf_result.efhg_spans[:10],
             "header_repairs": uf_result.headers.repairs,
         }
+        if header_cfg.HEADER_MODE != "preprocess_only":
+            uf_debug["efhg_preview"] = uf_result.efhg_spans[:10]
         if preprocess_debug_payload is None:
             preprocess_debug_payload = {"uf_pipeline": uf_debug}
         else:

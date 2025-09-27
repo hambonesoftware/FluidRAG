@@ -14,6 +14,14 @@ import math
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Tuple
 
+from backend.headers import config as cfg
+
+
+def _assert_efhg_enabled() -> None:
+    """Ensure EFHG helpers are not invoked while disabled."""
+
+    assert cfg.HEADER_MODE != "preprocess_only", "EFHG disabled for headers"
+
 
 @dataclass
 class _ChunkView:
@@ -255,6 +263,8 @@ def compute_fluid_neighbors(chunks: Sequence[Mapping[str, object]]) -> List[Dict
 
 def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
     """Compute EFHG spans for the provided UF chunks."""
+
+    _assert_efhg_enabled()
 
     prepared = _prepare_chunks(chunks)
     if not prepared:

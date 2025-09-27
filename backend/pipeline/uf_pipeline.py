@@ -34,6 +34,7 @@ from ingest.microchunker import MicroChunk, microchunk_text
 
 from ..ingest.pdf_extract import extract as pdf_extract
 from ..parse.header_sequence_repair import aggressive_sequence_repair
+from ..headers import config as header_cfg
 from index import BM25Store, EmbeddingStore
 
 LOGGER = logging.getLogger(__name__)
@@ -1131,7 +1132,9 @@ def run_pipeline(
         chunk.setdefault("doc_id", doc_id)
 
     chunk_scores = compute_chunk_scores(chunks)
-    spans = run_efhg(chunks)
+    spans: List[Dict[str, Any]] = []
+    if header_cfg.HEADER_MODE != "preprocess_only":
+        spans = run_efhg(chunks)
     header_result = _run_header_pass(ingest, chunks, llm_client=llm_client, sidecar_dir=target_dir)
     table_records = _link_tables_to_chunks(ingest.tables, chunks)
     tables_path = _write_json(target_dir / "uf_pipeline" / "tables.json", table_records)
