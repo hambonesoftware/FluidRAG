@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Callable, Dict, Iterable, List, Optional
 
+from backend.headers import config as cfg
 from backend.headers.pipeline import HeaderIndex, run_headers
 
 
@@ -36,8 +37,20 @@ def run_header_pipeline(
     }
     decomp = {"pages": [page], "output_dir": tmp_path}
 
+    original_mode = cfg.HEADER_MODE
+    legacy_profile_supported = hasattr(cfg, "HEADER_LEGACY_PROFILE")
+    original_profile = getattr(cfg, "HEADER_LEGACY_PROFILE", None)
+    cfg.HEADER_MODE = "legacy"
+    if legacy_profile_supported:
+        cfg.HEADER_LEGACY_PROFILE = "raw_truth"
+
     if call_llm is None:
-        return run_headers(doc_id, decomp)
+        try:
+            return run_headers(doc_id, decomp)
+        finally:
+            cfg.HEADER_MODE = original_mode
+            if legacy_profile_supported:
+                cfg.HEADER_LEGACY_PROFILE = original_profile
 
     from backend.headers import pipeline as pipeline_module
 
@@ -47,6 +60,9 @@ def run_header_pipeline(
         return run_headers(doc_id, decomp)
     finally:
         pipeline_module.call_llm = original_call  # type: ignore[assignment]
+        cfg.HEADER_MODE = original_mode
+        if legacy_profile_supported:
+            cfg.HEADER_LEGACY_PROFILE = original_profile
 
 
 __all__ = ["run_header_pipeline"]
