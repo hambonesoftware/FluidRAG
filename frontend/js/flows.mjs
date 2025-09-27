@@ -202,7 +202,7 @@ export async function onUpload() {
       } else {
         const headerStatus = el("headersStatus");
         if (headerStatus)
-          setStatus(headerStatus, "Headers cached — select provider/model to load.", "success");
+          setStatus(headerStatus, "Headers cached — rerun heuristics to refresh.", "success");
       }
     }
 
@@ -377,17 +377,7 @@ export async function onHeaders(options = {}) {
     alert("Run preprocess before header detection.");
     return;
   }
-  updateModel();
-  if (!state.provider) {
-    alert("Select an LLM provider first.");
-    return;
-  }
-  if (!state.model) {
-    alert("Select a model first.");
-    return;
-  }
   const forceRefresh = Boolean(options?.forceRefresh);
-  const providerName = providerLabel();
   const end = openGroup("[Flow] Header detection", false);
   try {
     console.log("State before header detection", { ...state });
@@ -403,19 +393,18 @@ export async function onHeaders(options = {}) {
 
     const statusNode = el("headersStatus");
     if (statusNode) {
-      const actionLabel = forceRefresh ? "Re-contacting" : "Contacting";
-      setStatus(statusNode, `${actionLabel} ${providerName}…`);
+      const actionLabel = forceRefresh ? "Re-running" : "Running";
+      setStatus(statusNode, `${actionLabel} heuristic header detection…`);
     }
 
     withGroup("[Flow] Header detection → Request payload", () => {
-      console.log({ session_id: state.sessionId, model: state.model, provider: state.provider, force_refresh: forceRefresh || undefined });
+      console.log({ session_id: state.sessionId, force_refresh: forceRefresh || undefined });
     }, true);
-    log(forceRefresh ? `Header detection rerun via ${providerName}` : `Header detection start via ${providerName}`);
-    const res = await determineHeaders(state.sessionId, state.model, state.provider, { forceRefresh });
+    log(forceRefresh ? "Header detection rerun via heuristics" : "Header detection start via heuristics");
+    const res = await determineHeaders(state.sessionId, { forceRefresh });
     withGroup(`[Flow] Header detection → Raw response (${res.httpStatus ?? "?"})`, () => {
       console.log(res);
     }, true);
-    dumpLLMDebug(res.llm_debug);
     if (!res.ok) {
       let msg = res.error || "Header detection failed";
       if (res.needs_api_key) msg += ` — ${providerAuthHint()}`;

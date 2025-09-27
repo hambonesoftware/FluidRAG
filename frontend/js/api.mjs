@@ -92,8 +92,8 @@ export async function preprocessDocument(sessionId, model, provider, options={})
   });
 }
 
-export async function determineHeaders(sessionId, model, provider, options={}){
-  const payload = {session_id:sessionId, model, provider};
+export async function determineHeaders(sessionId, options={}){
+  const payload = {session_id:sessionId};
   if(options && options.forceRefresh){
     payload.force_refresh = true;
   }
