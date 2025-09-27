@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Dict
 
-from backend.uf_chunker import UFChunk
+from backend.headers import config as cfg
 from backend.efhg.fluid import Span
+from backend.uf_chunker import UFChunk
 
 DEFAULT_PARAMS = {
     "a": 1.0,
@@ -20,6 +21,7 @@ def _span_has_feature(span: Span, chunks: Dict[str, UFChunk], predicate) -> bool
 
 
 def score_span_hep(span: Span, chunks: Dict[str, UFChunk], params: Dict[str, float] | None = None) -> Dict[str, object]:
+    assert cfg.HEADER_MODE != "preprocess_only", "EFHG disabled for headers"
     params = params or DEFAULT_PARAMS
     modal = _span_has_feature(span, chunks, lambda c: c.lex.get("has_modal"))
     constraints = _span_has_feature(span, chunks, lambda c: bool(c.lex.get("numbers")) and bool(c.lex.get("units")))

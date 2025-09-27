@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
+from backend.headers import config as cfg
 from backend.efhg.fluid import Span, span_from_chunk_ids
 from backend.uf_chunker import HEADER_PATTERN, UFChunk
 
@@ -22,6 +23,10 @@ class GraphContext:
     references: List[Dict[str, object]]
     tables: List[Dict[str, object]]
     domain: str | None = None
+
+
+def _assert_efhg_enabled() -> None:
+    assert cfg.HEADER_MODE != "preprocess_only", "EFHG disabled for headers"
 
 
 def _dominant_header(span: Span, chunks: Dict[str, UFChunk], headers: Sequence[Dict[str, object]]) -> Tuple[str | None, float]:
@@ -53,6 +58,7 @@ def _collect_domain_hints(span: Span, chunks: Dict[str, UFChunk]) -> List[str]:
 
 
 def score_graph(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk], params: Dict[str, float] | None = None) -> Tuple[float, Dict[str, float]]:
+    _assert_efhg_enabled()
     params = params or DEFAULT_PARAMS
     penalties = {
         "header_mismatch": 0.0,
@@ -87,6 +93,7 @@ def score_graph(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk]
 
 
 def snap_and_trim(span: Span, header_ctx: GraphContext, chunks: Dict[str, UFChunk]) -> Span:
+    _assert_efhg_enabled()
     dominant_label, _ = _dominant_header(span, chunks, header_ctx.headers)
     chunk_ids = list(span.chunk_ids)
     if dominant_label:

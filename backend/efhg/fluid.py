@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Mapping, Sequence, Tuple
 
+from backend.headers import config as cfg
 from backend.rag.embeddings import cosine
 from backend.uf_chunker import UFChunk
 
@@ -24,6 +25,10 @@ class Span:
     page: int
     span: Tuple[int, int]
     flow_total: float
+
+
+def _assert_efhg_enabled() -> None:
+    assert cfg.HEADER_MODE != "preprocess_only", "EFHG disabled for headers"
 
 
 def _style_similarity(a: UFChunk, b: UFChunk) -> float:
@@ -58,6 +63,7 @@ def _header_consistency(a: UFChunk, b: UFChunk) -> float:
 
 
 def build_edges(uf_chunks: List[UFChunk], params: Dict[str, float] | None = None) -> Dict[Tuple[str, str], float]:
+    _assert_efhg_enabled()
     params = params or DEFAULT_PARAMS
     edges: Dict[Tuple[str, str], float] = {}
     for i, left in enumerate(uf_chunks[:-1]):
@@ -86,6 +92,7 @@ def _span_text(chunk_lookup: Mapping[str, UFChunk], chunk_ids: Sequence[str]) ->
 
 
 def span_from_chunk_ids(chunk_lookup: Mapping[str, UFChunk], chunk_ids: Sequence[str]) -> Span:
+    _assert_efhg_enabled()
     text, span, page = _span_text(chunk_lookup, chunk_ids)
     return Span(chunk_ids=list(chunk_ids), text=text, page=page, span=span, flow_total=0.0)
 
@@ -97,6 +104,7 @@ def grow_span_from_seed(
     stop_scores: Dict[str, float],
     params: Dict[str, float] | None = None,
 ) -> Span:
+    _assert_efhg_enabled()
     params = params or DEFAULT_PARAMS
     chunk_lookup = {chunk.id: chunk for chunk in uf_chunks}
     ordered_ids = [chunk.id for chunk in uf_chunks]
