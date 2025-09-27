@@ -280,8 +280,14 @@ def promote_candidates(
         else:
             if gate == "score_gate":
                 candidate.promoted = candidate.total > 0.0
+                if candidate.promoted and not candidate.promotion_reason:
+                    candidate.promotion_reason = "score_gate"
             else:
-                candidate.promoted = False
+                candidate.promoted = True
+                if not candidate.promotion_reason:
+                    candidate.promotion_reason = "gate_bypass"
+            if candidate.promoted:
+                promoted.append(candidate)
     return promoted
 
 
