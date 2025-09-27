@@ -21,7 +21,6 @@ from ..parse.header_page_mode import (
     build_adjudication_prompt,
     dump_appendix_audit,
     select_candidates,
-    write_header_candidate_audit,
     write_header_debug_manifest,
     write_page_debug,
 )
@@ -491,13 +490,8 @@ def determine_headers():
                     results,
                     llm_selections=page_llm_selections,
                 )
-
-            write_header_candidate_audit(
-                doc_tag,
-                page_debug_snapshots,
-                results,
-                debug=getattr(session_state, "debug", None),
-            )
+            # Candidate audit payloads are emitted by the EFHG pipeline; the
+            # header-only route stops after writing optional debug manifests.
 
             response_payload = {
                 "ok": True,
