@@ -407,7 +407,6 @@ export async function onHeaders(options = {}) {
     }, true);
     if (!res.ok) {
       let msg = res.error || "Header detection failed";
-      if (res.needs_api_key) msg += ` — ${providerAuthHint()}`;
       if (res.httpStatus) msg += ` (HTTP ${res.httpStatus})`;
 
       if (statusNode) setStatus(statusNode, msg, "warn");
