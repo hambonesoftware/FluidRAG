@@ -266,6 +266,9 @@ def compute_fluid_neighbors(chunks: Sequence[Mapping[str, object]]) -> List[Dict
 def run_efhg(chunks: Sequence[Mapping[str, object]]) -> List[Dict[str, object]]:
     """Compute EFHG spans for the provided UF chunks."""
 
+    if cfg.HEADER_MODE == "preprocess_only":
+        return []
+
     _assert_efhg_enabled()
 
     prepared = _prepare_chunks(chunks)
