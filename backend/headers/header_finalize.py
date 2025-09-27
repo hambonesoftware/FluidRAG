@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Mapping
 
 
 def _iter_header_dicts(payload: object) -> Iterable[Mapping[str, object]]:
@@ -29,23 +29,40 @@ def _iter_header_dicts(payload: object) -> Iterable[Mapping[str, object]]:
                 yield item
 
 
-def _normalize_headers(doc: object) -> list[dict[str, object]]:
+def _extract_preprocess_payload(doc: object) -> object:
+    """Return the raw preprocess headers payload from ``doc``."""
+
     preprocess = getattr(doc, "preprocess", None)
-    headers_payload = None
     if preprocess is not None:
-        headers_payload = getattr(preprocess, "headers_by_page", None)
-        if headers_payload is None:
-            headers_payload = getattr(preprocess, "headers", None)
-    if headers_payload is None and isinstance(doc, Mapping):
-        preprocess = doc.get("preprocess") if isinstance(doc, Mapping) else None
+        for attr in ("headers_by_page", "headers"):
+            payload = getattr(preprocess, attr, None)
+            if payload:
+                return payload
+
+    for attr in ("decomp", "payload", "data"):
+        candidate = getattr(doc, attr, None)
+        if isinstance(candidate, Mapping):
+            payload = _extract_preprocess_payload(candidate)
+            if payload:
+                return payload
+
+    if isinstance(doc, Mapping):
+        preprocess = doc.get("preprocess")
         if isinstance(preprocess, Mapping):
-            headers_payload = (
-                preprocess.get("headers_by_page")
-                or preprocess.get("headers")
-                or preprocess.get("pages")
-            )
-    if headers_payload is None:
-        headers_payload = []
+            for key in ("headers_by_page", "headers", "pages"):
+                payload = preprocess.get(key)
+                if payload:
+                    return payload
+        for key in ("preprocess_headers", "headers", "headers_by_page", "header_pages"):
+            payload = doc.get(key)
+            if payload:
+                return payload
+
+    return []
+
+
+def _normalize_headers(doc: object) -> list[dict[str, object]]:
+    headers_payload: Any = _extract_preprocess_payload(doc)
 
     normalized: list[dict[str, object]] = []
     for entry in _iter_header_dicts(headers_payload):
