@@ -8,6 +8,9 @@ import re
 from statistics import median
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from backend.audit.preprocess_writer import candidate_to_dict, final_to_dict
+from backend.headers.preprocess_pipeline import run_header_pipeline
+
 from flask import Blueprint, jsonify, request
 
 try:
@@ -216,20 +219,59 @@ def extract_headers(pdf_bytes: bytes) -> Dict[str, Any]:
         headers, size_median, font_rank = _filter_headers(pages)
         toc = _get_toc(doc)
 
+    page_texts: List[str] = []
+    for page_lines in pages:
+        page_segments = [str(span.get("text") or "").strip() for span in page_lines if span.get("text")]
+        page_texts.append("\n".join(segment for segment in page_segments if segment))
+
+    normalized_text = "\n\n".join(segment for segment in page_texts if segment)
+    audit_path = os.path.abspath("Epf_Co.preprocess.json")
+    doc_meta = {
+        "page_count": len(pages),
+        "median_font_size": size_median,
+        "font_rank": font_rank,
+    }
+    pipeline_result = run_header_pipeline(
+        normalized_text,
+        headers,
+        doc_meta=doc_meta,
+        audit_path=audit_path,
+    )
+    final_headers = pipeline_result["final_headers"]
+    heuristic_candidates = pipeline_result["heuristic_candidates"]
+    llm_result = pipeline_result["llm_result"]
+
+    final_payload = [final_to_dict(header) for header in final_headers]
+    heuristic_payload = [candidate_to_dict(candidate) for candidate in heuristic_candidates]
+    llm_candidates_payload = [candidate_to_dict(candidate) for candidate in llm_result.get("candidates", [])]
+
     font_rank_list = [{"size": size, "rank": rank} for size, rank in sorted(font_rank.items(), key=lambda item: item[1])]
+
+    llm_parse_error = llm_result.get("parse_error")
+    notes = {
+        "extraction": "PyMuPDF heuristics merged with LLM header pass.",
+        "thresholds": {
+            "size_median": size_median,
+            "font_ranks": font_rank_list,
+        },
+        "audit_file": audit_path,
+        "llm": {
+            "parse_error": llm_parse_error,
+            "candidate_count": len(llm_candidates_payload),
+        },
+    }
+    if llm_parse_error:
+        notes["llm"]["raw_response_preview"] = (llm_result.get("raw_response") or "")[:200]
 
     return {
         "ok": True,
-        "count": len(headers),
-        "headers": headers,
+        "count": len(final_headers),
+        "headers": final_payload,
+        "heuristic_headers": headers,
+        "heuristic_candidates": heuristic_payload,
+        "llm_candidates": llm_candidates_payload,
         "toc": toc,
-        "notes": {
-            "extraction": "PyMuPDF deterministic (no LLM).",
-            "thresholds": {
-                "size_median": size_median,
-                "font_ranks": font_rank_list,
-            },
-        },
+        "notes": notes,
     }
 
 
