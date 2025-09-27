@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Mapping, Sequence
 import logging
 import re
 
-from backend.headers.config import HEADER_GATE_MODE
+from backend.headers import config as cfg
 from backend.uf_chunker import HEADER_PATTERN, UFChunk
 
 # Strong patterns that should always auto-promote regardless of EFHG scores.
@@ -259,7 +259,14 @@ def promote_candidates(
 ) -> List[HeaderCandidate]:
     """Apply promotion rules to header candidates."""
 
-    gate = gate_mode or HEADER_GATE_MODE
+    if cfg.HEADER_MODE == "preprocess_only":
+        # In preprocess-only mode we bypass post-processing entirely and the
+        # preprocess headers are considered authoritative. Downstream callers
+        # should not rely on EFHG scores or promotion flags, so we simply return
+        # the sequence as-is.
+        return list(candidates)
+
+    gate = gate_mode or cfg.HEADER_GATE_MODE
     promoted: List[HeaderCandidate] = []
     for candidate in candidates:
         if candidate.pattern in STRONG_PATTERNS:

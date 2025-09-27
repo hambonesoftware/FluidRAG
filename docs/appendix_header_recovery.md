@@ -6,6 +6,17 @@ segmentation or typography is unreliable. Each technique maps to an existing
 stage in the FluidRAG pipeline so you can bolt it onto the current flow without
 a wholesale rewrite.
 
+## Preprocess-only header mode
+
+The header subsystem now exposes a `HEADER_MODE` flag in
+`backend.headers.config`. When set to `"preprocess_only"`, the pipeline
+trusts the preprocess payload as the single source of truth: the
+`run_headers_stage` wrapper returns the normalized preprocess headers and the
+canonical artifact persists as `headers_final.json`. Downstream components must
+consume that artifact (or the returned list) directly—no EFHG candidate audits,
+scores, or suppression heuristics run in this mode—ensuring appendix headers
+like A5/A6 remain intact.
+
 ## Pre-ingest (make the text exist the way you need)
 
 1. **Redundant line segmentation ensemble (vote & merge).**
