@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Optional
 
 
 def _iter_header_dicts(payload: object) -> Iterable[Mapping[str, object]]:
@@ -61,6 +61,17 @@ def _extract_preprocess_payload(doc: object) -> object:
     return []
 
 
+def _to_int(value: object) -> Optional[int]:
+    """Return ``value`` coerced to ``int`` when possible."""
+
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):  # pragma: no cover - defensive guard
+        return None
+
+
 def _normalize_headers(doc: object) -> list[dict[str, object]]:
     headers_payload: Any = _extract_preprocess_payload(doc)
 
@@ -74,10 +85,11 @@ def _normalize_headers(doc: object) -> list[dict[str, object]]:
         text = str(entry.get("text") or entry.get("name") or "").strip()
         if not text:
             continue
+        line_idx = _to_int(entry.get("line_idx"))
         normalized.append(
             {
                 "page": page_num,
-                "line_idx": entry.get("line_idx"),
+                "line_idx": line_idx,
                 "text": text,
                 "bold": entry.get("bold"),
                 "font_pt": entry.get("font_pt"),
@@ -103,7 +115,7 @@ def finalize_headers_preprocess_only(doc: object) -> list[dict[str, object]]:
     final: list[dict[str, object]] = []
     for header in raw_entries:
         page = header.get("page")
-        line_idx = header.get("line_idx")
+        line_idx = _to_int(header.get("line_idx"))
         text = str(header.get("text", "")).strip()
         key = (int(page), line_idx, text)
         if key in seen:
