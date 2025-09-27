@@ -44,15 +44,14 @@ def run_header_pipeline(
     if legacy_profile_supported:
         cfg.HEADER_LEGACY_PROFILE = "raw_truth"
 
-    if call_llm is None:
+    from backend.headers import pipeline as pipeline_module
+    if call_llm is None or not hasattr(pipeline_module, "call_llm"):
         try:
             return run_headers(doc_id, decomp)
         finally:
             cfg.HEADER_MODE = original_mode
             if legacy_profile_supported:
                 cfg.HEADER_LEGACY_PROFILE = original_profile
-
-    from backend.headers import pipeline as pipeline_module
 
     original_call = pipeline_module.call_llm
     pipeline_module.call_llm = call_llm  # type: ignore[assignment]

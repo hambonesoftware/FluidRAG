@@ -14,7 +14,7 @@ HEADER_LEGACY_PROFILE = "preprocess_truth"
 
 # EFHG gate mode controls whether scoring is allowed to block promotions
 # when the pipeline relies on score-based gating.
-# "bypass" => strong patterns auto-promote, scores only inform logging.
+# "bypass" => promote all candidates without EFHG score gating.
 # "score_gate" => legacy behaviour where EFHG scores gate weaker patterns.
 HEADER_GATE_MODE = "bypass"
 

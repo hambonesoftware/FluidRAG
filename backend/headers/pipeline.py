@@ -32,10 +32,6 @@ from backend.headers.header_llm import (
     VerifiedHeader,
     VerifiedHeaders,
     aggressive_sequence_repair,
-    build_header_prompt,
-    call_llm,
-    parse_fenced_outline,
-    verify_headers,
 )
 from backend.headers.header_scan import (
     STRONG_PATTERNS,
@@ -881,17 +877,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         candidates,
     )
 
-    messages = build_header_prompt(pages_norm)
-    llm_raw = ""
-    verified_headers: VerifiedHeaders
     llm_error: str | None = None
-    try:
-        llm_raw = call_llm(messages)
-        parsed = parse_fenced_outline(llm_raw)
-        verified_headers = verify_headers(parsed, pages_norm, pages_raw)
-    except Exception as exc:  # pylint: disable=broad-except
-        llm_error = str(exc)
-        verified_headers = VerifiedHeaders()
+    verified_headers = VerifiedHeaders()
 
     repaired_headers = aggressive_sequence_repair(verified_headers, pages_norm, tokens_per_page)
     if preprocess_truth_active and preprocess_headers:
@@ -1290,9 +1277,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
             for chunk in uf_chunks
         ],
         "llm_headers": {
-            "raw_fenced_json": llm_raw,
+            "enabled": False,
             "verified": _serialize_verified(verified_headers),
-            "error": llm_error,
         },
         "sequence_repair": repaired_headers.repair_log,
         "efhg_header_spans": spans_audit,
