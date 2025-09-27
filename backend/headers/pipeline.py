@@ -48,6 +48,16 @@ from backend.uf_chunker import HEADER_PATTERN, UFChunk, uf_chunk
 
 @dataclass
 class HeaderIndex:
+    """Materialized header payload for downstream consumers.
+
+    In ``HEADER_MODE == "preprocess_only"`` callers must treat the
+    preprocess payload (returned directly from
+    :func:`finalize_headers_preprocess_only`) as the canonical list of final
+    headers. No EFHG metadata or audit records are produced in that mode and
+    ``headers_final.json`` is the artifact of record. The ``truth`` field is
+    retained for legacy compatibility when the EFHG pipeline runs.
+    """
+
     doc_id: str
     headers: List[Dict[str, Any]]
     uf_chunks: List[UFChunk]
@@ -1347,7 +1357,14 @@ def _decomp_from_doc(doc: object) -> Mapping[str, Any]:
 
 
 def run_headers_stage(doc: object) -> List[Dict[str, Any]]:
-    """Return the finalized headers list for ``doc`` based on configuration."""
+    """Return the finalized headers list for ``doc`` based on configuration.
+
+    When ``HEADER_MODE`` is ``"preprocess_only"`` this is a thin wrapper that
+    exposes the preprocess headers as the definitive, ordered header list. In
+    that configuration callers should read ``headers_final.json`` (or reuse the
+    returned in-memory list) rather than attempting to inspect EFHG audit data,
+    which is not produced.
+    """
 
     if cfg.HEADER_MODE == "preprocess_only":
         return finalize_headers_preprocess_only(doc)

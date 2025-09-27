@@ -5,7 +5,7 @@ from __future__ import annotations
 # Overall header mode determines the promotion strategy.
 # "preprocess_only" => trust preprocess headers as the final list with zero post-processing.
 # "legacy" => fall back to the historical EFHG pipeline (see ``HEADER_LEGACY_PROFILE``).
-HEADER_MODE = "preprocess_only"
+HEADER_MODE = "preprocess_only"  # options: "preprocess_only", "legacy"
 
 # When running the legacy pipeline additional strategy hints are required.
 # "preprocess_truth" => promote preprocess headers directly (with optional stitching).

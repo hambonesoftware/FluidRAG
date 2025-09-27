@@ -71,7 +71,14 @@ def _normalize_headers(doc: object) -> list[dict[str, object]]:
 
 
 def finalize_headers_preprocess_only(doc: object) -> list[dict[str, object]]:
-    """Use preprocess headers as the single source of truth for final headers."""
+    """Use preprocess headers as the single source of truth for final headers.
+
+    The resulting list is considered canonical when ``HEADER_MODE`` is set to
+    ``"preprocess_only"``. Downstream systems should consume either the
+    returned list or the persisted ``headers_final.json`` artifact and must not
+    expect EFHG scoring, audits, or suppression heuristics to have been
+    applied.
+    """
 
     raw_entries = _normalize_headers(doc)
 
