@@ -105,6 +105,52 @@ class _DocProxy(SimpleNamespace):
         )
 
 
+def _sentinel(stage: str, cands: Iterable[Any] | None) -> Iterable[Any] | None:
+    """Emit a quick stage summary showing whether an A5 header is still present."""
+
+    if cands is None:
+        items: List[Any] = []
+    elif isinstance(cands, list):
+        items = cands
+    else:
+        try:
+            items = list(cands)
+        except TypeError:
+            items = []
+
+    def _values(obj: Any) -> List[str]:
+        tokens: List[str] = []
+        if isinstance(obj, MappingABC):
+            for key in ("text", "label", "section_id"):
+                value = obj.get(key)
+                if value:
+                    tokens.append(str(value))
+        for attr in ("text", "label", "section_id"):
+            value = getattr(obj, attr, None)
+            if value:
+                tokens.append(str(value))
+        span = getattr(obj, "span", None)
+        if span:
+            if isinstance(span, MappingABC):
+                value = span.get("text")
+                if value:
+                    tokens.append(str(value))
+            else:
+                value = getattr(span, "text", None)
+                if value:
+                    tokens.append(str(value))
+        return tokens
+
+    has_a5 = False
+    for item in items:
+        values = _values(item)
+        if any("A5." in token for token in values) or any(token == "A5" for token in values):
+            has_a5 = True
+            break
+    print(f"[SENTINEL] {stage}: total={len(items)}  A5_present={has_a5}")
+    return cands
+
+
 @dataclass
 class PreprocessHeader:
     """Normalized representation of a preprocess header entry."""
@@ -861,6 +907,7 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     preprocess_headers = _load_preprocess_headers(decomp) if preprocess_truth_active else []
     preprocess_matches: Dict[int, Dict[str, Any]] = {}
     candidates = scan_candidates(uf_chunks)
+    _sentinel("candidate_generation", candidates)
     compute_entropy_features(uf_chunks)
     start_scores = score_starts(uf_chunks)
     stop_scores = score_stops(uf_chunks)
@@ -885,17 +932,20 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         preprocess_verified = _verified_from_preprocess(preprocess_headers, pages_norm, pages_raw)
         if preprocess_verified.headers:
             repaired_headers = preprocess_verified
+    _sentinel("sequence_repair", repaired_headers.headers)
     if preprocess_truth_active:
         preprocess_matches = _promote_preprocess_truth(candidates, uf_chunks, preprocess_headers, chunk_lookup)
     elif raw_truth_active:
         _promote_raw_truth(candidates, uf_chunks, verified_headers)
     else:
         promote_candidates(candidates, cfg.HEADER_GATE_MODE)
+    _sentinel("regex_promoter", candidates)
     candidates_by_chunk: Dict[str, List[HeaderCandidate]] = {}
     for candidate in candidates:
         candidates_by_chunk.setdefault(candidate.chunk_id, []).append(candidate)
     for cand_list in candidates_by_chunk.values():
         cand_list.sort(key=lambda c: (not c.promoted, c.line_index, c.start_char))
+    _sentinel("typography_filter", candidates)
     domain_hint = (
         decomp.get("metadata", {}).get("domain")
         or decomp.get("metadata", {}).get("domain_hint")
@@ -978,6 +1028,8 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
         )
         span_records.append(record)
 
+    _sentinel("efhg_stitcher", span_records)
+
     llm_labels = {header.label for header in repaired_headers.headers}
     if span_records:
         _resolve_conflicts(span_records, llm_labels)
@@ -997,10 +1049,13 @@ def run_headers(doc_id: str, decomp: Dict[str, Any]) -> HeaderIndex:
     ]
 
     accepted_records = [record for record in span_records if record.accepted]
+    _sentinel("dedupe_merge", accepted_records)
+    _sentinel("toc_suppress", accepted_records)
 
     if preprocess_truth_active and preprocess_headers:
         _apply_preprocess_matches(repaired_headers, preprocess_headers, preprocess_matches)
 
+    _sentinel("final_reducer_in", accepted_records)
     final_headers_map: Dict[str, VerifiedHeader] = {header.label: header for header in repaired_headers.headers}
     for record in accepted_records:
         span = record.span
