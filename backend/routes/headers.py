@@ -1,24 +1,17 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import asyncio
 import copy
-import json
 import logging
 import os
 import re
-import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
-import httpx
 from flask import Blueprint, request, jsonify, make_response
 
 from ..pipeline.preprocess import extract_pages_with_layout, _sections_from_detected_headers
 from ..persistence import clear_headers_cache, get_headers_cache, save_headers_cache
-from ..llm.errors import LLMAuthError
-from ..llm.factory import create_llm_client, provider_default_model
 from ..parse.header_page_mode import (
-    build_adjudication_prompt,
     dump_appendix_audit,
     select_candidates,
     write_header_debug_manifest,
@@ -26,7 +19,6 @@ from ..parse.header_page_mode import (
 )
 from ..parse.header_config import CONFIG
 from ..state import get_state
-from ..utils.envsafe import env
 from ..utils.strings import s
 
 bp = Blueprint("headers", __name__)
@@ -106,8 +98,6 @@ def determine_headers():
         doc_tag = _sanitize_component(doc_tag_source, "document")
         header_debug_dir: Optional[str] = None
         page_debug_snapshots: List[Tuple[int, List[dict], str]] = []
-        page_debug_map: Dict[int, Dict[str, Any]] = {}
-        page_llm_selections: Dict[int, List[Dict[str, Any]]] = {}
 
         try:
             CONFIG["debug"] = bool(debug_requested)
@@ -125,6 +115,42 @@ def determine_headers():
                 if session_state is not None:
                     session_state.headers = results
                 response_payload = dict(cached.get("response") or {})
+                debug_payload = response_payload.setdefault("debug", {})
+                if isinstance(debug_payload, dict):
+                    selected_counts = []
+                    for page in results:
+                        if not isinstance(page, dict):
+                            continue
+                        headers = page.get("headers")
+                        if not isinstance(headers, list):
+                            headers = []
+                        selected_counts.append(len(headers))
+                    heuristics = debug_payload.get("heuristics")
+                    if not isinstance(heuristics, dict):
+                        heuristics = {
+                            "heuristic_only": True,
+                            "fallback_topk": int(CONFIG.get("fallback_top_k_per_page", 3)),
+                            "selected_headers": sum(selected_counts),
+                            "selected_per_page": selected_counts,
+                        }
+                    else:
+                        heuristics = dict(heuristics)
+                        heuristics.setdefault("heuristic_only", True)
+                        heuristics.setdefault(
+                            "fallback_topk", int(CONFIG.get("fallback_top_k_per_page", 3))
+                        )
+                        heuristics.setdefault("selected_headers", sum(selected_counts))
+                        heuristics.setdefault("selected_per_page", selected_counts)
+                    debug_payload["heuristics"] = heuristics
+                    for legacy_key in (
+                        "llm_batches",
+                        "llm_debug",
+                        "llm_transport",
+                        "provider",
+                        "model",
+                        "adjudicated_pages",
+                    ):
+                        debug_payload.pop(legacy_key, None)
                 response_payload.update(
                     {
                         "ok": True,
@@ -158,17 +184,6 @@ def determine_headers():
                 [{} for _ in (p or [])] for p in pages_lines
             ]
 
-            provider = (
-                s(data.get("provider")) or env("LLM_PROVIDER", "openrouter") or "openrouter"
-            )
-            model = (
-                s(data.get("model"))
-                or provider_default_model(provider)
-                or env("HEADER_MODEL", "x-ai/grok-4-fast:free")
-                or "x-ai/grok-4-fast:free"
-            )
-            client = create_llm_client(provider) if CONFIG.get("llm_enabled", True) else None
-
             all_page_cands, debug_candidates = [], []
             for pi, lines in enumerate(pages_lines):
                 styles = (
@@ -188,264 +203,30 @@ def determine_headers():
                 )
                 snapshot = [copy.deepcopy(c) for c in cands]
                 page_debug_snapshots.append((pi, snapshot, page_text))
-                page_debug_map[pi] = {"snapshot": snapshot, "text": page_text}
                 if debug_active:
                     write_page_debug(doc_tag, pi, page_text, snapshot)
-
-            adjudicated: Dict[int, List[int]] = {}
-            llm_debug: List[Dict[str, Any]] = []
-            if client and any(c for c in all_page_cands):
-                pages = list(range(len(pages_lines)))
-                batch_size = max(1, int(CONFIG.get("llm_batch_pages", 4)))
-                max_batches = max(1, int(CONFIG.get("llm_max_batches", 5)))
-                batches = [
-                    pages[i : i + batch_size] for i in range(0, len(pages), batch_size)
-                ][:max_batches]
-                req_id = uuid.uuid4().hex[:8]
-                temperature = float(CONFIG.get("llm_temperature", 0.0) or 0.0)
-                timeout_s = float(CONFIG.get("headers_llm_timeout_seconds", 120.0) or 120.0)
-                initial_backoff = max(
-                    0.1, float(CONFIG.get("llm_backoff_initial_ms", 600)) / 1000.0
-                )
-                backoff_factor = float(CONFIG.get("llm_backoff_factor", 1.7) or 1.7)
-                backoff_ceiling = max(
-                    initial_backoff, float(CONFIG.get("llm_backoff_max_ms", 4500)) / 1000.0
-                )
-                max_attempts = max(1, int(CONFIG.get("llm_max_retries", 4)))
-
-                system_prompt = (
-                    "You adjudicate section headings. Reply ONLY JSON per page id:\n"
-                    "[{\"page\":N,\"items\":[{\"section_number\":\"\",\"section_name\":\"\",\"line_idx\":0}]}]"
-                )
-
-                async def run_batch(batch_pages: List[int], batch_index: int) -> Dict[str, Any]:
-                    user_payload = []
-                    for p in batch_pages:
-                        if not all_page_cands[p]:
-                            continue
-                        prompt = build_adjudication_prompt(
-                            pages_linear[p] if p < len(pages_linear) else "\n".join(pages_lines[p]),
-                            all_page_cands[p],
-                            CONFIG.get("context_chars_per_candidate", 700),
-                        )
-                        user_payload.append({"page": p + 1, "prompt": prompt})
-
-                        if debug_active:
-                            entry = page_debug_map.get(p)
-                            if entry is None:
-                                snapshot = [copy.deepcopy(c) for c in all_page_cands[p]]
-                                page_text_local = (
-                                    pages_linear[p]
-                                    if p < len(pages_linear)
-                                    else "\n".join(pages_lines[p])
-                                )
-                                entry = {"snapshot": snapshot, "text": page_text_local}
-                                page_debug_map[p] = entry
-                                page_debug_snapshots.append((p, snapshot, page_text_local))
-                                write_page_debug(doc_tag, p, page_text_local, snapshot)
-                            entry["prompt"] = prompt
-                            write_page_debug(
-                                doc_tag,
-                                p,
-                                entry.get("text")
-                                or (
-                                    pages_linear[p]
-                                    if p < len(pages_linear)
-                                    else "\n".join(pages_lines[p])
-                                ),
-                                entry.get("snapshot") or [],
-                                llm_prompt=prompt,
-                            )
-
-                    if not user_payload:
-                        return {"ok": True, "batch": batch_pages, "result": [], "skipped": True}
-
-                    payload_text = json.dumps(user_payload, ensure_ascii=False)
-                    backoff = initial_backoff
-
-                    for attempt in range(1, max_attempts + 1):
-                        try:
-                            log.info(
-                                "[headers] req=%s batch=%d/%d attempting adjudication pages=%s",
-                                req_id,
-                                batch_index + 1,
-                                len(batches),
-                                ",".join(str(p + 1) for p in batch_pages),
-                            )
-                            response_text = await asyncio.wait_for(
-                                client.acomplete(
-                                    model=model,
-                                    system=system_prompt,
-                                    user=payload_text,
-                                    temperature=temperature,
-                                    max_tokens=120_000,
-                                    extra={"stream": True},
-                                ),
-                                timeout=timeout_s,
-                            )
-                            parsed: Any = []
-                            if isinstance(response_text, str) and response_text.strip():
-                                try:
-                                    parsed = json.loads(response_text)
-                                except json.JSONDecodeError:
-                                    preview = response_text.strip()[:400]
-                                    log.warning(
-                                        "[headers] req=%s batch=%d JSON parse failed; preview=%r",
-                                        req_id,
-                                        batch_index + 1,
-                                        preview,
-                                    )
-                            if debug_active:
-                                result_map: Dict[int, List[Dict[str, Any]]] = {}
-                                if isinstance(parsed, list):
-                                    for item in parsed:
-                                        try:
-                                            pg = int(item.get("page", 0))
-                                        except Exception:
-                                            continue
-                                        if pg < 1:
-                                            continue
-                                        idx = pg - 1
-                                        selections = [
-                                            dict(it)
-                                            for it in (item.get("items") or [])
-                                            if isinstance(it, dict)
-                                        ]
-                                        result_map[idx] = selections
-                                for page_index in batch_pages:
-                                    entry = page_debug_map.get(page_index)
-                                    if not entry:
-                                        continue
-                                    page_text_local = entry.get("text") or (
-                                        pages_linear[page_index]
-                                        if page_index < len(pages_linear)
-                                        else "\n".join(pages_lines[page_index])
-                                    )
-                                    if page_index in result_map:
-                                        page_llm_selections[page_index] = result_map.get(page_index, [])
-                                    write_page_debug(
-                                        doc_tag,
-                                        page_index,
-                                        page_text_local,
-                                        entry.get("snapshot") or [],
-                                        llm_prompt=entry.get("prompt"),
-                                        llm_json=result_map.get(page_index, []),
-                                    )
-                            return {
-                                "ok": True,
-                                "batch": batch_pages,
-                                "result": parsed if isinstance(parsed, list) else [],
-                                "raw": response_text,
-                                "attempts": attempt,
-                            }
-                        except asyncio.TimeoutError:
-                            log.error(
-                                "[headers] req=%s batch=%d timeout after %.1fs",
-                                req_id,
-                                batch_index + 1,
-                                timeout_s,
-                            )
-                            return {
-                                "ok": False,
-                                "batch": batch_pages,
-                                "error": f"timeout after {timeout_s:.1f}s",
-                                "result": [],
-                            }
-                        except LLMAuthError as exc:
-                            log.error("[headers] req=%s auth error: %s", req_id, exc)
-                            return {"ok": False, "batch": batch_pages, "error": str(exc), "result": []}
-                        except httpx.HTTPStatusError as exc:
-                            status = exc.response.status_code if exc.response else None
-                            message = f"HTTP {status}: {exc}"
-                            if status == 429 and attempt < max_attempts:
-                                await asyncio.sleep(backoff)
-                                backoff = min(backoff * backoff_factor, backoff_ceiling)
-                                continue
-                            log.error(
-                                "[headers] req=%s batch=%d transport error: %s",
-                                req_id,
-                                batch_index + 1,
-                                message,
-                            )
-                            return {"ok": False, "batch": batch_pages, "error": message, "result": []}
-                        except Exception as exc:
-                            message = str(exc)
-                            if attempt < max_attempts and ("429" in message or "Too Many Requests" in message):
-                                await asyncio.sleep(backoff)
-                                backoff = min(backoff * backoff_factor, backoff_ceiling)
-                                continue
-                            log.exception("[headers] req=%s batch=%d exception", req_id, batch_index + 1)
-                            return {"ok": False, "batch": batch_pages, "error": message, "result": []}
-
-                    return {"ok": False, "batch": batch_pages, "error": "LLM retry exhausted", "result": []}
-
-                async def run_all_batches() -> List[Dict[str, Any]]:
-                    outputs: List[Dict[str, Any]] = []
-                    for idx, batch in enumerate(batches):
-                        outputs.append(await run_batch(batch, idx))
-                    return outputs
-
-                outs = asyncio.run(run_all_batches())
-
-                for out in outs:
-                    if len(llm_debug) < 6:
-                        llm_debug.append(out)
-                    else:
-                        llm_debug.append({"ok": out.get("ok", False), "batch": out.get("batch")})
-                    if not out.get("ok"):
-                        continue
-                    for item in out.get("result") or []:
-                        try:
-                            pg = int(item.get("page", 0))
-                        except Exception:
-                            continue
-                        arr = item.get("items") or []
-                        chosen: List[int] = []
-                        for it in arr:
-                            try:
-                                chosen.append(int(it.get("line_idx")))
-                            except Exception:
-                                continue
-                        if pg >= 1:
-                            adjudicated[pg - 1] = chosen
-
-                transport_debug = client.drain_debug_records()
-            else:
-                transport_debug = []
-
             results = []
             sections_count = 0
             topk = int(CONFIG.get("fallback_top_k_per_page", 3))
+            candidate_counts: List[int] = []
+            selected_counts: List[int] = []
             for pi, cands in enumerate(all_page_cands):
-                chosen_idx = adjudicated.get(pi)
                 headers = []
-                if chosen_idx is not None:
-                    for ci in cands:
-                        if ci["line_idx"] in chosen_idx:
-                            headers.append(
-                                {
-                                    "line_idx": ci["line_idx"],
-                                    "text": ci["text"],
-                                    "section_number": ci.get("section_number", ""),
-                                    "level": ci.get("level", 3),
-                                    "score": max(ci.get("score", 0.0), 3.0),
-                                    "style": ci.get("style", {}),
-                                }
-                            )
-                else:
-                    for ci in cands[:topk]:
-                        headers.append(
-                            {
-                                "line_idx": ci["line_idx"],
-                                "text": ci["text"],
-                                "section_number": ci.get("section_number", ""),
-                                "level": ci.get("level", 3),
-                                "score": ci.get("score", 0.0),
-                                "style": ci.get("style", {}),
-                            }
-                        )
+                candidate_counts.append(len(cands))
+                for ci in cands[:topk]:
+                    headers.append(
+                        {
+                            "line_idx": ci["line_idx"],
+                            "text": ci["text"],
+                            "section_number": ci.get("section_number", ""),
+                            "level": ci.get("level", 3),
+                            "score": ci.get("score", 0.0),
+                            "style": ci.get("style", {}),
+                        }
+                    )
 
                 sections_count += len(headers)
+                selected_counts.append(len(headers))
                 results.append({"page": pi + 1, "headers": headers})
 
             if session_state is not None:
@@ -484,14 +265,20 @@ def determine_headers():
 
             if debug_active:
                 dump_appendix_audit(doc_tag, page_debug_snapshots)
-                write_header_debug_manifest(
-                    doc_tag,
-                    page_debug_snapshots,
-                    results,
-                    llm_selections=page_llm_selections,
-                )
+                write_header_debug_manifest(doc_tag, page_debug_snapshots, results)
             # Candidate audit payloads are emitted by the EFHG pipeline; the
             # header-only route stops after writing optional debug manifests.
+
+            heuristic_debug = {
+                "pages": len(all_page_cands),
+                "pages_with_candidates": sum(1 for count in candidate_counts if count),
+                "total_candidates": sum(candidate_counts),
+                "selected_headers": sections_count,
+                "fallback_topk": topk,
+                "candidates_per_page": candidate_counts,
+                "selected_per_page": selected_counts,
+                "heuristic_only": True,
+            }
 
             response_payload = {
                 "ok": True,
@@ -505,12 +292,7 @@ def determine_headers():
                 },
                 "debug": {
                     "candidates": debug_candidates,
-                    "adjudicated_pages": sorted(list(adjudicated.keys())),
-                    "llm_batches": len(llm_debug),
-                    "llm_debug": llm_debug,
-                    "llm_transport": transport_debug,
-                    "provider": provider,
-                    "model": model,
+                    "heuristics": heuristic_debug,
                 },
             }
 

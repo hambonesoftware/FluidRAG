@@ -8,8 +8,8 @@ CONFIG = {
     "max_candidates_per_page": 40,
     "dedup_fuzzy_threshold": 90,      # rapidfuzz ratio threshold
 
-    # LLM adjudication controls
-    "llm_enabled": True,
+    # LLM adjudication controls (reruns rely purely on heuristics)
+    "llm_enabled": False,
     "llm_temperature": 0.0,
     "context_chars_per_candidate": 700,
 
