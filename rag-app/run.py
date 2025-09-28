@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import multiprocessing
+import os
 import signal
 import sys
 from functools import partial
@@ -19,10 +20,10 @@ from backend.app.util.logging import get_logger
 logger = get_logger(__name__)
 
 
-def start_backend(reload_override: bool | None = None) -> None:
+def start_backend() -> None:
     """Start FastAPI backend using uvicorn."""
     settings = get_settings()
-    reload = settings.backend_reload if reload_override is None else reload_override
+    reload = settings.backend_reload
     config = uvicorn.Config(
         "backend.app.main:create_app",
         host=settings.backend_host,
@@ -88,9 +89,11 @@ def _terminate_processes(processes: list[multiprocessing.Process]) -> None:
 def main() -> None:
     args = parse_args()
 
+    if args.reload:
+        os.environ["BACKEND_RELOAD"] = "true"
+
     backend_proc = multiprocessing.Process(
         target=start_backend,
-        kwargs={"reload_override": args.reload},
         name="backend",
     )
     frontend_proc = multiprocessing.Process(

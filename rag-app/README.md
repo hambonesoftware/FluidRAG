@@ -12,7 +12,7 @@ This repository currently contains the Phase 1 foundations for the FluidRAG proj
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp rag-app/.env.example rag-app/.env
+cp .env.example .env
 pre-commit install
 python run.py  # launches FastAPI on :8000 and static frontend on :3000
 ```

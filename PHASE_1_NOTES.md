@@ -13,7 +13,7 @@ cd rag-app
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp rag-app/.env.example rag-app/.env
+cp .env.example .env
 python run.py  # backend on :8000, frontend on :3000
 ```
 
@@ -24,7 +24,7 @@ pytest -q
 ```
 
 ## Environment
-- Copy `rag-app/.env.example` to `rag-app/.env` to customize runtime settings without committing secrets.
+- Copy `.env.example` to `.env` within `rag-app` to customize runtime settings without committing secrets.
 - `FLUIDRAG_OFFLINE` defaults to `true` to disable outbound network calls; flip to `false` when integrations require external access.
 
 ## Offline Mode

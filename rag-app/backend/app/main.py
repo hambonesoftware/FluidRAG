@@ -12,7 +12,7 @@ logger = get_logger(__name__)
 
 
 def create_app() -> FastAPI:
-    """Build and configure the FastAPI application."""
+    """App factory; registers routers and returns FastAPI instance."""
     settings = get_settings()
     app = FastAPI(title=settings.app_name)
 

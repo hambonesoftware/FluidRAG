@@ -58,11 +58,51 @@
     "declared_types": []
   },
   {
+    "file_path": "rag-app/PHASE_1_NOTES.md",
+    "language": "markdown",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
     "file_path": "rag-app/.gitignore",
     "language": "text",
     "imported_types": [],
     "imports": [],
     "declared_types": []
+  },
+  {
+    "file_path": "rag-app/.pre-commit-config.yaml",
+    "language": "yaml",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/pyproject.toml",
+    "language": "toml",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/requirements.txt",
+    "language": "text",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/scripts/check_file_lengths.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
   },
   {
     "file_path": "rag-app/data/.gitkeep",
