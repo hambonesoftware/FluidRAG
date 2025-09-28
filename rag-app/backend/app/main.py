@@ -1,12 +1,10 @@
-"""App factory; registers routers and returns FastAPI instance."""
-
 from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routes import chunk_router, parser_router, upload_router
+from .routes import chunk_router, headers_router, parser_router, upload_router
 from .util.logging import get_logger
 
 logger = get_logger(__name__)
@@ -28,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(upload_router)
     app.include_router(parser_router)
     app.include_router(chunk_router)
+    app.include_router(headers_router)
 
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:
