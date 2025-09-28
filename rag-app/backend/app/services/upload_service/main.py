@@ -22,7 +22,7 @@ class NormalizedDoc(BaseModel):
 def ensure_normalized(
     file_id: str | None = None, file_name: str | None = None
 ) -> NormalizedDoc:
-    """Validate/normalize upload and emit normalize.json."""
+    """Validate/normalize upload and emit normalize.json"""
     internal: NormalizedDocInternal = controller_ensure_normalized(
         file_id=file_id, file_name=file_name
     )
