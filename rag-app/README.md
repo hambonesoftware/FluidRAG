@@ -1,6 +1,4 @@
-# FluidRAG — Phases 1 & 2 Foundations
-
-Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults.
+Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults. Phase 3 introduces the upload normalization + parser fan-out/fan-in services, FastAPI routes, and an offline benchmark harness.
 
 ## Getting Started
 
@@ -15,6 +13,36 @@ python run.py  # launches FastAPI on :8000 and static frontend on :3000
 
 Open [http://localhost:3000](http://localhost:3000) to load the static shell and ping the backend health endpoint.
 
+## Upload & Parser Pipeline
+
+With the backend running:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/upload/normalize \
+  -H 'Content-Type: application/json' \
+  -d '{"file_id": "Sample document text with [image:diagram] and https://example.com"}'
+```
+
+The response includes the generated `doc_id`, `normalize.json` path, and manifest. Feed that artifact into the parser:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/parser/enrich \
+  -H 'Content-Type: application/json' \
+  -d '{"doc_id": "<doc_id>", "normalize_artifact": "<normalize_path>"}'
+```
+
+This triggers the asyncio fan-out (text/tables/images/links/language) and fan-in merge, producing `parse.enriched.json` under the artifact root.
+
+## Benchmark Harness
+
+To measure offline performance end-to-end:
+
+```bash
+python rag-app/scripts/bench_phase3.py --iterations 5
+```
+
+The script reports p50/p95 latencies for upload, parser, and combined stages while respecting the offline flag.
+
 ## Testing & Linting
 
 ```bash
@@ -28,6 +56,12 @@ All three commands are wired into the `pre-commit` configuration along with a gu
 ## Configuration
 
 The application reads environment variables via `backend.app.config.Settings`. Copy `.env.example` to `.env` to override defaults for ports, reload mode, logging level, or the offline policy.
+
+Key variables for the ingestion pipeline:
+
+- `ARTIFACT_ROOT` — directory where `normalize.json` and `parse.enriched.json` are written (defaults to `rag-app/data/artifacts`).
+- `UPLOAD_OCR_THRESHOLD` — minimum average coverage (0–1) before the upload controller triggers OCR fallback.
+- `PARSER_TIMEOUT_SECONDS` — timeout applied to each parser fan-out task.
 
 Key variables for the OpenRouter integration:
 

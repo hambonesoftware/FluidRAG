@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .routes import parser_router, upload_router
 from .util.logging import get_logger
 
 logger = get_logger(__name__)
@@ -24,6 +25,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(upload_router)
+    app.include_router(parser_router)
+
     @app.get("/health", tags=["system"])
     async def healthcheck() -> dict[str, str]:
         """Simple readiness probe."""
@@ -31,7 +35,13 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def _startup_event() -> None:
-        logger.info("backend.startup", extra={"backend": settings.backend_address})
+        logger.info(
+            "backend.startup",
+            extra={
+                "backend": settings.backend_address,
+                "offline": settings.offline,
+            },
+        )
 
     @app.on_event("shutdown")
     async def _shutdown_event() -> None:
