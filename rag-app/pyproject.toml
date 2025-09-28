@@ -22,5 +22,5 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pytest.ini_options]
-testpaths = ["rag-app/backend/app/tests"]
+testpaths = ["backend/app/tests"]
 pythonpath = ["rag-app"]
