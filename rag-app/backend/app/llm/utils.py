@@ -15,7 +15,7 @@ from .envsafe import masked_headers
 
 
 def windows_curl(url: str, headers: dict[str, str], payload: dict[str, Any]) -> str:
-    """Build a Windows-friendly ``curl`` command for debugging."""
+    """Build Windows-friendly curl command."""
     escaped_headers = " ^\n  ".join(
         f'-H "{_escape_quotes(key)}: {_escape_quotes(value)}"'
         for key, value in headers.items()
@@ -31,7 +31,7 @@ def windows_curl(url: str, headers: dict[str, str], payload: dict[str, Any]) -> 
 def log_prompt(
     prefix: str, payload: dict[str, Any], hdrs: dict[str, str]
 ) -> dict[str, Any]:
-    """Return compact metadata describing a prompt for logging."""
+    """Build compact request meta for logging."""
     messages = payload.get("messages", []) or []
     last = messages[-1] if messages else {}
     preview = last.get("content", "")

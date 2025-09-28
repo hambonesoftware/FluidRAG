@@ -13,9 +13,11 @@ target-version = ["py310"]
 
 [tool.ruff]
 line-length = 88
+exclude = ["rag-app/frontend", "rag-app/data"]
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4", "RET"]
 ignore = ["E203", "E266", "E501"]
-exclude = ["rag-app/frontend", "rag-app/data"]
 
 [tool.ruff.format]
 quote-style = "double"
