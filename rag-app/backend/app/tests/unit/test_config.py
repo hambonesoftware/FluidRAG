@@ -1,4 +1,5 @@
 """Tests for configuration utilities."""
+
 from __future__ import annotations
 
 from importlib import reload
@@ -39,6 +40,11 @@ def test_uvicorn_and_frontend_options(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_settings_cache()
     settings = Settings(backend_reload=True, backend_port=8123, frontend_port=3123)
     uvicorn_opts = settings.uvicorn_options()
-    assert uvicorn_opts == {"host": "127.0.0.1", "port": 8123, "reload": True, "log_level": "info"}
+    assert uvicorn_opts == {
+        "host": "127.0.0.1",
+        "port": 8123,
+        "reload": True,
+        "log_level": "info",
+    }
     frontend_opts = settings.frontend_options()
     assert frontend_opts == {"host": "127.0.0.1", "port": 3123}

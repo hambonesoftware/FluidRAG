@@ -22,6 +22,14 @@ cd rag-app
 pytest -q
 ```
 
+## Environment
+- Copy `rag-app/.env.example` to `rag-app/.env` to customize runtime settings without committing secrets.
+- `FLUIDRAG_OFFLINE` defaults to `true` to disable outbound network calls; flip to `false` when integrations require external access.
+
+## Offline Mode
+- Backend: `backend.app.config.Settings.offline` exposes the offline flag for service and client guards.
+- Frontend: `index.html` ships with a `fluidrag-offline` meta tag, and `main.js` bypasses the health check fetch (with an inline notice) while offline.
+
 ## Tooling
 - `pre-commit install` to enable ruff, black, and file-length guard.
 - `ruff check .` / `black --check .` for standalone linting/formatting verification.

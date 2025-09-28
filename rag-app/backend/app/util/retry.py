@@ -1,11 +1,12 @@
 """Retry and circuit breaker utilities."""
+
 from __future__ import annotations
 
 import random
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Optional, Tuple, Type
+from typing import Any
 
 from .errors import RetryExhaustedError
 
@@ -52,7 +53,7 @@ class CircuitBreaker:
         self.reset_timeout = reset_timeout
         self._failures = 0
         self._state = "closed"
-        self._opened_at: Optional[float] = None
+        self._opened_at: float | None = None
 
     def _trip(self) -> None:
         self._state = "open"
@@ -90,9 +91,9 @@ class CircuitBreaker:
 
 def with_retries(
     fn: Callable[..., Any],
-    exceptions: Tuple[Type[BaseException], ...],
-    policy: Optional[RetryPolicy] = None,
-    breaker: Optional[CircuitBreaker] = None,
+    exceptions: tuple[type[BaseException], ...],
+    policy: RetryPolicy | None = None,
+    breaker: CircuitBreaker | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> Any:
@@ -101,7 +102,7 @@ def with_retries(
         policy = RetryPolicy()
     attempts = 0
     delays = iter(policy.sleep_durations())
-    last_exc: Optional[BaseException] = None
+    last_exc: BaseException | None = None
 
     while True:
         attempts += 1
@@ -119,7 +120,9 @@ def with_retries(
         except RetryExhaustedError:
             raise
 
-    raise RetryExhaustedError(f"Retries exhausted after {attempts} attempts") from last_exc
+    raise RetryExhaustedError(
+        f"Retries exhausted after {attempts} attempts"
+    ) from last_exc
 
 
 __all__ = ["RetryPolicy", "CircuitBreaker", "with_retries"]

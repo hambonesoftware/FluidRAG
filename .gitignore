@@ -8,6 +8,7 @@ build/
 dist/
 .env
 .env.*
+!*.env.example
 .venv/
 venv/
 .DS_Store

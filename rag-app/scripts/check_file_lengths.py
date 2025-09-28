@@ -1,4 +1,5 @@
 """Pre-commit helper to ensure source files stay within the 500-line policy."""
+
 from __future__ import annotations
 
 import sys

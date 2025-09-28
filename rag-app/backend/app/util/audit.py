@@ -1,15 +1,16 @@
 """Build a normalized stage audit record."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any
 
 
-def stage_record(**kwargs: Any) -> Dict[str, Any]:
+def stage_record(**kwargs: Any) -> dict[str, Any]:
     """Build a normalized stage audit record."""
     stage = kwargs.pop("stage", "unknown")
     status = kwargs.pop("status", "ok")
-    record: Dict[str, Any] = {
+    record: dict[str, Any] = {
         "stage": stage,
         "status": status,
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),

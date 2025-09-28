@@ -1,4 +1,5 @@
 """Common application errors."""
+
 from __future__ import annotations
 
 
