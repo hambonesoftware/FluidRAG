@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.env
+.venv/
+venv/
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# Node / Frontend
+node_modules/
+.npm/
+.pnpm-store/
+dist/
+
+# Editors
+.vscode/
+.idea/
+.DS_Store
+
+# Test & coverage
+.pytest_cache/
+.coverage*
+htmlcov/
+
+# Local tooling
+.env.local
+logs/
