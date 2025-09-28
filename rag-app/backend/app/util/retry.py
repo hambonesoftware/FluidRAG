@@ -112,7 +112,7 @@ def with_retries(
     *args: Any,
     **kwargs: Any,
 ) -> Any:
-    """Execute with retries/backoff and optional circuit breaker."""
+    """Execute with retries/backoff and optional circuit breaker"""
     if policy is None:
         policy = RetryPolicy()
     attempts = 0
