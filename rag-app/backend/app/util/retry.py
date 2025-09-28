@@ -21,6 +21,21 @@ class RetryPolicy:
     jitter: bool = True
     _rng: random.Random = field(default_factory=random.Random, repr=False)
 
+    def __init__(
+        self,
+        retries: int = 3,
+        base_delay: float = 0.5,
+        max_delay: float = 8.0,
+        jitter: bool = True,
+    ) -> None:
+        """Initialize policy"""
+        self.retries = retries
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.jitter = jitter
+        self._rng = random.Random()
+        self.__post_init__()
+
     def __post_init__(self) -> None:
         if self.retries < 1:
             raise ValueError("retries must be >= 1")
