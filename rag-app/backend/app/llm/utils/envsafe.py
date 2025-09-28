@@ -6,7 +6,7 @@ import os
 
 
 def mask_bearer(token: str | None) -> str:
-    """Mask a bearer token for log output."""
+    """Mask bearer tokens for logs."""
     if not token:
         return ""
     raw = token.strip()
@@ -16,7 +16,7 @@ def mask_bearer(token: str | None) -> str:
 
 
 def openrouter_headers() -> dict[str, str]:
-    """Build OpenRouter headers from environment variables."""
+    """Build OpenRouter headers from env."""
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter calls.")
@@ -37,7 +37,7 @@ def openrouter_headers() -> dict[str, str]:
 
 
 def masked_headers(headers: dict[str, str]) -> dict[str, str]:
-    """Return a copy of ``headers`` with Authorization masked."""
+    """Return a copy with Authorization masked."""
     sanitized = dict(headers)
     auth_header = sanitized.get("Authorization")
     if auth_header:
