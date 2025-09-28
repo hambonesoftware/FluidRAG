@@ -1,7 +1,17 @@
-{
-  "file_path": "rag-app/.gitignore",
-  "language": "text",
-  "imported_types": [],
-  "imports": [],
-  "declared_types": []
-}
+__pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.egg-info/
+.eggs/
+build/
+dist/
+.env
+.env.*
+.venv/
+venv/
+.DS_Store
+node_modules/
+*.log
+.coverage
+.pytest_cache/
