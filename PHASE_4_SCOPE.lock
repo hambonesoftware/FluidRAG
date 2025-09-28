@@ -1,0 +1,29 @@
+Phase 4 Scope Selection — Chunk Service & Vector Indexes
+=======================================================
+Scope rationale: implement the UF chunking pipeline, typography features, sparse+dense vector adapters, FastAPI route, settings, documentation, and unit tests required by the Phase 4 plan while preserving prior phase contracts and offline defaults.
+
+Files to add or modify:
+- PHASE_4_SCOPE.lock
+- PHASE_4_NOTES.md
+- rag-app/backend/app/config.py
+- rag-app/.env.example
+- rag-app/README.md
+- rag-app/backend/app/main.py
+- rag-app/backend/app/routes/__init__.py
+- rag-app/backend/app/routes/chunk.py
+- rag-app/backend/app/services/__init__.py
+- rag-app/backend/app/services/chunk_service/__init__.py
+- rag-app/backend/app/services/chunk_service/main.py
+- rag-app/backend/app/services/chunk_service/chunk_controller.py
+- rag-app/backend/app/services/chunk_service/packages/__init__.py
+- rag-app/backend/app/services/chunk_service/packages/segment/__init__.py
+- rag-app/backend/app/services/chunk_service/packages/segment/sentences.py
+- rag-app/backend/app/services/chunk_service/packages/features/__init__.py
+- rag-app/backend/app/services/chunk_service/packages/features/typography.py
+- rag-app/backend/app/services/chunk_service/packages/index/__init__.py
+- rag-app/backend/app/services/chunk_service/packages/index/local_vss.py
+- rag-app/backend/app/adapters/__init__.py
+- rag-app/backend/app/adapters/vectors.py
+- rag-app/backend/app/contracts/__init__.py
+- rag-app/backend/app/contracts/chunking.py
+- rag-app/backend/app/tests/unit/test_chunk.py

@@ -33,6 +33,18 @@ curl -s -X POST http://127.0.0.1:8000/parser/enrich \
 
 This triggers the asyncio fan-out (text/tables/images/links/language) and fan-in merge, producing `parse.enriched.json` under the artifact root.
 
+## Chunk Service & Vector Indexes
+
+After running the parser, invoke the chunk service to generate UF chunks and build local indexes:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/chunk/uf \
+  -H 'Content-Type: application/json' \
+  -d '{"doc_id": "<doc_id>", "normalize_artifact": "<parse_enriched_path>"}'
+```
+
+The response echoes the chunk artifact path (`uf_chunks.jsonl`) and, if enabled, the index manifest. The chunk controller writes a `chunk.audit.json` record alongside the JSONL file and persists sparse+dense index metadata when offline-safe hashing is enabled by default.
+
 ## Benchmark Harness
 
 To measure offline performance end-to-end:
@@ -62,6 +74,8 @@ Key variables for the ingestion pipeline:
 - `ARTIFACT_ROOT` — directory where `normalize.json` and `parse.enriched.json` are written (defaults to `rag-app/data/artifacts`).
 - `UPLOAD_OCR_THRESHOLD` — minimum average coverage (0–1) before the upload controller triggers OCR fallback.
 - `PARSER_TIMEOUT_SECONDS` — timeout applied to each parser fan-out task.
+- `CHUNK_TARGET_TOKENS` — target token count for each UF chunk (defaults to 90).
+- `CHUNK_TOKEN_OVERLAP` — token overlap budget between adjacent chunks (defaults to 12).
 
 Key variables for the OpenRouter integration:
 
