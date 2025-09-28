@@ -33,6 +33,7 @@ def _build_pipeline(tmp_path: Path, text: str) -> tuple[str, str]:
 
 
 def test_run_uf_chunking_creates_chunks_and_indexes(tmp_path: Path) -> None:
+    """Unit test placeholder."""
     doc_id, enriched_path = _build_pipeline(
         tmp_path,
         (
@@ -68,6 +69,7 @@ def test_run_uf_chunking_creates_chunks_and_indexes(tmp_path: Path) -> None:
 
 
 def test_run_uf_chunking_missing_artifact_raises_not_found(tmp_path: Path) -> None:
+    """Validate chunk boundaries respect sentence and header edges."""
     with pytest.raises(NotFoundError):
         run_uf_chunking("doc-123", str(tmp_path / "missing.json"))
 
