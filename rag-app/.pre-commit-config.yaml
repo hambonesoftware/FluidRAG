@@ -1,0 +1,18 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.4
+    hooks:
+      - id: ruff
+      - id: ruff-format
+  - repo: https://github.com/psf/black
+    rev: 24.2.0
+    hooks:
+      - id: black
+  - repo: local
+    hooks:
+      - id: file-length-guard
+        name: Enforce 500 line cap
+        entry: python rag-app/scripts/check_file_lengths.py
+        language: system
+        files: """(?x)\.(py|js|ts|css|html)$"""
+        pass_filenames: true

@@ -1,0 +1,35 @@
+Phase 1 Scope Selection (Foundations & Tooling)
+=============================================
+
+Selected vertical slice: project foundations that allow the FastAPI backend and static frontend to boot locally via `python run.py`, along with baseline tooling (lint/format/test config) and utility modules required for Phase 1 acceptance.
+
+Files to be materialized/implemented:
+- rag-app/.gitignore
+- rag-app/.env.example
+- rag-app/.pre-commit-config.yaml
+- rag-app/pyproject.toml
+- rag-app/requirements.txt
+- rag-app/scripts/check_file_lengths.py
+- rag-app/run.py
+- rag-app/backend/__init__.py
+- rag-app/backend/app/__init__.py
+- rag-app/backend/app/config.py
+- rag-app/backend/app/main.py
+- rag-app/backend/app/util/__init__.py
+- rag-app/backend/app/util/audit.py
+- rag-app/backend/app/util/errors.py
+- rag-app/backend/app/util/logging.py
+- rag-app/backend/app/util/retry.py
+- rag-app/backend/app/tests/__init__.py
+- rag-app/backend/app/tests/unit/__init__.py
+- rag-app/backend/app/tests/unit/test_config.py
+- rag-app/backend/app/tests/unit/test_retry.py
+- rag-app/backend/app/tests/unit/test_logging.py
+- rag-app/data/.gitkeep
+- rag-app/frontend/index.html
+- rag-app/frontend/styles/app.css
+- rag-app/frontend/js/main.js
+- rag-app/README.md
+- PHASE_1_NOTES.md
+
+Rationale: This set satisfies all Phase 1 acceptance criteria (boot script, tooling, tests) while leaving later-phase domain services and routes untouched for future work.
