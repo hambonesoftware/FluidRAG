@@ -1,4 +1,4 @@
-"""RAG passes controller."""
+"""Controller for running RAG passes."""
 from __future__ import annotations
 
 import json

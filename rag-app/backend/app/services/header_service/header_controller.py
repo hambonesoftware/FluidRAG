@@ -1,143 +1,137 @@
-"""Header controller."""
+"""Simple heuristics to detect headers and map chunks to sections."""
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import Dict, List
 
-from backend.app.adapters import storage
+from backend.app.adapters.storage import storage
+from backend.app.contracts.chunking import Chunk
 from backend.app.contracts.headers import Header, HeaderChunk
 from backend.app.util.errors import AppError
 from backend.app.util.logging import get_logger
 
-from .packages.heur.regex_bank import header_patterns
-from .packages.join.stitcher import stitch_headers
-from .packages.rechunk.by_headers import rechunk_by_headers
-from .packages.repair.sequence import repair_sequence
-from .packages.score.typo_features import score_chunk
-
 logger = get_logger(__name__)
 
-_STOPWORDS = {"the", "and", "with", "for", "from", "into", "onto", "using"}
+_HEADER_LINE = re.compile(r"^(?:(\d+(?:\.\d+)*)\s+)?(.+)$")
 
 
-@dataclass
+@dataclass(slots=True)
 class HeaderJoinInternal:
-    """Internal header join result."""
-
     doc_id: str
     headers_path: str
     header_chunks_path: str
     headers: List[Header]
     header_chunks: List[HeaderChunk]
+    sections: Dict[str, List[str]]
 
 
-def handle_header_errors(e: Exception) -> None:
-    """Normalize and raise header errors."""
-
-    if isinstance(e, AppError):
+def handle_header_errors(error: Exception) -> None:
+    if isinstance(error, AppError):
         raise
-    logger.exception("header_error", exc_info=e)
-    raise AppError("Header detection failed") from e
+    logger.exception("header_error", exc_info=error)
+    raise AppError("Header detection failed") from error
 
 
-def _clean_token(token: str) -> str:
-    return token.strip(".,:;()[]{}")
+def _is_header_candidate(line: str) -> bool:
+    if not line:
+        return False
+    if line.isupper() and len(line) >= 4:
+        return True
+    match = _HEADER_LINE.match(line)
+    if not match:
+        return False
+    prefix, remainder = match.groups()
+    if prefix and remainder and remainder.strip() and remainder.strip()[0].isupper():
+        return True
+    words = line.split()
+    capitalised = sum(1 for word in words if word[:1].isupper())
+    return capitalised >= max(1, len(words) // 2)
 
 
-def _sentence_candidates(text: str) -> List[List[str]]:
-    segments = re.split(r"(?<=\.)\s+|\n+", text)
-    words: List[List[str]] = []
-    for segment in segments:
-        tokens = [_clean_token(tok) for tok in segment.strip().split() if tok.strip()]
-        if tokens:
-            words.append(tokens)
-    return words
+def _infer_level(line: str) -> int:
+    match = _HEADER_LINE.match(line)
+    if match and match.group(1):
+        return max(1, match.group(1).count(".") + 1)
+    return 1
 
 
-def _extract_candidates(doc_id: str, record: Dict[str, str], index_offset: int) -> List[Dict[str, object]]:
-    candidates: List[Dict[str, object]] = []
-    page = record.get("page", 1)
-    chunk_id = record.get("chunk_id", f"{doc_id}-chunk")
-    for tokens in _sentence_candidates(record.get("text", "")):
-        if not tokens:
-            continue
-        first = tokens[0]
-        header_words: List[str] = []
-        level = 1
-        if first.isupper() and len(first) >= 4:
-            header_words = [first.title()]
-        elif first.replace(".", "").isdigit() and len(tokens) > 1:
-            header_words.append(first)
-            extras = 0
-            for token in tokens[1:]:
-                clean = token
-                if not clean:
-                    break
-                if clean.lower() in _STOPWORDS:
-                    break
-                if not clean[0].isupper():
-                    break
-                header_words.append(clean)
-                extras += 1
-                if extras >= 2:
-                    break
-            if len(header_words) <= 1:
-                continue
-            level = first.count(".") + 1 if "." in first else 1
-        else:
-            continue
+def _load_chunks(chunks_artifact: str) -> List[Chunk]:
+    payloads = storage.read_jsonl(chunks_artifact)
+    return [Chunk(**record) for record in payloads]
 
-        header_text = " ".join(header_words)
-        header_id = f"{doc_id}-header-{index_offset + len(candidates)}"
-        temp_chunk = HeaderChunk(
-            header_id=header_id,
-            chunk_id=chunk_id,
-            text=header_text,
-            page=page,
+
+def _build_header_chunks(doc_id: str, headers: List[Header], chunk_lookup: Dict[str, Chunk]) -> List[HeaderChunk]:
+    header_chunks: List[HeaderChunk] = []
+    for index, header in enumerate(headers):
+        chunk = chunk_lookup.get(header.start_chunk)
+        text = chunk.text if chunk else header.title
+        header_chunks.append(
+            HeaderChunk(
+                header_id=f"{doc_id}-header-{index}",
+                chunk_id=header.start_chunk,
+                text=text,
+                page=1,
+            )
         )
-        confidence = score_chunk(temp_chunk)
-        candidates.append(
-            {
-                "header_id": header_id,
-                "text": header_text,
-                "level": level,
-                "page": page,
-                "confidence": confidence,
-            }
-        )
-    return candidates
+    return header_chunks
+
+
+def _build_sections(headers: List[Header], chunks: List[Chunk]) -> Dict[str, List[str]]:
+    sections: Dict[str, List[str]] = {"Document": []}
+    current = "Document"
+    header_map = {header.start_chunk: header.title for header in headers}
+    for chunk in sorted(chunks, key=lambda item: item.start):
+        maybe_header = header_map.get(chunk.chunk_id)
+        if maybe_header:
+            current = maybe_header
+            sections.setdefault(current, [])
+        sections.setdefault(current, []).append(chunk.chunk_id)
+    return sections
 
 
 def join_and_rechunk(doc_id: str, chunks_artifact: str) -> HeaderJoinInternal:
-    """Controller: regex/typo scoring, stitching, repair, emit headers & rechunk."""
-
     try:
-        chunk_records = storage.read_jsonl(chunks_artifact)
-        patterns = header_patterns()
-        candidates: List[Dict[str, object]] = []
-        for record in chunk_records:
-            text = record.get("text", "")
-            if any(pattern.search(text) for pattern in patterns):
-                candidates.extend(_extract_candidates(doc_id, record, len(candidates)))
-        stitched = stitch_headers(candidates)
-        repaired = repair_sequence(stitched)
-        headers = [Header(**header) for header in repaired]
+        chunks = _load_chunks(chunks_artifact)
+        chunk_lookup = {chunk.chunk_id: chunk for chunk in chunks}
+        headers: List[Header] = []
+        for chunk in chunks:
+            line = chunk.text.strip().splitlines()[0] if chunk.text.strip() else ""
+            if not _is_header_candidate(line):
+                continue
+            level = _infer_level(line)
+            headers.append(
+                Header(
+                    title=line.strip(),
+                    level=level,
+                    start_chunk=chunk.chunk_id,
+                    end_chunk=chunk.chunk_id,
+                    confidence=1.0,
+                )
+            )
+
+        sections = _build_sections(headers, chunks)
+        header_chunks = _build_header_chunks(doc_id, headers, chunk_lookup)
+
+        headers_payload = {
+            "doc_id": doc_id,
+            "headers": [asdict(header) for header in headers],
+            "sections": sections,
+        }
         headers_path = f"{doc_id}/headers/headers.json"
-        storage.write_json(headers_path, [header.to_dict() for header in headers])
-        header_chunks = [
-            HeaderChunk(**chunk)
-            for chunk in rechunk_by_headers(chunks_artifact, [header.to_dict() for header in headers])
-        ]
+        storage.write_json(headers_path, headers_payload)
+
         header_chunks_path = f"{doc_id}/headers/header_chunks.jsonl"
-        storage.write_jsonl(header_chunks_path, [chunk.to_dict() for chunk in header_chunks])
+        storage.write_jsonl(header_chunks_path, [asdict(chunk) for chunk in header_chunks])
+
         return HeaderJoinInternal(
             doc_id=doc_id,
             headers_path=headers_path,
             header_chunks_path=header_chunks_path,
             headers=headers,
             header_chunks=header_chunks,
+            sections=sections,
         )
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - defensive logging
         handle_header_errors(exc)
         raise

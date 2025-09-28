@@ -5,8 +5,9 @@ import math
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from hashlib import blake2b
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, Iterable, List, Sequence
 
 from backend.app.config import settings
 from backend.app.util.logging import get_logger
@@ -16,6 +17,44 @@ logger = get_logger(__name__)
 
 def _tokenize(text: str) -> List[str]:
     return [tok.lower() for tok in text.split() if tok.strip()]
+
+
+@dataclass(slots=True)
+class EmbeddingModel:
+    """Deterministic, dependency-free embedding helper.
+
+    The production project relies on remote embedding services.  For the
+    purposes of the kata we provide a light-weight replacement that produces
+    repeatable vectors based solely on the input text.  The implementation uses
+    a BLAKE2 hash of individual tokens to populate a fixed-size vector and then
+    L2 normalises the result so that cosine similarity behaves as expected.
+    """
+
+    dimension: int = 256
+
+    def _vectorise_token(self, token: str) -> List[float]:
+        digest = blake2b(token.encode("utf-8"), digest_size=64).digest()
+        values = [(byte / 255.0) * 2.0 - 1.0 for byte in digest]
+        repeats = (self.dimension + len(values) - 1) // len(values)
+        tiled: Iterable[float] = (val for _ in range(repeats) for val in values)
+        vector = [next(tiled) for _ in range(self.dimension)]
+        return vector
+
+    def embed_texts(self, texts: Sequence[str]) -> List[List[float]]:
+        embeddings: List[List[float]] = []
+        for text in texts:
+            vector = [0.0] * self.dimension
+            tokens = _tokenize(text)
+            if not tokens:
+                embeddings.append(vector)
+                continue
+            for token in tokens:
+                token_vec = self._vectorise_token(token)
+                for idx, value in enumerate(token_vec):
+                    vector[idx] += value
+            norm = math.sqrt(sum(val * val for val in vector)) or 1.0
+            embeddings.append([val / norm for val in vector])
+        return embeddings
 
 
 @dataclass
@@ -136,34 +175,41 @@ class QdrantIndex:
         ]
 
 
+def _cosine_similarity(vec_a: Sequence[float], vec_b: Sequence[float]) -> float:
+    if not vec_a or not vec_b:
+        return 0.0
+    length = min(len(vec_a), len(vec_b))
+    dot = sum(vec_a[idx] * vec_b[idx] for idx in range(length))
+    norm_a = math.sqrt(sum(val * val for val in vec_a[:length])) or 1.0
+    norm_b = math.sqrt(sum(val * val for val in vec_b[:length])) or 1.0
+    return dot / (norm_a * norm_b)
+
+
 def hybrid_search(
-    bm25: BM25Index | None,
-    dense: FaissIndex | QdrantIndex | None,
+    bm25: BM25Index,
+    embeddings: Dict[str, Sequence[float]],
     query: str,
-    query_vec: List[float] | None,
     *,
-    alpha: float = 0.5,
-    k: int = 20,
-) -> List[dict]:
-    """Fuse sparse+dense scores."""
+    embedder: EmbeddingModel,
+    alpha: float = 0.6,
+    limit: int = 5,
+) -> List[tuple[str, float]]:
+    """Fuse sparse and dense scores for the hybrid retrieval pipeline."""
 
-    sparse_hits: Dict[str, float] = {}
-    if bm25:
-        for hit in bm25.search(query, limit=k * 2):
-            sparse_hits[hit["doc_id"]] = hit["score"]
-
+    sparse_hits = {hit["doc_id"]: hit["score"] for hit in bm25.search(query, limit=limit * 4)}
     dense_hits: Dict[str, float] = {}
-    if dense and query_vec is not None:
-        for hit in dense.search(query_vec, k=k * 2):
-            dense_hits[hit["doc_id"]] = hit["score"]
+    if embeddings:
+        query_vec = embedder.embed_texts([query])[0]
+        for doc_id, vector in embeddings.items():
+            dense_hits[doc_id] = _cosine_similarity(query_vec, vector)
 
     doc_ids = set(sparse_hits) | set(dense_hits)
     fused = []
     for doc_id in doc_ids:
         sparse = sparse_hits.get(doc_id, 0.0)
-        dense_score = dense_hits.get(doc_id, 0.0)
-        score = alpha * sparse + (1 - alpha) * dense_score
-        fused.append({"doc_id": doc_id, "score": score})
+        dense = dense_hits.get(doc_id, 0.0)
+        score = alpha * sparse + (1 - alpha) * dense
+        fused.append((doc_id, score))
 
-    fused.sort(key=lambda item: item["score"], reverse=True)
-    return fused[:k]
+    fused.sort(key=lambda item: item[1], reverse=True)
+    return fused[:limit]

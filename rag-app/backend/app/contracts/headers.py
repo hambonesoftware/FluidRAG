@@ -19,3 +19,11 @@ class HeaderArtifact:
     doc_id: str
     headers: List[Header]
     sections: Dict[str, List[str]]
+
+
+@dataclass(slots=True)
+class HeaderChunk:
+    header_id: str
+    chunk_id: str
+    text: str
+    page: int
