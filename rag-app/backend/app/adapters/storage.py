@@ -1,72 +1,104 @@
-"""Local filesystem storage adapter."""
+"""Storage adapter for reading/writing pipeline artifacts."""
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List
+from typing import Any, AsyncIterator, Dict, Iterable, List
 
-from ..config import settings
-from ..util.logging import get_logger
+from backend.app.config import settings
+from backend.app.util.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-class StorageAdapter:
-    def __init__(self, base_dir: Path | None = None) -> None:
-        self.base_dir = (base_dir or settings.storage_dir).resolve()
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-
-    def _resolve(self, relative: str | Path) -> Path:
-        path = (self.base_dir / relative).resolve()
-        if not str(path).startswith(str(self.base_dir)):
-            raise ValueError("Path traversal detected")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        return path
-
-    def write_bytes(self, relative: str | Path, data: bytes) -> Path:
-        path = self._resolve(relative)
-        path.write_bytes(data)
-        return path
-
-    def write_text(self, relative: str | Path, text: str) -> Path:
-        path = self._resolve(relative)
-        path.write_text(text, encoding="utf-8")
-        return path
-
-    def read_text(self, relative: str | Path) -> str:
-        path = self._resolve(relative)
-        return path.read_text(encoding="utf-8")
-
-    def write_json(self, relative: str | Path, payload: Dict[str, Any]) -> Path:
-        path = self._resolve(relative)
-        with path.open("w", encoding="utf-8") as fp:
-            json.dump(payload, fp, indent=2, sort_keys=True)
-        return path
-
-    def write_jsonl(self, relative: str | Path, rows: Iterable[Dict[str, Any]]) -> Path:
-        path = self._resolve(relative)
-        with path.open("w", encoding="utf-8") as fp:
-            for row in rows:
-                fp.write(json.dumps(row, sort_keys=True) + "\n")
-        return path
-
-    def iter_jsonl(self, relative: str | Path) -> Iterator[Dict[str, Any]]:
-        path = self._resolve(relative)
-        with path.open("r", encoding="utf-8") as fp:
-            for line in fp:
-                if line.strip():
-                    yield json.loads(line)
-
-    def exists(self, relative: str | Path) -> bool:
-        return self._resolve(relative).exists()
-
-    def list_artifacts(self, relative: str | Path) -> List[Path]:
-        path = self._resolve(relative)
-        if not path.exists():
-            return []
-        if path.is_file():
-            return [path]
-        return sorted(p for p in path.iterdir())
+def _resolve(path: str | Path) -> Path:
+    base = settings.storage_dir
+    resolved = (base / path).resolve()
+    if not str(resolved).startswith(str(base.resolve())):
+        raise ValueError("Path traversal detected")
+    return resolved
 
 
-storage = StorageAdapter()
+def ensure_parent_dirs(path: str | Path) -> None:
+    """Create parent directories if missing."""
+
+    resolved = _resolve(path)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+
+
+def write_json(path: str | Path, payload: Dict[str, Any]) -> None:
+    """Write a JSON file with directories ensured."""
+
+    resolved = _resolve(path)
+    ensure_parent_dirs(resolved)
+    with resolved.open("w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2, sort_keys=True)
+    logger.debug("write_json", extra={"path": str(resolved)})
+
+
+def write_jsonl(path: str | Path, rows: Iterable[Dict[str, Any]]) -> None:
+    """Write JSONL lines safely."""
+
+    resolved = _resolve(path)
+    ensure_parent_dirs(resolved)
+    with resolved.open("w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, sort_keys=True) + "\n")
+    logger.debug("write_jsonl", extra={"path": str(resolved)})
+
+
+def read_jsonl(path: str | Path) -> List[Dict[str, Any]]:
+    """Read JSONL into list of dicts."""
+
+    resolved = _resolve(path)
+    if not resolved.exists():
+        return []
+    with resolved.open("r", encoding="utf-8") as fh:
+        return [json.loads(line) for line in fh if line.strip()]
+
+
+def write_bytes(path: str | Path, data: bytes) -> None:
+    resolved = _resolve(path)
+    ensure_parent_dirs(resolved)
+    resolved.write_bytes(data)
+
+
+def read_json(path: str | Path) -> Dict[str, Any]:
+    resolved = _resolve(path)
+    with resolved.open("r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def stream_path(path: str | Path) -> Path:
+    return _resolve(path)
+
+
+async def stream_read(path: str | Path, chunk_size: int = 65536) -> AsyncIterator[bytes]:
+    """Async stream file bytes in chunks."""
+
+    resolved = _resolve(path)
+    loop = asyncio.get_running_loop()
+
+    def _reader() -> bytes:
+        return resolved.read_bytes()
+
+    data = await loop.run_in_executor(None, _reader)
+    for idx in range(0, len(data), chunk_size):
+        yield data[idx : idx + chunk_size]
+
+
+async def stream_write(path: str | Path, aiter: AsyncIterator[bytes]) -> None:
+    """Async write bytes from stream to file."""
+
+    resolved = _resolve(path)
+    ensure_parent_dirs(resolved)
+    loop = asyncio.get_running_loop()
+    chunks: List[bytes] = []
+    async for chunk in aiter:
+        chunks.append(chunk)
+
+    def _writer() -> None:
+        resolved.write_bytes(b"".join(chunks))
+
+    await loop.run_in_executor(None, _writer)

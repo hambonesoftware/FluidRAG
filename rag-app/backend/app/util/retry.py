@@ -1,78 +1,102 @@
 """Retry and circuit breaker utilities."""
 from __future__ import annotations
 
-import itertools
+import random
 import time
-from dataclasses import dataclass
-from typing import Any, Callable, Generator, Iterable, Optional, Type
+from dataclasses import dataclass, field
+from threading import Lock
+from typing import Any, Callable, Iterable, Optional, Tuple
 
 from .errors import RetryExhaustedError
 
 
-@dataclass(frozen=True)
+@dataclass
 class RetryPolicy:
-    attempts: int = 3
-    backoff_factor: float = 0.5
-    max_backoff: float = 4.0
+    """Configurable retry policy with backoff."""
+
+    retries: int = 3
+    base_delay: float = 0.5
+    max_delay: float = 8.0
+    jitter: bool = True
 
     def sleep_durations(self) -> Iterable[float]:
-        for attempt in range(self.attempts):
-            delay = min(self.backoff_factor * (2 ** attempt), self.max_backoff)
+        """Yield backoff durations."""
+
+        for attempt in range(self.retries):
+            delay = min(self.max_delay, self.base_delay * (2**attempt))
+            if self.jitter:
+                delay *= random.uniform(0.5, 1.5)
             yield delay
 
 
+@dataclass
 class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 5, reset_timeout: float = 60.0) -> None:
-        self.failure_threshold = failure_threshold
-        self.reset_timeout = reset_timeout
-        self.failure_count = 0
-        self.opened_at: Optional[float] = None
+    """Simple circuit breaker."""
 
-    def _trip_if_needed(self) -> None:
-        if self.failure_count >= self.failure_threshold:
-            self.opened_at = time.monotonic()
+    fail_threshold: int = 5
+    reset_timeout: float = 30.0
+    _failures: int = field(default=0, init=False)
+    _opened_at: float | None = field(default=None, init=False)
+    _lock: Lock = field(default_factory=Lock, init=False)
 
-    def _can_attempt(self) -> bool:
-        if self.opened_at is None:
-            return True
-        if time.monotonic() - self.opened_at >= self.reset_timeout:
-            self.failure_count = 0
-            self.opened_at = None
-            return True
-        return False
+    def call(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        """Protect call with breaker."""
 
-    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-        if not self._can_attempt():
-            raise RetryExhaustedError("Circuit breaker open")
+        with self._lock:
+            now = time.monotonic()
+            if self._opened_at and now - self._opened_at < self.reset_timeout:
+                raise RetryExhaustedError("Circuit breaker open")
+            if self._opened_at and now - self._opened_at >= self.reset_timeout:
+                self._failures = 0
+                self._opened_at = None
+
         try:
-            result = func(*args, **kwargs)
+            result = fn(*args, **kwargs)
         except Exception:
-            self.failure_count += 1
-            self._trip_if_needed()
+            with self._lock:
+                self._failures += 1
+                if self._failures >= self.fail_threshold:
+                    self._opened_at = time.monotonic()
             raise
-        self.failure_count = 0
-        self.opened_at = None
-        return result
+        else:
+            with self._lock:
+                self._failures = 0
+                self._opened_at = None
+            return result
 
 
 def with_retries(
-    func: Callable[..., Any],
+    fn: Callable[..., Any],
+    exceptions: Tuple[type[Exception], ...],
     *,
     policy: RetryPolicy | None = None,
-    retriable: tuple[Type[BaseException], ...] = (Exception,),
-) -> Callable[..., Any]:
+    breaker: CircuitBreaker | None = None,
+    args: Tuple[Any, ...] | None = None,
+    kwargs: dict[str, Any] | None = None,
+) -> Any:
+    """Execute with retries/backoff and optional circuit breaker."""
+
+    args = args or ()
+    kwargs = kwargs or {}
     policy = policy or RetryPolicy()
 
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        last_exc: Optional[BaseException] = None
-        for delay in itertools.chain(policy.sleep_durations(), [None]):
-            try:
-                return func(*args, **kwargs)
-            except retriable as exc:
-                last_exc = exc
-                if delay is None:
-                    break
-                time.sleep(delay)
-        raise RetryExhaustedError("Retry attempts exhausted") from last_exc
+    def invoke() -> Any:
+        return fn(*args, **kwargs)
 
-    return wrapper
+    if breaker is not None:
+        call_fn = lambda: breaker.call(invoke)  # noqa: E731 - simple wrapper
+    else:
+        call_fn = invoke
+
+    last_error: Optional[Exception] = None
+    for delay in (*policy.sleep_durations(), None):
+        try:
+            return call_fn()
+        except exceptions as exc:  # type: ignore[arg-type]
+            last_error = exc
+            if delay is None:
+                break
+            time.sleep(delay)
+        except Exception:
+            raise
+    raise RetryExhaustedError(str(last_error) if last_error else "Retries exhausted") from last_error

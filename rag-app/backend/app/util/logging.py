@@ -1,29 +1,54 @@
-"""Logging utilities with structured defaults."""
+"""Structured logging utilities."""
 from __future__ import annotations
 
+import json
 import logging
 from logging import Logger
-from typing import Optional
+from typing import Any, Dict
+
+from backend.app.config import settings
+
+
+class JsonFormatter(logging.Formatter):
+    """Render log records as single-line JSON."""
+
+    def format(self, record: logging.LogRecord) -> str:  # noqa: D401
+        payload: Dict[str, Any] = {
+            "level": record.levelname,
+            "name": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            payload["stack"] = self.formatStack(record.stack_info)
+        for key, value in record.__dict__.items():
+            if key.startswith("_") or key in payload:
+                continue
+            try:
+                json.dumps(value)
+                payload[key] = value
+            except TypeError:
+                payload[key] = repr(value)
+        return json.dumps(payload, ensure_ascii=False)
 
 
 _LOGGERS: dict[str, Logger] = {}
 
 
-def get_logger(name: str, level: Optional[str] = None) -> Logger:
-    """Return a module level logger configured once."""
+def get_logger(name: str | None = None) -> Logger:
+    """Return configured JSON logger."""
+
+    name = name or "fluidrag"
     if name in _LOGGERS:
         return _LOGGERS[name]
 
     logger = logging.getLogger(name)
+    logger.setLevel(settings.log_level)
     if not logger.handlers:
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(
-            fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        handler.setFormatter(formatter)
+        handler.setFormatter(JsonFormatter())
         logger.addHandler(handler)
-    logger.setLevel(level or logging.getLevelName(logger.level) or "INFO")
     logger.propagate = False
     _LOGGERS[name] = logger
     return logger
