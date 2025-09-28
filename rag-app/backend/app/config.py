@@ -52,6 +52,16 @@ class Settings(BaseSettings):
         default=0.85,
         validation_alias=AliasChoices("UPLOAD_OCR_THRESHOLD", "upload_ocr_threshold"),
     )
+    chunk_target_tokens: int = Field(
+        default=90,
+        ge=10,
+        validation_alias=AliasChoices("CHUNK_TARGET_TOKENS", "chunk_target_tokens"),
+    )
+    chunk_token_overlap: int = Field(
+        default=12,
+        ge=0,
+        validation_alias=AliasChoices("CHUNK_TOKEN_OVERLAP", "chunk_token_overlap"),
+    )
     parser_timeout_seconds: float = Field(
         default=1.0,
         validation_alias=AliasChoices(
