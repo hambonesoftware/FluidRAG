@@ -1,0 +1,18 @@
+Phase 2 Scope Selection (OpenRouter Client Integration)
+======================================================
+
+Files to create or modify:
+- PHASE_2_NOTES.md — implementation summary, runbook, and testing notes for Phase 2.
+- PHASE_2_SCOPE.lock — this scope declaration.
+- rag-app/.env.example — add OpenRouter-related environment variables and documentation.
+- rag-app/README.md — update setup instructions and smoke-test guidance for the OpenRouter client.
+- rag-app/backend/app/llm/__init__.py — expose client helpers for downstream imports.
+- rag-app/backend/app/llm/utils.py — helper utilities for logging and curl inspection.
+- rag-app/backend/app/llm/utils/envsafe.py — environment + masking utilities for headers.
+- rag-app/backend/app/llm/openrouter.py — thin sync wrapper raising typed errors.
+- rag-app/backend/app/llm/clients/__init__.py — package exports for the OpenRouter client.
+- rag-app/backend/app/llm/clients/openrouter.py — full client with retries, streaming, embeddings.
+- rag-app/backend/app/tests/unit/test_llm_envsafe.py — unit tests for env/header helpers.
+- rag-app/backend/app/tests/unit/test_openrouter_client.py — unit tests for retry/backoff, streaming, and offline guards.
+
+Rationale: This list covers the entire OpenRouter integration vertical slice defined for Phase 2, including utilities, client implementation, configuration, documentation, and regression tests, while leaving later pipeline services untouched.
