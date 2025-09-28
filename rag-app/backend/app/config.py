@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     )
 
     def __init__(self, **data: Any) -> None:
-        """Pydantic settings init."""
+        """Pydantic settings init"""
         super().__init__(**data)
 
     @property

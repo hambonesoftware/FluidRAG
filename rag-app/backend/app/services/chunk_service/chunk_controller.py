@@ -29,18 +29,17 @@ class ChunkInternal(BaseModel):
     index_manifest_path: str | None = None
 
 
-def _validate_inputs(
-    doc_id: str | None, normalize_artifact: str | None
-) -> tuple[str, str]:
-    if not doc_id or not doc_id.strip():
+def _validate_inputs(doc_id: str, normalize_artifact: str) -> tuple[str, str]:
+    if not doc_id.strip():
         raise ValidationError("doc_id is required for chunking")
-    if not normalize_artifact or not normalize_artifact.strip():
+    if not normalize_artifact.strip():
         raise ValidationError("normalize_artifact is required for chunking")
     return doc_id.strip(), normalize_artifact.strip()
 
 
 def run_uf_chunking(
-    doc_id: str | None = None, normalize_artifact: str | None = None
+    doc_id: str,
+    normalize_artifact: str,
 ) -> ChunkInternal:
     """Controller for chunking & local index building."""
     doc_id, normalize_artifact = _validate_inputs(doc_id, normalize_artifact)

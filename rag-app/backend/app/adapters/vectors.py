@@ -191,7 +191,7 @@ def hybrid_search(
     alpha: float = 0.5,
     k: int = 20,
 ) -> list[dict[str, Any]]:
-    """Fuse sparse+dense scores."""
+    """Fuse sparse+dense scores"""
     sparse_scores: dict[int, float] = {}
     if bm25 is not None:
         for idx, score in bm25.search(query, k=k):
