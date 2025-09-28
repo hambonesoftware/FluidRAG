@@ -26,3 +26,7 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["backend/app/tests"]
 pythonpath = ["rag-app"]
+markers = [
+    "phase4: marks tests that exercise Phase 4 functionality",
+    "phase5: marks tests that exercise Phase 5 functionality",
+]
