@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from pydantic import AliasChoices, Field
@@ -43,6 +44,20 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("FLUIDRAG_OFFLINE", "fluidrag_offline"),
     )
+    artifact_root: str = Field(
+        default="rag-app/data/artifacts",
+        validation_alias=AliasChoices("ARTIFACT_ROOT", "artifact_root"),
+    )
+    upload_ocr_threshold: float = Field(
+        default=0.85,
+        validation_alias=AliasChoices("UPLOAD_OCR_THRESHOLD", "upload_ocr_threshold"),
+    )
+    parser_timeout_seconds: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices(
+            "PARSER_TIMEOUT_SECONDS", "parser_timeout_seconds"
+        ),
+    )
 
     def __init__(self, **data: Any) -> None:
         """Pydantic settings init."""
@@ -57,6 +72,15 @@ class Settings(BaseSettings):
     def frontend_address(self) -> str:
         """Return the ``host:port`` pair for the static frontend server."""
         return f"{self.frontend_host}:{self.frontend_port}"
+
+    @property
+    def artifact_root_path(self) -> Path:
+        """Return the absolute path for storing artifacts."""
+        base = Path(__file__).resolve().parents[3]
+        root = Path(self.artifact_root)
+        if root.is_absolute():
+            return root
+        return (base / root).resolve()
 
     def uvicorn_options(self) -> dict[str, Any]:
         """Return keyword arguments for configuring Uvicorn."""

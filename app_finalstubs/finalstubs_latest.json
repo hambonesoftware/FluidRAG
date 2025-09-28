@@ -5013,5 +5013,40 @@
       "test_embed_sync_parses_vectors",
       "test_chat_sync_propagates_auth_error"
     ]
+  },
+  {
+    "file_path": "PHASE_3_NOTES.md",
+    "language": "markdown",
+    "imports": [],
+    "imported_types": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/scripts/bench_phase3.py",
+    "language": "python",
+    "imports": [],
+    "imported_types": [],
+    "declared_types": [
+      {
+        "type": "function",
+        "name": "run_benchmark",
+        "line": 1,
+        "docstring": "Run upload\u2192parser benchmark and return stats.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "iterations",
+            "type": "int",
+            "default": 5
+          }
+        ],
+        "returns": {
+          "type": "dict[str, float]",
+          "description": ""
+        }
+      }
+    ]
   }
 ]
