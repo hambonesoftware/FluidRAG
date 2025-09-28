@@ -1,3 +1,9 @@
+import ApiClient from "./apiClient.js";
+import UploadVM from "./viewmodels/UploadVM.js";
+import PipelineVM from "./viewmodels/PipelineVM.js";
+import UploadView from "./views/UploadView.js";
+import PipelineView from "./views/PipelineView.js";
+
 const button = document.getElementById("ping-backend");
 const output = document.getElementById("health-response");
 
@@ -51,4 +57,18 @@ async function pingBackend() {
 
 if (button) {
   button.addEventListener("click", pingBackend);
+}
+
+const apiClient = new ApiClient({
+  baseUrl: `${backendProtocol}//${backendHost}:${backendPort}`,
+});
+const pipelineRoot = document.querySelector("[data-pipeline-root]");
+const uploadRoot = document.querySelector("[data-upload-root]");
+if (pipelineRoot) {
+  const pipelineVM = new PipelineVM(apiClient);
+  const pipelineView = new PipelineView(pipelineVM, pipelineRoot);
+  if (uploadRoot) {
+    const uploadVM = new UploadVM(apiClient);
+    new UploadView(uploadVM, uploadRoot, { pipelineView });
+  }
 }

@@ -1,0 +1,95 @@
+"""Unit tests covering retrieval pass helpers."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from ...config import get_settings
+from ...services.rag_pass_service import run_all
+from ...services.rag_pass_service.packages.emit.results import write_pass_results
+from ...services.rag_pass_service.packages.retrieval import retrieve_ranked
+
+
+@pytest.fixture(autouse=True)
+def _configure_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
+    monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def _sample_chunks() -> list[dict[str, object]]:
+    return [
+        {
+            "chunk_id": "doc:c1",
+            "text": "Torque requirement is 50 Nm with 200 RPM limit.",
+            "token_count": 9,
+            "sentence_start": 0,
+            "sentence_end": 0,
+            "header_path": "Mechanics/Drive",
+        },
+        {
+            "chunk_id": "doc:c2",
+            "text": "The controller monitors pressure and temperature sensors.",
+            "token_count": 9,
+            "sentence_start": 1,
+            "sentence_end": 1,
+            "header_path": "Controls/Safety",
+        },
+        {
+            "chunk_id": "doc:c3",
+            "text": "Project timeline shows integration milestone at week 12.",
+            "token_count": 10,
+            "sentence_start": 2,
+            "sentence_end": 2,
+            "header_path": "PM/Schedule",
+        },
+    ]
+
+
+def test_test_passes() -> None:
+    """Unit test placeholder."""
+
+    ranked = retrieve_ranked(_sample_chunks(), domain="mechanical")
+    assert ranked, "ranked results should not be empty"
+
+
+def test_hybrid_retrieval_ranking() -> None:
+    """Validate BM25+dense+physics re-ranking on sample corpus."""
+
+    ranked = retrieve_ranked(_sample_chunks(), domain="mechanical")
+    assert ranked[0]["chunk_id"] == "doc:c1"
+    assert ranked[0]["total_score"] >= ranked[-1]["total_score"]
+
+
+def test_write_pass_results_persists_payload(tmp_path: Path) -> None:
+    ranked = retrieve_ranked(_sample_chunks(), domain="controls")
+    answer = {
+        "content": "Answer",
+        "context": "Context",
+        "prompt": {"system": "s", "user": "u"},
+    }
+    path = write_pass_results("doc", "controls", answer, ranked)
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert payload["doc_id"] == "doc"
+    assert payload["pass_name"] == "controls"
+
+
+def test_run_all_emits_all_passes(tmp_path: Path) -> None:
+    chunks_path = tmp_path / "header_chunks.jsonl"
+    lines = [json.dumps(row) for row in _sample_chunks()]
+    chunks_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    jobs = run_all("doc", str(chunks_path))
+    assert set(jobs.passes.keys()) == {
+        "mechanical",
+        "electrical",
+        "software",
+        "controls",
+        "project_mgmt",
+    }
+    for artifact in jobs.passes.values():
+        assert Path(artifact).exists()

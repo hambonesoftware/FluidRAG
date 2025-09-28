@@ -15,9 +15,25 @@
     <main>
       <section class="card">
         <h2>Pipeline Runner</h2>
-        <p>The interactive pipeline UI will arrive in later phases.</p>
+        <p>Run the ingestion pipeline and inspect domain pass results.</p>
         <div id="offlineNotice" style="display:none;">
           Offline mode is enabled — network calls are disabled.
+        </div>
+        <div data-upload-root class="pipeline-upload">
+          <label for="pipeline-input">Document path or ID</label>
+          <input
+            id="pipeline-input"
+            type="text"
+            placeholder="rag-app/data/artifacts/sample.txt"
+            data-upload-input
+          />
+          <button type="button" data-upload-run>Run Pipeline</button>
+          <p class="status" data-upload-status></p>
+        </div>
+        <div data-pipeline-root class="pipeline-results">
+          <button type="button" data-pipeline-refresh>Refresh Results</button>
+          <p class="status" data-pipeline-status></p>
+          <div data-pass-results></div>
         </div>
         <button id="ping-backend" type="button">Ping Backend</button>
         <pre id="health-response" aria-live="polite"></pre>
