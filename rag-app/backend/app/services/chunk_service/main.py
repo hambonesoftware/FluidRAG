@@ -17,9 +17,7 @@ class ChunkResult(BaseModel):
     index_manifest_path: str | None = None
 
 
-def run_uf_chunking(
-    doc_id: str | None = None, normalize_artifact: str | None = None
-) -> ChunkResult:
+def run_uf_chunking(doc_id: str, normalize_artifact: str) -> ChunkResult:
     """Create UF chunks from enriched parse."""
     internal: ChunkInternal = controller_run_uf_chunking(
         doc_id=doc_id, normalize_artifact=normalize_artifact

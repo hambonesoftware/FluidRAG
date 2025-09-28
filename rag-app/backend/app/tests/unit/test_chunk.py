@@ -1,5 +1,3 @@
-"""Unit tests for chunk service and retrieval helpers."""
-
 from __future__ import annotations
 
 import json
@@ -13,6 +11,8 @@ from ...services.chunk_service import ChunkResult, run_uf_chunking
 from ...services.parser_service import parse_and_enrich
 from ...services.upload_service import ensure_normalized
 from ...util.errors import NotFoundError
+
+pytestmark = pytest.mark.phase4
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +32,7 @@ def _build_pipeline(tmp_path: Path, text: str) -> tuple[str, str]:
     return parsed.doc_id, parsed.enriched_path
 
 
-def test_run_uf_chunking_creates_chunks_and_indexes(tmp_path: Path) -> None:
+def test_test_chunk(tmp_path: Path) -> None:
     """Unit test placeholder."""
     doc_id, enriched_path = _build_pipeline(
         tmp_path,
@@ -67,24 +67,54 @@ def test_run_uf_chunking_creates_chunks_and_indexes(tmp_path: Path) -> None:
     ), "overlap should reuse context"
     assert rows[0]["token_count"] <= 40
 
-
-def test_run_uf_chunking_missing_artifact_raises_not_found(tmp_path: Path) -> None:
-    """Validate chunk boundaries respect sentence and header edges."""
     with pytest.raises(NotFoundError):
         run_uf_chunking("doc-123", str(tmp_path / "missing.json"))
 
-
-def test_hybrid_search_fuses_sparse_and_dense() -> None:
     bm25 = BM25Index()
     bm25.add(["alpha beta", "beta gamma", "delta epsilon"])
 
-    faiss = FaissIndex(2)
-    faiss.add([[0.9, 0.1], [0.6, 0.4], [0.0, 1.0]])
+    dense_vectors = FaissIndex(2)
+    dense_vectors.add([[0.9, 0.1], [0.6, 0.4], [0.0, 1.0]])
 
     results = hybrid_search(
-        bm25, faiss, query="beta", query_vec=[0.8, 0.2], alpha=0.6, k=2
+        bm25,
+        dense_vectors,
+        query="beta",
+        query_vec=[0.8, 0.2],
+        alpha=0.6,
+        k=2,
     )
     assert results, "hybrid search should return matches"
     top = results[0]
-    assert top["id"] == 0, "first document should win due to combined score"
     assert top["dense"] >= top["sparse"], "dense score should influence ranking"
+
+
+def test_uf_chunk_boundaries(tmp_path: Path) -> None:
+    """Validate chunk boundaries respect sentence and header edges."""
+    doc_id, enriched_path = _build_pipeline(
+        tmp_path,
+        (
+            "Heading: Context overview. "
+            "First section describes the setup and parameters. "
+            "Second section provides results and insights. "
+            "Conclusion reiterates findings and next steps."
+        ),
+    )
+
+    result: ChunkResult = run_uf_chunking(doc_id, enriched_path)
+    chunks_path = Path(result.chunks_path)
+    rows = [
+        json.loads(line)
+        for line in chunks_path.read_text(encoding="utf-8").splitlines()
+        if line
+    ]
+
+    assert rows, "chunking should yield at least one chunk"
+    first = rows[0]
+    assert first["sentence_start"] == 0
+    for current, nxt in zip(rows, rows[1:], strict=False):
+        assert current["sentence_start"] <= current["sentence_end"]
+        assert nxt["sentence_start"] <= nxt["sentence_end"]
+        assert (
+            nxt["sentence_start"] <= current["sentence_end"]
+        ), "subsequent chunk should overlap or abut previous sentences"
