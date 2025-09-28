@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 __path__ = [str(Path(__file__).with_name("utils"))]
 if __spec__ is not None:  # pragma: no cover - package wiring
     __spec__.submodule_search_locations = __path__
     __package__ = __spec__.parent  # type: ignore[assignment]
 
-from .envsafe import masked_headers
+if TYPE_CHECKING:
+    from backend.app.llm.utils.envsafe import masked_headers as masked_headers
+else:
+    from .envsafe import masked_headers
 
 
 def windows_curl(url: str, headers: dict[str, str], payload: dict[str, Any]) -> str:

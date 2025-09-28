@@ -72,7 +72,7 @@ def _configure_root_logger(level: str) -> None:
     _LOGGER_INITIALIZED = True
 
 
-def get_logger(name: str = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """Return configured JSON logger."""
     try:
         from ..config import get_settings  # Local import to avoid circular dependency.

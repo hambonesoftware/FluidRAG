@@ -1,3 +1,5 @@
 """Normalization helpers."""
 
-__all__ = []
+from __future__ import annotations
+
+__all__: list[str] = []

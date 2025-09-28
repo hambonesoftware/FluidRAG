@@ -201,12 +201,12 @@ def hybrid_search(
     dense_scores: dict[int, float] = {}
     if dense is not None and query_vec is not None:
         if isinstance(dense, FaissIndex):
-            results = dense.search(query_vec, k=k)
-            for idx, score in results:
+            faiss_results = dense.search(query_vec, k=k)
+            for idx, score in faiss_results:
                 dense_scores[idx] = score
         else:
-            results = dense.search(query_vec, k=k)
-            for item in results:
+            qdrant_results = dense.search(query_vec, k=k)
+            for item in qdrant_results:
                 dense_scores[int(item.get("id", 0))] = float(item.get("score", 0.0))
 
     combined: dict[int, dict[str, float]] = {}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncGenerator, Iterator
 from typing import Any
 
 import pytest
@@ -73,8 +74,8 @@ class DummyStreamResponse:
     ) -> None:  # pragma: no cover - context stub
         return None
 
-    def aiter_lines(self):
-        async def _gen():
+    def aiter_lines(self) -> AsyncGenerator[str, None]:
+        async def _gen() -> AsyncGenerator[str, None]:
             for item in self._lines:
                 if isinstance(item, float):
                     await asyncio.sleep(item)
@@ -116,7 +117,7 @@ class MockAsyncClient:
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+def _reset_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
