@@ -44,7 +44,7 @@
     ]
   },
   {
-    "file_path": "rag-app/.env",
+    "file_path": "rag-app/.env.example",
     "language": "text",
     "imported_types": [],
     "imports": [],
@@ -183,7 +183,7 @@
         "name": "run_pipeline",
         "type": "function",
         "line": 1,
-        "docstring": "Execute full pipeline: upload→parse→chunk→headers→passes.",
+        "docstring": "Execute full pipeline: upload\u2192parse\u2192chunk\u2192headers\u2192passes.",
         "modifiers": [],
         "decorators": [],
         "extends": [],
@@ -4369,6 +4369,221 @@
         },
         "members": []
       }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_config.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "reset_settings_cache",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_settings_defaults",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_environment_overrides",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_uvicorn_and_frontend_options",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_settings_defaults",
+      "test_environment_overrides",
+      "test_uvicorn_and_frontend_options"
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_retry.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_retry_policy_generates_backoff_sequence",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_with_retries_eventually_succeeds",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_with_retries_raises_after_exhaustion",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_circuit_breaker_trips_and_resets",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_retry_policy_generates_backoff_sequence",
+      "test_with_retries_eventually_succeeds",
+      "test_with_retries_raises_after_exhaustion",
+      "test_circuit_breaker_trips_and_resets"
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_logging.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_get_logger_emits_json",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "capsys",
+            "type": "pytest.CaptureFixture[str]"
+          },
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_get_logger_emits_json"
     ]
   }
 ]

@@ -13,6 +13,7 @@ cd rag-app
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp rag-app/.env.example rag-app/.env
 python run.py  # backend on :8000, frontend on :3000
 ```
 
