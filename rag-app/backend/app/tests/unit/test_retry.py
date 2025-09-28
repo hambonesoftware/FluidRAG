@@ -1,4 +1,5 @@
 """Tests for retry utilities."""
+
 from __future__ import annotations
 
 import pytest
@@ -22,7 +23,11 @@ def test_with_retries_eventually_succeeds(monkeypatch: pytest.MonkeyPatch) -> No
         return "ok"
 
     monkeypatch.setattr("time.sleep", lambda _: None)
-    result = with_retries(flaky, (ValueError,), policy=RetryPolicy(retries=5, base_delay=0.01, jitter=False))
+    result = with_retries(
+        flaky,
+        (ValueError,),
+        policy=RetryPolicy(retries=5, base_delay=0.01, jitter=False),
+    )
     assert result == "ok"
     assert attempts["count"] == 3
 
@@ -34,7 +39,11 @@ def test_with_retries_raises_after_exhaustion(monkeypatch: pytest.MonkeyPatch) -
         raise RuntimeError("boom")
 
     with pytest.raises(RetryExhaustedError):
-        with_retries(always_fail, (RuntimeError,), policy=RetryPolicy(retries=2, base_delay=0.01, jitter=False))
+        with_retries(
+            always_fail,
+            (RuntimeError,),
+            policy=RetryPolicy(retries=2, base_delay=0.01, jitter=False),
+        )
 
 
 def test_circuit_breaker_trips_and_resets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -48,7 +57,12 @@ def test_circuit_breaker_trips_and_resets(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr("time.sleep", lambda _: None)
 
     with pytest.raises(RetryExhaustedError):
-        with_retries(failing_call, (RuntimeError,), policy=RetryPolicy(retries=2, base_delay=0.01, jitter=False), breaker=breaker)
+        with_retries(
+            failing_call,
+            (RuntimeError,),
+            policy=RetryPolicy(retries=2, base_delay=0.01, jitter=False),
+            breaker=breaker,
+        )
 
     # Breaker should now be open and refuse further calls until timeout elapses.
     with pytest.raises(RetryExhaustedError):

@@ -1,4 +1,5 @@
 """Start FastAPI backend using uvicorn and serve the static frontend."""
+
 from __future__ import annotations
 
 import argparse
@@ -9,7 +10,6 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from socketserver import ThreadingTCPServer
-from typing import Optional
 
 import uvicorn
 
@@ -19,7 +19,7 @@ from backend.app.util.logging import get_logger
 logger = get_logger(__name__)
 
 
-def start_backend(reload_override: Optional[bool] = None) -> None:
+def start_backend(reload_override: bool | None = None) -> None:
     """Start FastAPI backend using uvicorn."""
     settings = get_settings()
     reload = settings.backend_reload if reload_override is None else reload_override
@@ -34,7 +34,11 @@ def start_backend(reload_override: Optional[bool] = None) -> None:
     server = uvicorn.Server(config)
     logger.info(
         "backend.run",
-        extra={"host": settings.backend_host, "port": settings.backend_port, "reload": reload},
+        extra={
+            "host": settings.backend_host,
+            "port": settings.backend_port,
+            "reload": reload,
+        },
     )
     server.run()
 
@@ -48,10 +52,16 @@ def start_frontend() -> None:
     class QuietServer(ThreadingTCPServer):
         allow_reuse_address = True
 
-    with QuietServer((settings.frontend_host, settings.frontend_port), handler) as httpd:
+    with QuietServer(
+        (settings.frontend_host, settings.frontend_port), handler
+    ) as httpd:
         logger.info(
             "frontend.run",
-            extra={"host": settings.frontend_host, "port": settings.frontend_port, "directory": str(directory)},
+            extra={
+                "host": settings.frontend_host,
+                "port": settings.frontend_port,
+                "directory": str(directory),
+            },
         )
         try:
             httpd.serve_forever()
@@ -61,7 +71,9 @@ def start_frontend() -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the FluidRAG development stack.")
-    parser.add_argument("--reload", action="store_true", help="Reload backend on code changes.")
+    parser.add_argument(
+        "--reload", action="store_true", help="Reload backend on code changes."
+    )
     return parser.parse_args()
 
 
@@ -90,7 +102,7 @@ def main() -> None:
     for proc in processes:
         proc.start()
 
-    def _handle_signal(signum: int, _frame: Optional[object]) -> None:
+    def _handle_signal(signum: int, _frame: object | None) -> None:
         logger.info("runner.signal", extra={"signal": signum})
         _terminate_processes(processes)
         sys.exit(0)

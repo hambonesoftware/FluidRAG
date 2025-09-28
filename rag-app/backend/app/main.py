@@ -1,4 +1,5 @@
 """App factory; registers routers and returns FastAPI instance."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI

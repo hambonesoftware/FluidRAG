@@ -1,10 +1,11 @@
 """Return configured JSON logger."""
+
 from __future__ import annotations
 
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 _LOGGER_INITIALIZED = False
 
@@ -36,8 +37,10 @@ class JsonFormatter(logging.Formatter):
     }
 
     def format(self, record: logging.LogRecord) -> str:  # noqa: D401
-        payload: Dict[str, Any] = {
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(record.created)),
+        payload: dict[str, Any] = {
+            "timestamp": time.strftime(
+                "%Y-%m-%dT%H:%M:%S", time.gmtime(record.created)
+            ),
             "level": record.levelname,
             "name": record.name,
             "message": record.getMessage(),
@@ -69,7 +72,7 @@ def _configure_root_logger(level: str) -> None:
     _LOGGER_INITIALIZED = True
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
+def get_logger(name: str | None = None) -> logging.Logger:
     """Return configured JSON logger."""
     try:
         from ..config import get_settings  # Local import to avoid circular dependency.

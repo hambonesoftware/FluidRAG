@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FluidRAG</title>
+    <meta name="fluidrag-offline" content="true" />
     <link rel="stylesheet" href="styles/app.css" />
   </head>
   <body data-backend-port="8000">
@@ -15,6 +16,9 @@
       <section class="card">
         <h2>Pipeline Runner</h2>
         <p>The interactive pipeline UI will arrive in later phases.</p>
+        <div id="offlineNotice" style="display:none;">
+          Offline mode is enabled — network calls are disabled.
+        </div>
         <button id="ping-backend" type="button">Ping Backend</button>
         <pre id="health-response" aria-live="polite"></pre>
       </section>
