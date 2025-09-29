@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import pytest
@@ -40,7 +41,10 @@ def test_faiss_index_add_search_and_persist(tmp_path: Path) -> None:
     # Reload and ensure vectors persisted
     reloaded = FaissIndex(dim=3, index_path=str(index_path))
     results = reloaded.search([1.0, 0.0, 0.0], k=1)
-    assert results == [(0, pytest.approx(1.0))]
+    assert results, "search should return persisted vector"
+    index_id, similarity = results[0]
+    assert index_id == 0
+    assert math.isclose(similarity, 1.0, rel_tol=1e-6)
 
 
 def test_faiss_index_validates_dimensions() -> None:
