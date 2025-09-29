@@ -18,6 +18,12 @@
 - Existing unit tests were refactored to rely on reusable fixtures, improving determinism and
   asserting richer invariants across the pipeline stages.
 
+### Fixed
+- Route packages now explicitly re-export their service helpers to satisfy strict mypy checks and
+  clarify the functions exercised by the new route error tests.
+- Vector adapter persistence tests compare floats via `math.isclose` so type checking remains
+  strict without losing numerical robustness.
+
 ### Documentation
 - README updated with guidance for running the full pipeline using the curated fixture, refreshed
   test/coverage commands, and a description of the new data assets.
@@ -25,8 +31,9 @@
 
 ### Verification
 - Backend pytest suite expanded to 96 passing tests covering phases 1–9 with 91% line coverage
-  across `backend/app`.
-- Ruff, mypy, and pytest coverage reports executed to satisfy repo quality bars.
+  across `backend/app`, run with `-W error`.
+- Ruff, mypy (`--strict`), and pytest coverage reports executed to satisfy repo quality bars during
+  the audit.
 
 ## [Phase 8] - 2025-09-30
 ### Added

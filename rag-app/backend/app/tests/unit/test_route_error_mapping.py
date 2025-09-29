@@ -10,10 +10,10 @@ import pytest
 from fastapi import HTTPException
 
 from ...routes import chunk, headers, parser, upload
-from ...services.chunk_service import ChunkResult
-from ...services.header_service import HeaderJoinResult
-from ...services.parser_service import ParseResult
-from ...services.upload_service import NormalizedDoc
+from ...services.chunk_service import ChunkResult, run_uf_chunking
+from ...services.header_service import HeaderJoinResult, join_and_rechunk
+from ...services.parser_service import ParseResult, parse_and_enrich
+from ...services.upload_service import NormalizedDoc, ensure_normalized
 from ...util.errors import AppError, NotFoundError, ValidationError
 
 
@@ -51,7 +51,7 @@ def _make_header_result() -> HeaderJoinResult:
 
 def test_upload_route_success(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_run_in_threadpool(func: Callable[..., Any], *args: Any) -> Any:
-        assert func is upload.ensure_normalized
+        assert func is ensure_normalized
         return _make_normalized_doc()
 
     monkeypatch.setattr(upload, "run_in_threadpool", fake_run_in_threadpool)
@@ -86,7 +86,7 @@ def test_upload_route_error_mapping(
 
 def test_chunk_route_success(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_run_in_threadpool(func: Callable[..., Any], *args: Any) -> Any:
-        assert func is chunk.run_uf_chunking
+        assert func is run_uf_chunking
         return _make_chunk_result()
 
     monkeypatch.setattr(chunk, "run_in_threadpool", fake_run_in_threadpool)
@@ -120,7 +120,7 @@ def test_chunk_route_error_mapping(
 
 def test_parser_route_success(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_run_in_threadpool(func: Callable[..., Any], *args: Any) -> Any:
-        assert func is parser.parse_and_enrich
+        assert func is parse_and_enrich
         return _make_parse_result()
 
     monkeypatch.setattr(parser, "run_in_threadpool", fake_run_in_threadpool)
@@ -158,7 +158,7 @@ def test_parser_route_error_mapping(
 
 def test_header_route_success(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake_run_in_threadpool(func: Callable[..., Any], *args: Any) -> Any:
-        assert func is headers.join_and_rechunk
+        assert func is join_and_rechunk
         return _make_header_result()
 
     monkeypatch.setattr(headers, "run_in_threadpool", fake_run_in_threadpool)
