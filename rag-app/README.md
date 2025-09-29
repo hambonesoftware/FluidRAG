@@ -75,6 +75,13 @@ Artifacts can be streamed back without loading them into memory. The route enfor
 curl -s -G http://127.0.0.1:8000/pipeline/artifacts --data-urlencode "path=<absolute-or-relative-artifact>" -o artifact.json
 ```
 
+## Observability & Profiling
+
+- Every HTTP request now receives a deterministic `X-Correlation-ID` response header. Downstream services can propagate this value to stitch spans together. Custom correlation IDs can be supplied via the request header of the same name.
+- Structured JSON logs record request metadata, span durations (`duration_ms`), and status codes. These logs are emitted through the shared `fluidrag` logger and can be piped into analysis tools (`jq`, `bunyan`, etc.).
+- Pipeline stages (`upload.ensure_normalized`, `parser.parse_and_enrich`, `chunk.run_uf_chunking`, `headers.join_and_rechunk`, `passes.run_all`) produce audit records with correlation IDs and elapsed milliseconds written to `pipeline.audit.json`. Integration tests read this payload to assert stage coverage.
+- The offline LLM adapter now surfaces timing spans for synthesized completions and batched embeddings, allowing the profiling harness to attribute time across stages even when network calls are disabled.
+
 ## Frontend MVVM Dashboard
 
 - **Upload panel** — enter a path or document identifier and click **Run Pipeline**. The upload view-model persists the most recent `doc_id` in `localStorage` and surfaces job errors inline.
@@ -142,8 +149,8 @@ ruff check backend/app --fix
 ruff format backend/app
 ```
 
-The curated fixtures ensure tests remain deterministic offline. The backend suite now spans 96 tests with
-approximately 91% line coverage. All commands above are wired into the `pre-commit` configuration along
+The curated fixtures ensure tests remain deterministic offline. The backend suite now spans triple-digit
+coverage with structured logging and audit instrumentation validated under pytest. All commands above are wired into the `pre-commit` configuration along
 with a guard that fails when any source file exceeds 500 lines.
 
 ## Configuration
@@ -157,6 +164,13 @@ Key variables for the ingestion pipeline:
 - `PARSER_TIMEOUT_SECONDS` — timeout applied to each parser fan-out task.
 - `CHUNK_TARGET_TOKENS` — target token count for each UF chunk (defaults to 90).
 - `CHUNK_TOKEN_OVERLAP` — token overlap budget between adjacent chunks (defaults to 12).
+- `OPENROUTER_TIMEOUT_SECONDS` — request timeout applied to chat, stream, and embedding calls (defaults to 45s).
+- `OPENROUTER_MAX_RETRIES` — number of exponential backoff attempts for OpenRouter (defaults to 3).
+- `OPENROUTER_BACKOFF_BASE_SECONDS` / `OPENROUTER_BACKOFF_CAP_SECONDS` — configure the exponential backoff curve for OpenRouter requests.
+- `OPENROUTER_STREAM_IDLE_TIMEOUT_SECONDS` — maximum idle duration tolerated for streaming responses before aborting.
+- `VECTOR_BATCH_SIZE` and `LLM_BATCH_SIZE` — control offline embedding/chunk batching to tune CPU workload.
+- `AUDIT_RETENTION_DAYS` — retention window for stage audit artifacts.
+- `STORAGE_STREAM_CHUNK_SIZE` — chunk size (bytes) used by streaming artifact responses.
 
 Key variables for the OpenRouter integration:
 

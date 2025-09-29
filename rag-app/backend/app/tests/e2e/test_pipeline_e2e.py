@@ -43,7 +43,8 @@ def test_pipeline_run_endpoint(
     assert status_response.status_code == 200
     status_payload = status_response.json()
     assert status_payload["doc_id"] == doc_id
-    assert status_payload["pipeline_audit"]["stage"] == "pipeline.run"
+    assert status_payload["pipeline_audit"]["pipeline"]["stage"] == "pipeline.run"
+    assert status_payload["pipeline_audit"]["stages"], "expected pipeline stages"
     assert set(status_payload["passes"].keys()) == set(expected_sections["passes"])
 
     results_response = client.get(f"/pipeline/results/{doc_id}")

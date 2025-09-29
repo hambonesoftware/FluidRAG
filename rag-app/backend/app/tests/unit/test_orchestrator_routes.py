@@ -152,13 +152,17 @@ def test_pipeline_run_creates_manifest_and_results(
     payload = response.json()
     assert payload["doc_id"] == doc_id
     assert payload["passes"]["passes"]["mechanical"].endswith("mechanical.json")
-    assert Path(payload["audit_path"]).exists(), "pipeline audit should be written"
+    audit_path = Path(payload["audit_path"])
+    assert audit_path.exists(), "pipeline audit should be written"
+    audit_payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert audit_payload["pipeline"]["stage"] == "pipeline.run"
+    assert audit_payload["stages"], "expected stage records"
 
     status_response = client.get(f"/pipeline/status/{doc_id}")
     assert status_response.status_code == 200
     status_payload = status_response.json()
     assert status_payload["passes"] == {"mechanical": str(pass_result_path)}
-    assert status_payload["pipeline_audit"]["stage"] == "pipeline.run"
+    assert status_payload["pipeline_audit"]["pipeline"]["stage"] == "pipeline.run"
 
     results_response = client.get(f"/pipeline/results/{doc_id}")
     assert results_response.status_code == 200

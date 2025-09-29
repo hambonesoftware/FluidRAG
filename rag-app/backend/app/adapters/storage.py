@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
 from typing import Any
 
+from ..config import get_settings
 from ..util.logging import get_logger
 
 logger = get_logger(__name__)
@@ -65,16 +66,19 @@ def read_jsonl(path: str) -> list[dict[str, Any]]:
     return rows
 
 
-async def stream_read(path: str, chunk_size: int = 65536) -> AsyncIterator[bytes]:
+async def stream_read(path: str, chunk_size: int | None = None) -> AsyncIterator[bytes]:
     """Async stream file bytes in chunks from disk."""
 
     target = Path(path)
     if not target.exists():
         raise FileNotFoundError(path)
 
+    effective_chunk = (
+        chunk_size if chunk_size is not None else get_settings().storage_chunk_bytes()
+    )
     with target.open("rb") as handle:
         while True:
-            chunk = await asyncio.to_thread(handle.read, chunk_size)
+            chunk = await asyncio.to_thread(handle.read, effective_chunk)
             if not chunk:
                 break
             yield chunk

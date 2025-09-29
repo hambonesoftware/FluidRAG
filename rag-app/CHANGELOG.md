@@ -1,5 +1,23 @@
 # Changelog
 
+## [Phase 10] - 2025-10-02
+### Added
+- Request-scoped observability middleware emitting `X-Correlation-ID` headers, structured JSON request logs, and timing spans for the FastAPI backend.
+- Configurable OpenRouter timeouts, retry backoff schedules, idle stream thresholds, and offline LLM/vector batch sizing surfaced through `backend/app/config.py` helpers.
+- Stage audit enrichment across parser, chunk, header, and pass controllers with duration capture, correlation IDs, and span logging hooks.
+- Comprehensive unit coverage for logging correlation context, audit helpers, OpenRouter retry logic, configuration overrides, and middleware behaviour.
+
+### Changed
+- Pipeline orchestrator now records per-stage audit metadata and writes aggregated `pipeline.audit.json` payloads, with status endpoints returning the structured audit envelope.
+- Offline LLM and storage adapters respect the new tuning knobs while emitting span logs for completions and embedding batches.
+- README updated with observability guidance and new environment variables governing performance tuning.
+
+### Documentation
+- Phase 10 outcome report summarising observability additions, test coverage, and configuration changes.
+
+### Verification
+- Pytest suite extended with correlation/middleware coverage while preserving offline determinism; lint, mypy, and coverage gates remain enforced.
+
 ## [Phase 9] - 2025-10-01
 ### Added
 - Curated backend test fixtures under `backend/app/tests/data/` including an engineering text sample

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ from ...config import get_settings
 from ...contracts.headers import HeaderArtifact, HeaderChunk, SectionAssignment
 from ...util.audit import stage_record
 from ...util.errors import AppError, NotFoundError, ValidationError
-from ...util.logging import get_logger
+from ...util.logging import get_logger, log_span
 from .packages import (
     find_header_candidates,
     rechunk_by_headers,
@@ -95,79 +96,90 @@ def join_and_rechunk(doc_id: str, chunks_artifact: str) -> HeaderJoinInternal:
     artifact_root = Path(settings.artifact_root_path) / doc_id
     artifact_root.mkdir(parents=True, exist_ok=True)
 
+    stage_start = time.perf_counter()
     try:
-        candidates = find_header_candidates(str(chunks_path))
-        candidates = score_typo(candidates)
-        stitched = stitch_headers(candidates)
-        repaired = repair_sequence(stitched)
-        if not repaired:
-            raise AppError("no headers detected")
-        repaired.sort(
-            key=lambda item: (
-                int(item.get("chunk_index", 0)),
-                int(item.get("sentence_start", 0)),
+        with log_span(
+            "headers.join_and_rechunk",
+            logger=logger,
+            extra={"doc_id": doc_id},
+        ) as span_meta:
+            candidates = find_header_candidates(str(chunks_path))
+            candidates = score_typo(candidates)
+            stitched = stitch_headers(candidates)
+            repaired = repair_sequence(stitched)
+            if not repaired:
+                raise AppError("no headers detected")
+            repaired.sort(
+                key=lambda item: (
+                    int(item.get("chunk_index", 0)),
+                    int(item.get("sentence_start", 0)),
+                )
             )
-        )
-        assigned = _assign_header_ids(doc_id, repaired)
-        header_models = [
-            HeaderArtifact(
-                header_id=header["header_id"],
-                doc_id=header["doc_id"],
-                text=header.get("text", ""),
-                level=int(header.get("level", 1) or 1),
-                score=float(header.get("score", 0.0)),
-                recovered=bool(header.get("recovered", False)),
-                ordinal=header.get("ordinal"),
-                section_key=str(header.get("section_key", header["header_id"])),
-                chunk_ids=[str(cid) for cid in header.get("chunk_ids", []) if cid],
-                sentence_start=int(header.get("sentence_start", 0)),
-                sentence_end=int(header.get("sentence_end", 0)),
+            assigned = _assign_header_ids(doc_id, repaired)
+            header_models = [
+                HeaderArtifact(
+                    header_id=header["header_id"],
+                    doc_id=header["doc_id"],
+                    text=header.get("text", ""),
+                    level=int(header.get("level", 1) or 1),
+                    score=float(header.get("score", 0.0)),
+                    recovered=bool(header.get("recovered", False)),
+                    ordinal=header.get("ordinal"),
+                    section_key=str(header.get("section_key", header["header_id"])),
+                    chunk_ids=[str(cid) for cid in header.get("chunk_ids", []) if cid],
+                    sentence_start=int(header.get("sentence_start", 0)),
+                    sentence_end=int(header.get("sentence_end", 0)),
+                )
+                for header in assigned
+            ]
+            headers_payload = [model.model_dump() for model in header_models]
+            header_chunks_raw = rechunk_by_headers(str(chunks_path), assigned)
+            header_chunks = [HeaderChunk(**row) for row in header_chunks_raw]
+            section_map = _build_section_map(header_chunks)
+
+            headers_path = artifact_root / "headers.json"
+            section_map_path = artifact_root / "section_map.json"
+            header_chunks_path = artifact_root / "header_chunks.jsonl"
+            audit_path = artifact_root / "headers.audit.json"
+
+            _persist_json(headers_path, headers_payload)
+            _persist_json(section_map_path, section_map)
+            _persist_jsonl(
+                header_chunks_path, [chunk.model_dump() for chunk in header_chunks]
             )
-            for header in assigned
-        ]
-        headers_payload = [model.model_dump() for model in header_models]
-        header_chunks_raw = rechunk_by_headers(str(chunks_path), assigned)
-        header_chunks = [HeaderChunk(**row) for row in header_chunks_raw]
-        section_map = _build_section_map(header_chunks)
+            recovered_count = sum(1 for header in header_models if header.recovered)
+            duration_ms = (time.perf_counter() - stage_start) * 1000.0
+            span_meta["headers"] = len(header_models)
+            span_meta["recovered"] = recovered_count
+            _persist_json(
+                audit_path,
+                stage_record(
+                    stage="headers.join",
+                    status="ok",
+                    doc_id=doc_id,
+                    headers=len(header_models),
+                    recovered=recovered_count,
+                    duration_ms=duration_ms,
+                ),
+            )
 
-        headers_path = artifact_root / "headers.json"
-        section_map_path = artifact_root / "section_map.json"
-        header_chunks_path = artifact_root / "header_chunks.jsonl"
-        audit_path = artifact_root / "headers.audit.json"
+            logger.info(
+                "headers.join.success",
+                extra={
+                    "doc_id": doc_id,
+                    "headers": len(header_models),
+                    "recovered": recovered_count,
+                },
+            )
 
-        _persist_json(headers_path, headers_payload)
-        _persist_json(section_map_path, section_map)
-        _persist_jsonl(
-            header_chunks_path, [chunk.model_dump() for chunk in header_chunks]
-        )
-        _persist_json(
-            audit_path,
-            stage_record(
-                stage="headers.join",
-                status="ok",
+            return HeaderJoinInternal(
                 doc_id=doc_id,
-                headers=len(header_models),
-                recovered=sum(1 for header in header_models if header.recovered),
-            ),
-        )
-
-        logger.info(
-            "headers.join.success",
-            extra={
-                "doc_id": doc_id,
-                "headers": len(header_models),
-                "recovered": sum(1 for header in header_models if header.recovered),
-            },
-        )
-
-        return HeaderJoinInternal(
-            doc_id=doc_id,
-            headers_path=str(headers_path),
-            section_map_path=str(section_map_path),
-            header_chunks_path=str(header_chunks_path),
-            header_count=len(header_models),
-            recovered_count=sum(1 for header in header_models if header.recovered),
-        )
+                headers_path=str(headers_path),
+                section_map_path=str(section_map_path),
+                header_chunks_path=str(header_chunks_path),
+                header_count=len(header_models),
+                recovered_count=recovered_count,
+            )
     except Exception as exc:  # noqa: BLE001
         handle_header_errors(exc)
         raise

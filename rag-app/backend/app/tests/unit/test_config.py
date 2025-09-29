@@ -69,3 +69,21 @@ def test_address_and_artifact_paths(
     reset_settings_cache()
     settings = get_settings()
     assert settings.artifact_root_path == absolute_root
+
+
+def test_openrouter_retry_schedule(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_MAX_RETRIES", "2")
+    monkeypatch.setenv("OPENROUTER_BACKOFF_BASE_SECONDS", "0.25")
+    monkeypatch.setenv("OPENROUTER_BACKOFF_CAP_SECONDS", "1.0")
+    reset_settings_cache()
+    settings = get_settings()
+    assert settings.openrouter_retry_schedule() == [0.0, 0.25, 0.5]
+
+
+def test_audit_and_storage_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AUDIT_RETENTION_DAYS", "21")
+    monkeypatch.setenv("STORAGE_STREAM_CHUNK_SIZE", "2048")
+    reset_settings_cache()
+    settings = get_settings()
+    assert settings.audit_retention_window().days == 21
+    assert settings.storage_chunk_bytes() == 2048
