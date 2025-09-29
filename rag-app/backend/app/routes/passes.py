@@ -7,8 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 
 from ..config import get_settings
+from ..services.rag_pass_service import PassJobs, run_all
+from ..util.errors import AppError, NotFoundError, ValidationError
 from ..util.logging import get_logger
 
 logger = get_logger(__name__)
@@ -19,6 +23,13 @@ router = APIRouter(prefix="/passes", tags=["passes"])
 def _passes_dir(doc_id: str) -> Path:
     settings = get_settings()
     return Path(settings.artifact_root_path) / doc_id / "passes"
+
+
+class RunPassesRequest(BaseModel):
+    """Request payload for executing passes."""
+
+    doc_id: str
+    rechunk_artifact: str
 
 
 @router.get("/{doc_id}", response_model=dict[str, Any])
@@ -73,4 +84,20 @@ async def get_pass(doc_id: str, pass_name: str) -> dict[str, Any]:
     raise HTTPException(status_code=500, detail="invalid pass payload")
 
 
-__all__ = ["list_passes", "get_pass"]
+@router.post("/run", response_model=PassJobs)
+async def run_passes(request: RunPassesRequest) -> PassJobs:
+    """Execute the suite of structured passes for a document."""
+
+    try:
+        return await run_in_threadpool(
+            run_all, request.doc_id, request.rechunk_artifact
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AppError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+__all__ = ["list_passes", "get_pass", "run_passes"]

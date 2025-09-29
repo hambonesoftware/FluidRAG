@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from ...config import get_settings
 from ...routes import passes as passes_routes
+from ...services.rag_pass_service import PassJobs
 
 
 def _artifact_root() -> Path:
@@ -136,3 +137,41 @@ def test_get_pass_payload_not_dict(tmp_path: Path) -> None:
     with pytest.raises(HTTPException) as exc:
         asyncio.run(passes_routes.get_pass(doc_id, "raw"))
     assert exc.value.status_code == 500
+
+
+def test_run_passes_executes_controller(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, object] = {}
+
+    async def fake_threadpool(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        return func(*args, **kwargs)
+
+    def fake_run_all(doc_id: str, artifact: str) -> PassJobs:
+        called["doc_id"] = doc_id
+        called["artifact"] = artifact
+        return PassJobs(doc_id=doc_id, manifest_path="manifest.json", passes={})
+
+    monkeypatch.setattr(passes_routes, "run_in_threadpool", fake_threadpool)
+    monkeypatch.setattr(passes_routes, "run_all", fake_run_all)
+
+    request = passes_routes.RunPassesRequest(
+        doc_id="doc-123", rechunk_artifact="/tmp/header-chunks.json"
+    )
+    payload = asyncio.run(passes_routes.run_passes(request))
+
+    assert payload.doc_id == "doc-123"
+    assert called["artifact"] == "/tmp/header-chunks.json"
+
+
+def test_run_passes_maps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_threadpool(func, *args, **kwargs):  # type: ignore[no-untyped-def]
+        raise passes_routes.ValidationError("bad input")
+
+    monkeypatch.setattr(passes_routes, "run_in_threadpool", fake_threadpool)
+
+    request = passes_routes.RunPassesRequest(
+        doc_id="doc-123", rechunk_artifact="missing.json"
+    )
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(passes_routes.run_passes(request))
+
+    assert exc.value.status_code == 400
