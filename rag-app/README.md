@@ -1,212 +1,195 @@
-Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults. Phase 3 introduces the upload normalization + parser fan-out/fan-in services, FastAPI routes, and an offline benchmark harness. Phase 7 wires the orchestrator API layer so the entire pipeline can be triggered and inspected through dedicated routes. Phase 9 layers in curated backend fixtures and an expanded test suite that runs the full pipeline end-to-end.
+# FluidRAG — Release Readiness
 
-## Getting Started
+FluidRAG is a FastAPI-powered retrieval-augmented generation pipeline with an MVVM
+frontend, OpenRouter client, hybrid retrieval, and deterministic offline harness.
+Phase 11 focuses on documentation, handover tooling, and a smooth release workflow
+while preserving the architecture and behaviours delivered in phases 1–10.
+
+## Quickstart
 
 ```bash
+cd rag-app
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt -r requirements-dev.txt
 cp .env.example .env
 pre-commit install
-python run.py  # launches FastAPI on :8000 and static frontend on :3000
+python run.py  # FastAPI on :8000, static frontend on :3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to load the frontend dashboard, trigger pipeline runs, monitor progress, and download artifacts.
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000) to access the dashboard. The
+frontend exposes upload controls, pipeline status polling, and pass result views
+with offline-aware messaging.
 
-## Upload & Parser Pipeline
-
-With the backend running:
+To verify release readiness end-to-end, run the scripted checklist:
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/upload/normalize \
-  -H 'Content-Type: application/json' \
-  -d '{"file_id": "Sample document text with [image:diagram] and https://example.com"}'
+python scripts/release_checklist.py
 ```
 
-The response includes the generated `doc_id`, `normalize.json` path, and manifest. Feed that artifact into the parser:
+A zero exit code indicates all required docs and scripts are present.
 
-```bash
-curl -s -X POST http://127.0.0.1:8000/parser/enrich \
-  -H 'Content-Type: application/json' \
-  -d '{"doc_id": "<doc_id>", "normalize_artifact": "<normalize_path>"}'
-```
+## Environment Setup
 
-This triggers the asyncio fan-out (text/tables/images/links/language) and fan-in merge, producing `parse.enriched.json` under the artifact root.
+All configuration is driven by `backend.app.config.Settings`. Copy `.env.example`
+into `.env` and customise as needed.
 
-## Chunk Service & Vector Indexes
+### Core runtime toggles
 
-After running the parser, invoke the chunk service to generate UF chunks and build local indexes:
+- `FLUIDRAG_OFFLINE` — defaults to `true` to disable outbound network calls.
+- `ARTIFACT_ROOT` — where the pipeline writes manifests and audit artifacts.
+- `BACKEND_HOST`/`BACKEND_PORT` — FastAPI bind address (default `127.0.0.1:8000`).
+- `FRONTEND_PORT` — static site port (default `3000`).
+- `LOG_LEVEL` — log verbosity for the shared `fluidrag` logger.
 
-```bash
-curl -s -X POST http://127.0.0.1:8000/chunk/uf \
-  -H 'Content-Type: application/json' \
-  -d '{"doc_id": "<doc_id>", "normalize_artifact": "<parse_enriched_path>"}'
-```
+### Ingestion & retrieval knobs
 
-The response echoes the chunk artifact path (`uf_chunks.jsonl`) and, if enabled, the index manifest. The chunk controller writes a `chunk.audit.json` record alongside the JSONL file and persists sparse+dense index metadata when offline-safe hashing is enabled by default.
+- `UPLOAD_OCR_THRESHOLD` — coverage threshold before OCR fallback.
+- `PARSER_TIMEOUT_SECONDS` — timeout per parser fan-out task.
+- `CHUNK_TARGET_TOKENS` / `CHUNK_TOKEN_OVERLAP` — UF chunk sizing.
+- `VECTOR_BATCH_SIZE` / `LLM_BATCH_SIZE` — offline batching controls.
+- `AUDIT_RETENTION_DAYS` — retention window for stage audit artifacts.
+- `STORAGE_STREAM_CHUNK_SIZE` — streaming chunk size for artifact downloads.
 
-## Pipeline Orchestrator & Artifact Access
+### OpenRouter integration
 
-With Phase 7 the orchestrator coordinates every stage:
+Set these when `FLUIDRAG_OFFLINE=false`:
 
-```bash
-curl -s -X POST http://127.0.0.1:8000/pipeline/run \
-  -H 'Content-Type: application/json' \
-  -d '{"file_name": "<path-or-handle-to-source>"}'
-```
+- `OPENROUTER_API_KEY`
+- `OPENROUTER_HTTP_REFERER`
+- `OPENROUTER_APP_TITLE`
+- `OPENROUTER_BASE_URL` (optional override)
+- `OPENROUTER_TIMEOUT_SECONDS`, `OPENROUTER_MAX_RETRIES`,
+  `OPENROUTER_BACKOFF_BASE_SECONDS`, `OPENROUTER_BACKOFF_CAP_SECONDS`, and
+  `OPENROUTER_STREAM_IDLE_TIMEOUT_SECONDS` for retry/backoff control.
 
-The response bundles the normalized, parsed, chunked, header-joined, and pass metadata along with the audit record location written to `<ARTIFACT_ROOT>/<doc_id>/pipeline.audit.json`.
+## Running the Pipeline
 
-Query the aggregated status for a document (manifest snapshot + audit trail):
+### Offline demo script
 
-```bash
-curl -s http://127.0.0.1:8000/pipeline/status/<doc_id>
-```
-
-Fetch the pass manifest and fully validated pass payloads:
-
-```bash
-curl -s http://127.0.0.1:8000/pipeline/results/<doc_id>
-```
-
-Artifacts can be streamed back without loading them into memory. The route enforces that all paths stay within the configured `ARTIFACT_ROOT`.
-
-```bash
-curl -s -G http://127.0.0.1:8000/pipeline/artifacts --data-urlencode "path=<absolute-or-relative-artifact>" -o artifact.json
-```
-
-## Observability & Profiling
-
-- Every HTTP request now receives a deterministic `X-Correlation-ID` response header. Downstream services can propagate this value to stitch spans together. Custom correlation IDs can be supplied via the request header of the same name.
-- Structured JSON logs record request metadata, span durations (`duration_ms`), and status codes. These logs are emitted through the shared `fluidrag` logger and can be piped into analysis tools (`jq`, `bunyan`, etc.).
-- Pipeline stages (`upload.ensure_normalized`, `parser.parse_and_enrich`, `chunk.run_uf_chunking`, `headers.join_and_rechunk`, `passes.run_all`) produce audit records with correlation IDs and elapsed milliseconds written to `pipeline.audit.json`. Integration tests read this payload to assert stage coverage.
-- The offline LLM adapter now surfaces timing spans for synthesized completions and batched embeddings, allowing the profiling harness to attribute time across stages even when network calls are disabled.
-
-## Frontend MVVM Dashboard
-
-- **Upload panel** — enter a path or document identifier and click **Run Pipeline**. The upload view-model persists the most recent `doc_id` in `localStorage` and surfaces job errors inline.
-- **Pipeline monitor** — the dashboard polls `/pipeline/status/{doc_id}` and `/pipeline/results/{doc_id}` until the audit record reports completion. Progress, last updated timestamps, and the active document id are shown in real time.
-- **Pass results** — each pass renders its answer, citation list, and top retrieval traces. Download buttons call `/pipeline/artifacts` while respecting the offline flag.
-- **Offline mode** — when the `<meta name="fluidrag-offline">` flag is `true`, the UI short-circuits network calls and emits banner messaging while still allowing users to explore previously cached results.
-
-Reloading the page restores the last processed document and resumes polling automatically as long as offline mode remains disabled.
-
-## Benchmark Harness
-
-To measure offline performance end-to-end:
-
-```bash
-python rag-app/scripts/bench_phase3.py --iterations 5
-```
-
-The script reports p50/p95 latencies for upload, parser, and combined stages while respecting the offline flag.
-
-## Curated Test Fixtures & Offline Pipeline
-
-Phase 9 ships a deterministic engineering document under
-`backend/app/tests/data/documents/engineering_overview.txt` alongside JSON fixtures. The
-pytest suite materialises a pseudo-PDF from this text at runtime to exercise the upload →
-parser → chunk → header → pass stages without relying on binary artifacts or network calls.
-
-To manually run the same flow while the backend is running:
-
-First, materialise the pseudo-PDF locally (mirroring the pytest fixture):
+Use the curated engineering document shipped with the test fixtures to trigger
+the orchestrator without external dependencies:
 
 ```bash
 python - <<'PY'
 from pathlib import Path
-source = Path('rag-app/backend/app/tests/data/documents/engineering_overview.txt')
-target = Path('rag-app/backend/app/tests/data/tmp/engineering_overview.pdf')
+source = Path('backend/app/tests/data/documents/engineering_overview.txt')
+target = Path('backend/app/tests/data/tmp/engineering_overview.pdf')
 target.parent.mkdir(parents=True, exist_ok=True)
 target.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
 print(target)
 PY
+
+python scripts/offline_pipeline_demo.py backend/app/tests/data/tmp/engineering_overview.pdf --json
 ```
 
-Then trigger the pipeline using the generated path:
+The demo script calls `/pipeline/run`, polls `/pipeline/status/{doc_id}` until the
+audit reports success, and finally fetches `/pipeline/results/{doc_id}`. The JSON
+payload includes the manifest, audit envelope, and pass metadata for downstream
+inspection.
+
+### Manual API calls
+
+When the backend is running you can interact with the services directly:
 
 ```bash
+# Normalize content
+curl -s -X POST http://127.0.0.1:8000/upload/normalize \
+  -H 'Content-Type: application/json' \
+  -d '{"file_id": "Sample document text with [image:diagram] and https://example.com"}'
+
+# Parser enrichment
+curl -s -X POST http://127.0.0.1:8000/parser/enrich \
+  -H 'Content-Type: application/json' \
+  -d '{"doc_id": "<doc_id>", "normalize_artifact": "<normalize_path>"}'
+
+# Chunking
+curl -s -X POST http://127.0.0.1:8000/chunk/uf \
+  -H 'Content-Type: application/json' \
+  -d '{"doc_id": "<doc_id>", "normalize_artifact": "<parse_enriched_path>"}'
+
+# Pipeline orchestrator
 curl -s -X POST http://127.0.0.1:8000/pipeline/run \
   -H 'Content-Type: application/json' \
-  -d '{"file_name": "rag-app/backend/app/tests/data/tmp/engineering_overview.pdf"}'
+  -d '{"file_name": "<path-or-handle-to-source>"}'
 
-# Inspect status and results
+# Status and results
 curl -s http://127.0.0.1:8000/pipeline/status/<doc_id>
 curl -s http://127.0.0.1:8000/pipeline/results/<doc_id>
+
+# Stream an artifact (guards ensure paths stay within ARTIFACT_ROOT)
+curl -s -G http://127.0.0.1:8000/pipeline/artifacts --data-urlencode "path=<artifact>" -o artifact.json
 ```
 
-Artifacts, manifests, and pass payloads will be written beneath the configured `ARTIFACT_ROOT` (defaults to `rag-app/data/artifacts`).
+Artifacts, manifests, and pass payloads live beneath `ARTIFACT_ROOT` (defaults to
+`data/artifacts`).
 
-## Testing & Linting
+## Quality Gates
 
-Run from the repository root (`rag-app/`):
+Run these from the repository root (`rag-app/`) before cutting a release:
 
 ```bash
 pytest -q --maxfail=1 --disable-warnings
 pytest --cov=backend/app --cov-report=term-missing
 mypy backend/app --pretty --show-error-codes
-ruff check backend/app --fix
-ruff format backend/app
+ruff check backend/app tests --fix
+ruff format backend/app tests
+python scripts/release_checklist.py --json
 ```
 
-The curated fixtures ensure tests remain deterministic offline. The backend suite now spans triple-digit
-coverage with structured logging and audit instrumentation validated under pytest. All commands above are wired into the `pre-commit` configuration along
-with a guard that fails when any source file exceeds 500 lines.
+Node-based frontend tests live under `tests/phase_8`; `pytest.ini` ensures they
+run alongside backend suites when Node.js is available (Node 20+ recommended).
 
-## Configuration
+## Troubleshooting
 
-The application reads environment variables via `backend.app.config.Settings`. Copy `.env.example` to `.env` to override defaults for ports, reload mode, logging level, or the offline policy.
+- **`node` not found during frontend tests** — install Node.js 18+ and ensure it
+  is on your `PATH`. The CI image uses Node 20.
+- **`document not found` when running the demo script** — create the pseudo-PDF
+  using the snippet above or provide an absolute path to an accessible file.
+- **Offline mode blocking external calls** — leave `FLUIDRAG_OFFLINE=true` during
+  tests. Set it to `false` only when ready to hit OpenRouter with valid headers.
+- **Artifacts missing** — verify `ARTIFACT_ROOT` points to a writable location and
+  that the backend has permission to create directories.
+- **Coverage shortfalls** — ensure new modules include targeted tests under
+  `backend/app/tests` or `tests/phase_11/` before re-running quality gates.
 
-Key variables for the ingestion pipeline:
+## Observability & Profiling
 
-- `ARTIFACT_ROOT` — directory where `normalize.json` and `parse.enriched.json` are written (defaults to `rag-app/data/artifacts`).
-- `UPLOAD_OCR_THRESHOLD` — minimum average coverage (0–1) before the upload controller triggers OCR fallback.
-- `PARSER_TIMEOUT_SECONDS` — timeout applied to each parser fan-out task.
-- `CHUNK_TARGET_TOKENS` — target token count for each UF chunk (defaults to 90).
-- `CHUNK_TOKEN_OVERLAP` — token overlap budget between adjacent chunks (defaults to 12).
-- `OPENROUTER_TIMEOUT_SECONDS` — request timeout applied to chat, stream, and embedding calls (defaults to 45s).
-- `OPENROUTER_MAX_RETRIES` — number of exponential backoff attempts for OpenRouter (defaults to 3).
-- `OPENROUTER_BACKOFF_BASE_SECONDS` / `OPENROUTER_BACKOFF_CAP_SECONDS` — configure the exponential backoff curve for OpenRouter requests.
-- `OPENROUTER_STREAM_IDLE_TIMEOUT_SECONDS` — maximum idle duration tolerated for streaming responses before aborting.
-- `VECTOR_BATCH_SIZE` and `LLM_BATCH_SIZE` — control offline embedding/chunk batching to tune CPU workload.
-- `AUDIT_RETENTION_DAYS` — retention window for stage audit artifacts.
-- `STORAGE_STREAM_CHUNK_SIZE` — chunk size (bytes) used by streaming artifact responses.
+The backend emits structured JSON logs with correlation IDs and span durations.
+Each pipeline stage writes audit records (`pipeline.audit.json`) capturing
+per-stage timings. Use `jq` or log aggregators to analyse runtime behaviour.
 
-Key variables for the OpenRouter integration:
+## Release Tooling & Reports
 
-- `FLUIDRAG_OFFLINE` (default: `true`) prevents any outbound network traffic when enabled. Leave it `true` for local unit testing; flip to `false` only when you are ready to hit OpenRouter.
-- `OPENROUTER_API_KEY` — required bearer token for OpenRouter requests.
-- `OPENROUTER_HTTP_REFERER` — URL of the site/project registered with OpenRouter.
-- `OPENROUTER_APP_TITLE` — human-readable name sent in the `X-Title` header.
-- `OPENROUTER_BASE_URL` — optional override for the API endpoint (defaults to `https://openrouter.ai/api/v1`).
+- `scripts/release_checklist.py` — validates docs, templates, and backlog files.
+  Use `--json` for machine-readable output or `--root` to target alternative
+  directories.
+- `scripts/offline_pipeline_demo.py` — drives the orchestrator endpoints end-to-end
+  for smoke testing and demonstrations.
+- `reports/phase_11_outcome.md` — summarises checklist completion, quality gates,
+  and migration status for this phase.
+- `reports/post_phase_backlog.md` — triaged backlog of enhancements to consider
+  after release (e.g., UI polish, additional retrieval metrics, deployment work).
 
-## OpenRouter Client Smoke Test
+## Frontend MVVM Dashboard
 
-1. Ensure `FLUIDRAG_OFFLINE=false` in your local `.env` and populate the OpenRouter headers listed above.
-2. Run the quick chat smoke test (streams tokens to stdout):
+The dashboard remains fully offline-aware:
 
-   ```bash
-   python - <<'PY'
-   import asyncio
-   from backend.app.llm.clients.openrouter import chat_stream_async
+- **Upload panel** — triggers `/pipeline/run`, persists the last `doc_id`, and
+  surfaces validation errors inline.
+- **Pipeline monitor** — polls `/pipeline/status/{doc_id}` and
+  `/pipeline/results/{doc_id}` until the pipeline completes, updating progress and
+  timestamps live.
+- **Results view** — renders pass answers, citations, and artifact links while
+  respecting offline mode. Download actions dispatch DOM events for analytics.
 
-   async def main() -> None:
-       async for chunk in chat_stream_async(
-           "openrouter/auto",
-           [{"role": "user", "content": "Say hello to FluidRAG"}],
-           temperature=0.2,
-           retries=1,
-       ):
-           if chunk["type"] == "delta":
-               content = chunk["data"].get("delta", {}).get("content")
-               if content:
-                   print(content, end="", flush=True)
-   asyncio.run(main())
-   PY
-   ```
+Reloading the page restores the most recent document and resumes polling as long
+as the backend remains reachable.
 
-3. To test embeddings offline, run `pytest -q` which exercises the retry, masking, and idle timeout handling without real network calls.
+## Additional Resources
 
-## Next Steps
-
-Future phases will flesh out the service routes, adapters, and frontend MVVM components. With the OpenRouter client in place, downstream services can rely on deterministic retries, masked logging, and streaming primitives without duplicating integration logic.
+- `CHANGELOG.md` — release history with phase-by-phase summaries.
+- `reports/phase_*` — historical outcome and verification reports.
+- `scripts/bench_phase3.py` — micro-benchmark harness for upload and parser stages.
+- `backend/app/tests/` — exhaustive unit, integration, and e2e coverage for the
+  pipeline services and routes.
