@@ -59,6 +59,46 @@ export class ApiClient {
     });
   }
 
+  /** POST upload normalization. */
+  async normalizeUpload({ fileId, fileName } = {}) {
+    return this._request("/upload/normalize", {
+      method: "POST",
+      body: JSON.stringify({ file_id: fileId, file_name: fileName }),
+    });
+  }
+
+  /** POST parser enrichment. */
+  async parseDocument({ docId, normalizeArtifact }) {
+    return this._request("/parser/enrich", {
+      method: "POST",
+      body: JSON.stringify({ doc_id: docId, normalize_artifact: normalizeArtifact }),
+    });
+  }
+
+  /** POST chunk generation. */
+  async chunkDocument({ docId, normalizeArtifact }) {
+    return this._request("/chunk/uf", {
+      method: "POST",
+      body: JSON.stringify({ doc_id: docId, normalize_artifact: normalizeArtifact }),
+    });
+  }
+
+  /** POST header detection and rechunking. */
+  async joinHeaders({ docId, chunksArtifact }) {
+    return this._request("/headers/join", {
+      method: "POST",
+      body: JSON.stringify({ doc_id: docId, chunks_artifact: chunksArtifact }),
+    });
+  }
+
+  /** POST pass execution. */
+  async runPasses({ docId, rechunkArtifact }) {
+    return this._request("/passes/run", {
+      method: "POST",
+      body: JSON.stringify({ doc_id: docId, rechunk_artifact: rechunkArtifact }),
+    });
+  }
+
   /** GET status. */
   async status(docId) {
     return this._request(`/pipeline/status/${encodeURIComponent(docId)}`);

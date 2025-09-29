@@ -63,6 +63,94 @@
             <div class="pipeline-pass-results" data-pass-results></div>
           </section>
         </div>
+        <section class="stage-runner" data-stage-runner-root>
+          <header class="stage-runner-header">
+            <h3>Manual Stage Controls</h3>
+            <p>Trigger individual ingestion stages when you need to inspect intermediates.</p>
+          </header>
+          <div class="stage-runner-doc">
+            <span class="stage-label">Active document</span>
+            <span class="stage-value" data-stage-doc>—</span>
+          </div>
+          <div class="stage-runner-grid">
+            <article class="stage-card">
+              <header>
+                <h4>1. Upload</h4>
+                <p>Normalize the source file and emit <code>normalize.json</code>.</p>
+              </header>
+              <button type="button" data-stage-upload-run>Run Upload</button>
+              <p class="status" data-stage-upload-status>Idle</p>
+              <dl class="stage-details" data-stage-upload-details hidden>
+                <div class="detail-row">
+                  <dt>Doc ID</dt>
+                  <dd data-stage-upload-doc>—</dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Normalized</dt>
+                  <dd data-stage-upload-path>—</dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Manifest</dt>
+                  <dd data-stage-upload-manifest>—</dd>
+                </div>
+              </dl>
+            </article>
+            <article class="stage-card">
+              <header>
+                <h4>2. Preprocess</h4>
+                <p>Parse the document and generate universal file chunks.</p>
+              </header>
+              <button type="button" data-stage-preprocess-run>Run Preprocess</button>
+              <p class="status" data-stage-preprocess-status>Idle</p>
+              <dl class="stage-details" data-stage-preprocess-details hidden>
+                <div class="detail-row">
+                  <dt>Enriched parse</dt>
+                  <dd data-stage-preprocess-parse>—</dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Chunk file</dt>
+                  <dd data-stage-preprocess-chunks>—</dd>
+                </div>
+              </dl>
+            </article>
+            <article class="stage-card">
+              <header>
+                <h4>3. Header search</h4>
+                <p>Detect headings, repair numbering, and re-chunk by section.</p>
+              </header>
+              <button type="button" data-stage-headers-run>Run Header Search</button>
+              <p class="status" data-stage-headers-status>Idle</p>
+              <dl class="stage-details" data-stage-headers-details hidden>
+                <div class="detail-row">
+                  <dt>Header chunks</dt>
+                  <dd data-stage-headers-path>—</dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Headers found</dt>
+                  <dd data-stage-headers-count>—</dd>
+                </div>
+              </dl>
+            </article>
+            <article class="stage-card">
+              <header>
+                <h4>4. Structured passes</h4>
+                <p>Run the five retrieval passes over the header-aligned chunks.</p>
+              </header>
+              <button type="button" data-stage-passes-run>Run Passes</button>
+              <p class="status" data-stage-passes-status>Idle</p>
+              <dl class="stage-details" data-stage-passes-details hidden>
+                <div class="detail-row">
+                  <dt>Manifest</dt>
+                  <dd data-stage-passes-manifest>—</dd>
+                </div>
+                <div class="detail-row">
+                  <dt>Passes</dt>
+                  <dd data-stage-passes-count>—</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+        </section>
         <section class="card-footer">
           <button id="ping-backend" type="button">Ping Backend</button>
           <pre id="health-response" aria-live="polite"></pre>

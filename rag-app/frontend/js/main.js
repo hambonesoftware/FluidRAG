@@ -1,8 +1,10 @@
 import ApiClient from "./apiClient.js";
 import UploadVM from "./viewmodels/UploadVM.js";
 import PipelineVM from "./viewmodels/PipelineVM.js";
+import StageRunnerVM from "./viewmodels/StageRunnerVM.js";
 import UploadView from "./views/UploadView.js";
 import PipelineView from "./views/PipelineView.js";
+import StageRunnerView from "./views/StageRunnerView.js";
 
 const button = document.getElementById("ping-backend");
 const output = document.getElementById("health-response");
@@ -67,7 +69,9 @@ function restoreLastDocId() {
 
 const pipelineRoot = document.querySelector("[data-pipeline-root]");
 const uploadRoot = document.querySelector("[data-upload-root]");
+const stageRunnerRoot = document.querySelector("[data-stage-runner-root]");
 let pipelineView = null;
+let uploadView = null;
 if (pipelineRoot) {
   const pipelineVM = new PipelineVM(apiClient);
   pipelineView = new PipelineView(pipelineVM, pipelineRoot);
@@ -75,7 +79,7 @@ if (pipelineRoot) {
 
 if (uploadRoot && pipelineView) {
   const uploadVM = new UploadVM(apiClient);
-  new UploadView(uploadVM, uploadRoot, {
+  uploadView = new UploadView(uploadVM, uploadRoot, {
     pipelineView,
     onRun: (docId) => {
       if (!offline && docId) {
@@ -84,6 +88,21 @@ if (uploadRoot && pipelineView) {
         });
       }
     },
+  });
+}
+
+if (stageRunnerRoot) {
+  const stageRunnerVM = new StageRunnerVM(apiClient);
+  const resolveInput = () => {
+    if (uploadView?.input) {
+      return uploadView.input.value || "";
+    }
+    const input = document.querySelector("[data-upload-input]");
+    return input ? input.value : "";
+  };
+  new StageRunnerView(stageRunnerVM, stageRunnerRoot, {
+    pipelineView,
+    getInputValue: resolveInput,
   });
 }
 
