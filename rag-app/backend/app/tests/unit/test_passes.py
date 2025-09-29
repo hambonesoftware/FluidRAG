@@ -10,6 +10,7 @@ import pytest
 from ...config import get_settings
 from ...contracts.passes import PassResult
 from ...services.rag_pass_service import run_all
+from ...services.rag_pass_service.packages.compose.context import compose_window
 from ...services.rag_pass_service.packages.emit.results import write_pass_results
 from ...services.rag_pass_service.packages.retrieval import retrieve_ranked
 
@@ -67,6 +68,18 @@ def test_hybrid_retrieval_ranking() -> None:
     ranked = retrieve_ranked(_sample_chunks(), domain="mechanical")
     assert ranked[0]["chunk_id"] == "doc:c1"
     assert ranked[0]["total_score"] >= ranked[-1]["total_score"]
+
+
+def test_hybrid_retrieval_emits_physics_scores_sorted() -> None:
+    """Ranked results expose physics scores and are sorted by total."""
+
+    ranked = retrieve_ranked(_sample_chunks(), domain="mechanical")
+    totals = [item["total_score"] for item in ranked]
+    assert totals == sorted(totals, reverse=True)
+    for item in ranked:
+        assert "flow_score" in item and item["flow_score"] >= 0
+        assert "energy_score" in item and item["energy_score"] >= 0
+        assert "graph_score" in item and item["graph_score"] >= 0
 
 
 def test_write_pass_results_persists_payload(tmp_path: Path) -> None:
@@ -135,3 +148,31 @@ def test_run_all_outputs_validate_schema_and_content(tmp_path: Path) -> None:
         preview = result.retrieval[0].text_preview.strip()
         if preview:
             assert preview in result.answer
+
+
+def test_compose_window_dedupes_and_honors_budget() -> None:
+    """Context composer removes duplicates and respects token ceiling."""
+
+    ranked = [
+        {
+            "chunk_id": "doc:c1",
+            "text": "Alpha beta gamma",
+            "header_path": "Mechanics/Drive",
+        },
+        {
+            "chunk_id": "doc:c1",
+            "text": "Duplicate chunk should not appear",
+            "header_path": "Mechanics/Drive",
+        },
+        {
+            "chunk_id": "doc:c2",
+            "text": "Delta epsilon zeta eta theta",
+            "header_path": "Controls/Safety",
+        },
+    ]
+    window = compose_window(ranked, budget_tokens=5)
+    assert window.count("Mechanics/Drive") == 1
+    assert "Duplicate" not in window
+    assert "Controls/Safety" not in window
+    segments = window.split("\n\n")
+    assert segments == ["[Mechanics/Drive] Alpha beta gamma"]
