@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from ...config import get_settings
 from ...util.audit import stage_record
 from ...util.errors import AppError, NotFoundError, ValidationError
-from ...util.logging import get_logger
+from ...util.logging import get_logger, log_span
 from .packages.detect.language import detect_language
 from .packages.enhance.lists_bullets import detect_lists_bullets
 from .packages.enhance.reading_order import build_reading_order
@@ -119,35 +119,51 @@ def parse_and_enrich(doc_id: str, normalize_artifact: str) -> ParseInternal:
         handle_parser_errors(exc)
 
     timeout = getattr(settings, "parser_timeout_seconds", 1.0)
+    controller_start = time.perf_counter()
     try:
-        results, metrics = asyncio.run(
-            _fan_out(
-                normalized=normalized, normalize_path=normalize_path, timeout=timeout
+        with log_span(
+            "parser.parse_and_enrich",
+            logger=logger,
+            extra={"doc_id": doc_id, "timeout": timeout},
+        ) as span_meta:
+            results, metrics = asyncio.run(
+                _fan_out(
+                    normalized=normalized,
+                    normalize_path=normalize_path,
+                    timeout=timeout,
+                )
             )
-        )
+            language = results.get("language", {"code": "und"})
+            enriched = merge_all(
+                doc_id=doc_id,
+                language=language,
+                text_blocks=results.get("text", []),
+                tables=results.get("tables", []),
+                images=results.get("images", []),
+                links=results.get("links", []),
+                ocr_layer=results.get("ocr", {}),
+                reading_order=results.get("reading_order", []),
+                semantics=results.get("semantics", []),
+                lists=results.get("lists", []),
+            )
+            span_meta["language"] = language.get("code", "und")
+            span_meta["blocks"] = len(enriched.get("blocks", []))
     except Exception as exc:  # noqa: BLE001
         handle_parser_errors(exc)
         raise  # pragma: no cover
 
-    language = results.get("language", {"code": "und"})
-    enriched = merge_all(
-        doc_id=doc_id,
-        language=language,
-        text_blocks=results.get("text", []),
-        tables=results.get("tables", []),
-        images=results.get("images", []),
-        links=results.get("links", []),
-        ocr_layer=results.get("ocr", {}),
-        reading_order=results.get("reading_order", []),
-        semantics=results.get("semantics", []),
-        lists=results.get("lists", []),
-    )
-
     artifact_root = Path(settings.artifact_root_path) / doc_id
     artifact_root.mkdir(parents=True, exist_ok=True)
     enriched_path = artifact_root / "parse.enriched.json"
+    duration_ms = (time.perf_counter() - controller_start) * 1000.0
     enriched.setdefault("audit", []).append(
-        stage_record(stage="parser.merge", status="ok", doc_id=doc_id)
+        stage_record(
+            stage="parser.merge",
+            status="ok",
+            doc_id=doc_id,
+            duration_ms=duration_ms,
+            blocks=len(enriched.get("blocks", [])),
+        )
     )
     enriched_path.write_text(
         json.dumps(enriched, indent=2, ensure_ascii=False), encoding="utf-8"

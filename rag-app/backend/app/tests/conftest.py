@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import io
 import json
+import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TextIO
 
 import pytest
 
 from backend.app.config import get_settings
+from backend.app.util.logging import get_logger
 
 FIXTURE_ROOT = Path(__file__).resolve().parent / "data"
 
@@ -59,3 +63,28 @@ def _apply_offline_settings(
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_logging_streams() -> Iterator[None]:
+    """Redirect fluidrag logging handlers to in-memory buffers during tests."""
+
+    root_logger = get_logger()
+    buffers: list[tuple[logging.StreamHandler, TextIO]] = []
+    for handler in list(root_logger.handlers):
+        if not isinstance(handler, logging.StreamHandler):
+            continue
+        stream = handler.stream
+        if stream is None:
+            continue
+        buffer = io.StringIO()
+        buffers.append((handler, stream))
+        try:
+            handler.setStream(buffer)
+        except ValueError:  # pragma: no cover - stream already closed by fixture
+            continue
+    try:
+        yield
+    finally:
+        for handler, original in buffers:
+            handler.setStream(original)

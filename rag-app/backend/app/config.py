@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -68,6 +69,73 @@ class Settings(BaseSettings):
             "PARSER_TIMEOUT_SECONDS", "parser_timeout_seconds"
         ),
     )
+    openrouter_timeout_seconds: float = Field(
+        default=45.0,
+        ge=1.0,
+        validation_alias=AliasChoices(
+            "OPENROUTER_TIMEOUT_SECONDS", "openrouter_timeout_seconds"
+        ),
+    )
+    openrouter_max_retries: int = Field(
+        default=3,
+        ge=0,
+        validation_alias=AliasChoices(
+            "OPENROUTER_MAX_RETRIES", "openrouter_max_retries"
+        ),
+    )
+    openrouter_backoff_base_seconds: float = Field(
+        default=0.5,
+        ge=0.0,
+        validation_alias=AliasChoices(
+            "OPENROUTER_BACKOFF_BASE_SECONDS",
+            "openrouter_backoff_base_seconds",
+        ),
+    )
+    openrouter_backoff_cap_seconds: float = Field(
+        default=6.0,
+        ge=0.0,
+        validation_alias=AliasChoices(
+            "OPENROUTER_BACKOFF_CAP_SECONDS",
+            "openrouter_backoff_cap_seconds",
+        ),
+    )
+    openrouter_stream_idle_timeout_seconds: float = Field(
+        default=4.0,
+        ge=0.5,
+        validation_alias=AliasChoices(
+            "OPENROUTER_STREAM_IDLE_TIMEOUT_SECONDS",
+            "openrouter_stream_idle_timeout_seconds",
+        ),
+    )
+    vector_batch_size: int = Field(
+        default=128,
+        ge=1,
+        validation_alias=AliasChoices(
+            "VECTOR_BATCH_SIZE",
+            "vector_batch_size",
+        ),
+    )
+    llm_batch_size: int = Field(
+        default=4,
+        ge=1,
+        validation_alias=AliasChoices("LLM_BATCH_SIZE", "llm_batch_size"),
+    )
+    audit_retention_days: int = Field(
+        default=14,
+        ge=1,
+        validation_alias=AliasChoices(
+            "AUDIT_RETENTION_DAYS",
+            "audit_retention_days",
+        ),
+    )
+    storage_stream_chunk_size: int = Field(
+        default=65536,
+        ge=1024,
+        validation_alias=AliasChoices(
+            "STORAGE_STREAM_CHUNK_SIZE",
+            "storage_stream_chunk_size",
+        ),
+    )
 
     def __init__(self, **data: Any) -> None:
         """Pydantic settings init"""
@@ -107,6 +175,28 @@ class Settings(BaseSettings):
             "host": self.frontend_host,
             "port": self.frontend_port,
         }
+
+    def openrouter_retry_schedule(self) -> list[float]:
+        """Return deterministic exponential backoff durations in seconds."""
+
+        retries = max(self.openrouter_max_retries, 0)
+        base = max(self.openrouter_backoff_base_seconds, 0.0)
+        cap = max(self.openrouter_backoff_cap_seconds, 0.0)
+        schedule: list[float] = [0.0]
+        for attempt in range(1, retries + 1):
+            delay = min(cap, base * (2 ** (attempt - 1)))
+            schedule.append(round(delay, 4))
+        return schedule
+
+    def audit_retention_window(self) -> timedelta:
+        """Return retention window for audit artifacts as ``timedelta``."""
+
+        return timedelta(days=self.audit_retention_days)
+
+    def storage_chunk_bytes(self) -> int:
+        """Return chunk size for streaming I/O operations."""
+
+        return int(self.storage_stream_chunk_size)
 
 
 @lru_cache(maxsize=1)

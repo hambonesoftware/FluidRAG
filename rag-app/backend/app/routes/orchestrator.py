@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -24,7 +26,7 @@ from ..services.rag_pass_service import run_all as run_passes
 from ..services.upload_service import NormalizedDoc, ensure_normalized
 from ..util.audit import stage_record
 from ..util.errors import AppError, NotFoundError, ValidationError
-from ..util.logging import get_logger
+from ..util.logging import get_correlation_id, get_logger
 
 logger = get_logger(__name__)
 
@@ -64,28 +66,128 @@ async def _load_json(path: str) -> dict[str, Any]:
     return {}
 
 
+async def _run_stage(
+    name: str,
+    func: Callable[..., Any],
+    *args: Any,
+    audit_events: list[dict[str, Any]],
+    extra: dict[str, Any] | None = None,
+    success_extra: Callable[[Any], dict[str, Any]] | None = None,
+) -> Any:
+    """Execute a stage with timing, logging, and audit emission."""
+
+    start = perf_counter()
+    try:
+        result = await run_in_threadpool(func, *args)
+    except Exception:
+        duration_ms = (perf_counter() - start) * 1000.0
+        failure_payload = dict(extra or {})
+        audit_events.append(
+            stage_record(
+                stage=name,
+                status="error",
+                duration_ms=duration_ms,
+                correlation_id=get_correlation_id(),
+                **failure_payload,
+            )
+        )
+        logger.exception(
+            "pipeline.stage.error",
+            extra={"stage": name, "duration_ms": round(duration_ms, 3)},
+        )
+        raise
+    duration_ms = (perf_counter() - start) * 1000.0
+    payload = dict(extra or {})
+    if success_extra is not None:
+        try:
+            payload.update(success_extra(result))
+        except Exception as exc:  # pragma: no cover - defensive metadata failure
+            logger.warning(
+                "pipeline.stage.extra_failure",
+                extra={"stage": name, "error": str(exc)},
+            )
+    audit_events.append(
+        stage_record(
+            stage=name,
+            status="ok",
+            duration_ms=duration_ms,
+            correlation_id=get_correlation_id(),
+            **payload,
+        )
+    )
+    logger.info(
+        "pipeline.stage.complete",
+        extra={"stage": name, "duration_ms": round(duration_ms, 3)},
+    )
+    return result
+
+
 @router.post("/run", response_model=dict)
 async def run_pipeline(req: PipelineRunRequest) -> dict[str, Any]:
     """Execute full pipeline: upload→parse→chunk→headers→passes."""
 
     try:
-        normalized: NormalizedDoc = await run_in_threadpool(
-            ensure_normalized, req.file_id, req.file_name
+        audit_events: list[dict[str, Any]] = []
+        pipeline_start = perf_counter()
+        normalized: NormalizedDoc = await _run_stage(
+            "upload.ensure_normalized",
+            ensure_normalized,
+            req.file_id,
+            req.file_name,
+            audit_events=audit_events,
+            extra={
+                "file_id": req.file_id,
+                "file_name": req.file_name,
+            },
+            success_extra=lambda result: {"doc_id": result.doc_id},
         )
         manifest = await _load_json(normalized.manifest_path)
         upsert_document_record(normalized.doc_id, normalized.normalized_path, manifest)
 
-        parse_result = await run_in_threadpool(
-            parse_and_enrich, normalized.doc_id, normalized.normalized_path
+        parse_result = await _run_stage(
+            "parser.parse_and_enrich",
+            parse_and_enrich,
+            normalized.doc_id,
+            normalized.normalized_path,
+            audit_events=audit_events,
+            extra={"doc_id": normalized.doc_id},
+            success_extra=lambda result: {
+                "language": result.language,
+                "enriched_path": result.enriched_path,
+            },
         )
-        chunk_result = await run_in_threadpool(
-            run_uf_chunking, normalized.doc_id, parse_result.enriched_path
+        chunk_result = await _run_stage(
+            "chunk.run_uf_chunking",
+            run_uf_chunking,
+            normalized.doc_id,
+            parse_result.enriched_path,
+            audit_events=audit_events,
+            extra={"doc_id": normalized.doc_id},
+            success_extra=lambda result: {
+                "chunks": result.chunk_count,
+                "chunks_path": result.chunks_path,
+            },
         )
-        headers_result = await run_in_threadpool(
-            join_and_rechunk, normalized.doc_id, chunk_result.chunks_path
+        headers_result = await _run_stage(
+            "headers.join_and_rechunk",
+            join_and_rechunk,
+            normalized.doc_id,
+            chunk_result.chunks_path,
+            audit_events=audit_events,
+            extra={"doc_id": normalized.doc_id},
+            success_extra=lambda result: {
+                "headers": result.header_count,
+                "header_chunks_path": result.header_chunks_path,
+            },
         )
-        pass_jobs: PassJobs = await run_in_threadpool(
-            run_passes, normalized.doc_id, headers_result.header_chunks_path
+        pass_jobs: PassJobs = await _run_stage(
+            "passes.run_all",
+            run_passes,
+            normalized.doc_id,
+            headers_result.header_chunks_path,
+            audit_events=audit_events,
+            extra={"doc_id": normalized.doc_id},
+            success_extra=lambda result: {"passes": len(result.passes)},
         )
 
         audit_path = (
@@ -93,18 +195,19 @@ async def run_pipeline(req: PipelineRunRequest) -> dict[str, Any]:
             / normalized.doc_id
             / "pipeline.audit.json"
         )
-        audit_path.write_text(
-            json.dumps(
-                stage_record(
-                    stage="pipeline.run",
-                    status="ok",
-                    doc_id=normalized.doc_id,
-                    passes=len(pass_jobs.passes),
-                ),
-                indent=2,
-            ),
-            encoding="utf-8",
+        total_duration_ms = (perf_counter() - pipeline_start) * 1000.0
+        pipeline_record = stage_record(
+            stage="pipeline.run",
+            status="ok",
+            doc_id=normalized.doc_id,
+            passes=len(pass_jobs.passes),
+            duration_ms=total_duration_ms,
         )
+        audit_payload = {
+            "pipeline": pipeline_record,
+            "stages": audit_events,
+        }
+        audit_path.write_text(json.dumps(audit_payload, indent=2), encoding="utf-8")
 
         return {
             "doc_id": normalized.doc_id,

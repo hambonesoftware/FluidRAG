@@ -1,0 +1,17 @@
+# Phase 10 Scope — Performance, Observability & Hardening
+
+## Checklist (implementation targets under rag-app/)
+- [x] backend/app/config.py — add OpenRouter timeout/batch/retry settings and helpers per plan
+- [x] backend/app/util/logging.py — implement correlation ID context, span helpers, JSON enrichment, middleware hooks
+- [x] backend/app/util/audit.py — capture durations and correlation metadata in stage records
+- [x] backend/app/main.py — register observability middleware and structured startup/shutdown logging
+- [x] backend/app/routes/orchestrator.py — emit audit records for each stage, propagate correlation IDs, and surface timing metadata
+- [x] backend/app/services/* (parser, chunk, header, rag_pass) — thread observability helpers through controllers/services as required
+- [x] backend/app/adapters/{llm,storage,vectors}.py and llm/clients/openrouter.py — honour new settings for retries/backoff/batch sizing and enrich logs
+- [x] backend/app/tests/unit/phase_10 — add unit coverage for config overrides, logging correlation IDs, audit spans, retry logic, and observability wiring
+- [x] backend/app/tests/integration — ensure pipeline observability integration coverage across orchestrator stack
+- [x] README.md & CHANGELOG.md — document new observability controls and profiling guidance
+- [x] reports/phase_10_outcome.md — summarize checklist completion, coverage, migrations, and known limitations
+
+## Notes
+Scope derived from `app_plan/10_Perf_Observability.md`, `app_finalstubs/finalstubs_latest.json`, and prior phase documentation. No database migrations anticipated; focus is runtime instrumentation and configuration hardening.

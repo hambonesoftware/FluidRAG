@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -57,12 +59,17 @@ def test_list_passes_invalid_manifest_logs_error(
     manifest_path = _write_manifest(_artifact_root(), doc_id, {"passes": {}})
     manifest_path.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
 
-    with caplog.at_level("ERROR"):
-        with pytest.raises(HTTPException) as exc:
-            asyncio.run(passes_routes.list_passes(doc_id))
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    passes_routes.logger.handlers = [handler]
+    passes_routes.logger.setLevel(logging.ERROR)
+    passes_routes.logger.propagate = False
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(passes_routes.list_passes(doc_id))
 
     assert exc.value.status_code == 500
-    assert any("passes.manifest_invalid" in record.message for record in caplog.records)
+    handler.flush()
+    assert "passes.manifest_invalid" in stream.getvalue()
 
 
 def test_get_pass_returns_payload(tmp_path: Path) -> None:
@@ -104,12 +111,17 @@ def test_get_pass_missing_file_logs_warning(
     _ = tmp_path
     _write_manifest(_artifact_root(), "doc", {"passes": {"summary": "summary.json"}})
 
-    with caplog.at_level("WARNING"):
-        with pytest.raises(HTTPException) as exc:
-            asyncio.run(passes_routes.get_pass("doc", "summary"))
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    passes_routes.logger.handlers = [handler]
+    passes_routes.logger.setLevel(logging.WARNING)
+    passes_routes.logger.propagate = False
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(passes_routes.get_pass("doc", "summary"))
 
     assert exc.value.status_code == 404
-    assert any("passes.get_missing" in record.message for record in caplog.records)
+    handler.flush()
+    assert "passes.get_missing" in stream.getvalue()
 
 
 def test_get_pass_payload_not_dict(tmp_path: Path) -> None:

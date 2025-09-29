@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -11,7 +12,7 @@ from ...config import get_settings
 from ...contracts.chunking import UFChunk
 from ...util.audit import stage_record
 from ...util.errors import AppError, NotFoundError, ValidationError
-from ...util.logging import get_logger
+from ...util.logging import get_logger, log_span
 from .packages.features.typography import extract_typography
 from .packages.index.local_vss import build_local_index
 from .packages.segment.sentences import split_sentences
@@ -48,58 +49,70 @@ def run_uf_chunking(
     artifact_root.mkdir(parents=True, exist_ok=True)
     target_tokens = int(getattr(settings, "chunk_target_tokens", 90))
     overlap = int(getattr(settings, "chunk_token_overlap", 12))
+    stage_start = time.perf_counter()
     try:
-        sentences = split_sentences(normalize_artifact)
-        if not sentences:
-            raise ValidationError("no sentences available for chunking")
-        typography = extract_typography(normalize_artifact)
-        chunk_dicts = uf_chunk(
-            sentences=sentences,
-            typography=typography,
-            target_tokens=target_tokens,
-            overlap=overlap,
-        )
-        if not chunk_dicts:
-            raise AppError("failed to create chunks")
-        chunks_path = artifact_root / "uf_chunks.jsonl"
-        with chunks_path.open("w", encoding="utf-8") as handle:
-            for index, chunk in enumerate(chunk_dicts, start=1):
-                payload = UFChunk(
-                    chunk_id=f"{doc_id}:c{index}",
-                    doc_id=doc_id,
-                    text=chunk["text"],
-                    sentence_start=chunk["sentence_start"],
-                    sentence_end=chunk["sentence_end"],
-                    token_count=chunk["token_count"],
-                    typography=chunk.get("typography", {}),
-                ).model_dump()
-                handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        build_local_index(doc_id=doc_id, chunks_path=str(chunks_path))
-        manifest_path = artifact_root / "index.manifest.json"
-        audit_path = artifact_root / "chunk.audit.json"
-        audit_payload = stage_record(
-            stage="chunk.build",
-            status="ok",
-            doc_id=doc_id,
-            chunks=len(chunk_dicts),
-            target_tokens=target_tokens,
-            overlap=overlap,
-        )
-        audit_path.write_text(json.dumps(audit_payload, indent=2), encoding="utf-8")
-        logger.info(
-            "chunk.run.success",
-            extra={
-                "doc_id": doc_id,
-                "chunks": len(chunk_dicts),
-                "chunks_path": str(chunks_path),
-            },
-        )
-        return ChunkInternal(
-            doc_id=doc_id,
-            chunks_path=str(chunks_path),
-            chunk_count=len(chunk_dicts),
-            index_manifest_path=str(manifest_path) if manifest_path.exists() else None,
-        )
+        with log_span(
+            "chunk.run_uf_chunking",
+            logger=logger,
+            extra={"doc_id": doc_id, "target_tokens": target_tokens},
+        ) as span_meta:
+            sentences = split_sentences(normalize_artifact)
+            if not sentences:
+                raise ValidationError("no sentences available for chunking")
+            typography = extract_typography(normalize_artifact)
+            chunk_dicts = uf_chunk(
+                sentences=sentences,
+                typography=typography,
+                target_tokens=target_tokens,
+                overlap=overlap,
+            )
+            if not chunk_dicts:
+                raise AppError("failed to create chunks")
+            chunks_path = artifact_root / "uf_chunks.jsonl"
+            with chunks_path.open("w", encoding="utf-8") as handle:
+                for index, chunk in enumerate(chunk_dicts, start=1):
+                    payload = UFChunk(
+                        chunk_id=f"{doc_id}:c{index}",
+                        doc_id=doc_id,
+                        text=chunk["text"],
+                        sentence_start=chunk["sentence_start"],
+                        sentence_end=chunk["sentence_end"],
+                        token_count=chunk["token_count"],
+                        typography=chunk.get("typography", {}),
+                    ).model_dump()
+                    handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            build_local_index(doc_id=doc_id, chunks_path=str(chunks_path))
+            manifest_path = artifact_root / "index.manifest.json"
+            audit_path = artifact_root / "chunk.audit.json"
+            span_meta["chunks"] = len(chunk_dicts)
+            span_meta["chunks_path"] = str(chunks_path)
+            duration_ms = (time.perf_counter() - stage_start) * 1000.0
+            audit_payload = stage_record(
+                stage="chunk.build",
+                status="ok",
+                doc_id=doc_id,
+                chunks=len(chunk_dicts),
+                target_tokens=target_tokens,
+                overlap=overlap,
+                duration_ms=duration_ms,
+            )
+            audit_path.write_text(json.dumps(audit_payload, indent=2), encoding="utf-8")
+            logger.info(
+                "chunk.run.success",
+                extra={
+                    "doc_id": doc_id,
+                    "chunks": len(chunk_dicts),
+                    "chunks_path": str(chunks_path),
+                },
+            )
+            return ChunkInternal(
+                doc_id=doc_id,
+                chunks_path=str(chunks_path),
+                chunk_count=len(chunk_dicts),
+                index_manifest_path=str(manifest_path)
+                if manifest_path.exists()
+                else None,
+            )
     except FileNotFoundError as exc:
         handle_chunk_errors(exc)
         raise

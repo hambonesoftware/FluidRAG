@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
+import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -34,11 +36,16 @@ def test_write_jsonl_and_read_handles_invalid_rows(
     with target.open("a", encoding="utf-8") as handle:
         handle.write("{invalid}\n\n")
 
-    with caplog.at_level("WARNING"):
-        loaded = storage.read_jsonl(str(target))
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    storage.logger.handlers = [handler]
+    storage.logger.setLevel(logging.WARNING)
+    storage.logger.propagate = False
+    loaded = storage.read_jsonl(str(target))
 
     assert loaded == rows
-    assert any("decode_failed" in record.message for record in caplog.records)
+    handler.flush()
+    assert "storage.read_jsonl.decode_failed" in stream.getvalue()
 
 
 def test_read_jsonl_missing_returns_empty(tmp_path: Path) -> None:

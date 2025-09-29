@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -12,7 +13,7 @@ from backend.app.config import get_settings
 from backend.app.contracts.passes import PassManifest
 from backend.app.util.audit import stage_record
 from backend.app.util.errors import AppError, NotFoundError, ValidationError
-from backend.app.util.logging import get_logger
+from backend.app.util.logging import get_logger, log_span
 
 from .packages.compose.context import compose_window
 from .packages.emit.results import write_pass_results
@@ -67,6 +68,7 @@ def run_all(doc_id: str, rechunk_artifact: str) -> PassJobsInternal:
     """Retrieve, compose context, LLM calls, emit results."""
 
     path = _validate_inputs(doc_id, rechunk_artifact)
+    stage_start = time.perf_counter()
     try:
         settings = get_settings()
         chunks = _load_chunks(path)
@@ -79,15 +81,21 @@ def run_all(doc_id: str, rechunk_artifact: str) -> PassJobsInternal:
         }
         llm = LLMClient()
         manifests: dict[str, str] = {}
-        for name, prompt in prompts.items():
-            ranked = retrieve_ranked(chunks, domain=name)
-            context = compose_window(ranked, budget_tokens=400)
-            system, user = prompt.render(context)
-            completion = llm.chat(system=system, user=user, context=context)
-            completion["context"] = context
-            completion["prompt"] = {"system": system, "user": user}
-            artifact = write_pass_results(doc_id, name, completion, ranked)
-            manifests[name] = artifact
+        with log_span(
+            "passes.run_all",
+            logger=logger,
+            extra={"doc_id": doc_id, "prompt_count": len(prompts)},
+        ) as span_meta:
+            for name, prompt in prompts.items():
+                ranked = retrieve_ranked(chunks, domain=name)
+                context = compose_window(ranked, budget_tokens=400)
+                system, user = prompt.render(context)
+                completion = llm.chat(system=system, user=user, context=context)
+                completion["context"] = context
+                completion["prompt"] = {"system": system, "user": user}
+                artifact = write_pass_results(doc_id, name, completion, ranked)
+                manifests[name] = artifact
+            span_meta["passes"] = len(manifests)
 
         manifest_path = (
             Path(settings.artifact_root_path) / doc_id / "passes" / "manifest.json"
@@ -106,6 +114,7 @@ def run_all(doc_id: str, rechunk_artifact: str) -> PassJobsInternal:
             status="ok",
             doc_id=doc_id,
             passes=len(manifests),
+            duration_ms=(time.perf_counter() - stage_start) * 1000.0,
         )
         write_json(str(audit_path), audit_payload)
 
