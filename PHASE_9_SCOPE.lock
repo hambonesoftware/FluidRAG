@@ -1,0 +1,18 @@
+Phase 9 Checklist
+- rag-app/backend/app/tests/conftest.py (shared fixtures, offline env reset)
+- rag-app/backend/app/tests/data/documents/engineering_overview.txt (curated pipeline text)
+- rag-app/backend/app/tests/data/json/expected_sections.json (expected headers/passes)
+- Update rag-app/backend/app/tests/unit/test_upload.py to leverage curated fixture
+- Update rag-app/backend/app/tests/unit/test_parser.py for enriched assertions
+- Update rag-app/backend/app/tests/unit/test_chunk.py to build chunks from fixture
+- Update rag-app/backend/app/tests/unit/test_headers.py to validate headers via fixture
+- Update rag-app/backend/app/tests/unit/test_passes.py to execute real pass pipeline
+- Update rag-app/backend/app/tests/e2e/test_pipeline_e2e.py for end-to-end run
+- Add rag-app/backend/app/tests/unit/test_storage.py to exercise storage adapter edge cases
+- Add rag-app/backend/app/tests/unit/test_vectors.py for retrieval adapter coverage
+- Add rag-app/backend/app/tests/unit/test_pass_routes.py for manifest/payload validation
+- Add rag-app/backend/app/tests/unit/test_route_error_mapping.py covering route exception paths
+- Add rag-app/backend/app/tests/unit/test_ids.py for identifier normalization helpers
+- Add rag-app/backend/app/tests/unit/test_llm_client.py for offline/online LLM flows
+- Register phase9 marker in pytest.ini
+- Documentation/reporting updates (CHANGELOG.md, README.md, rag-app/reports/phase_9_outcome.md)

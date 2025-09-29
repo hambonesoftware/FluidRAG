@@ -1,4 +1,4 @@
-Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults. Phase 3 introduces the upload normalization + parser fan-out/fan-in services, FastAPI routes, and an offline benchmark harness. Phase 7 wires the orchestrator API layer so the entire pipeline can be triggered and inspected through dedicated routes.
+Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults. Phase 3 introduces the upload normalization + parser fan-out/fan-in services, FastAPI routes, and an offline benchmark harness. Phase 7 wires the orchestrator API layer so the entire pipeline can be triggered and inspected through dedicated routes. Phase 9 layers in curated backend fixtures and an expanded test suite that runs the full pipeline end-to-end.
 
 ## Getting Started
 
@@ -94,15 +94,57 @@ python rag-app/scripts/bench_phase3.py --iterations 5
 
 The script reports p50/p95 latencies for upload, parser, and combined stages while respecting the offline flag.
 
-## Testing & Linting
+## Curated Test Fixtures & Offline Pipeline
+
+Phase 9 ships a deterministic engineering document under
+`backend/app/tests/data/documents/engineering_overview.txt` alongside JSON fixtures. The
+pytest suite materialises a pseudo-PDF from this text at runtime to exercise the upload →
+parser → chunk → header → pass stages without relying on binary artifacts or network calls.
+
+To manually run the same flow while the backend is running:
+
+First, materialise the pseudo-PDF locally (mirroring the pytest fixture):
 
 ```bash
-ruff check .
-black --check .
-pytest -q
+python - <<'PY'
+from pathlib import Path
+source = Path('rag-app/backend/app/tests/data/documents/engineering_overview.txt')
+target = Path('rag-app/backend/app/tests/data/tmp/engineering_overview.pdf')
+target.parent.mkdir(parents=True, exist_ok=True)
+target.write_text(source.read_text(encoding='utf-8'), encoding='utf-8')
+print(target)
+PY
 ```
 
-All three commands are wired into the `pre-commit` configuration along with a guard that fails when any source file exceeds 500 lines.
+Then trigger the pipeline using the generated path:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/pipeline/run \
+  -H 'Content-Type: application/json' \
+  -d '{"file_name": "rag-app/backend/app/tests/data/tmp/engineering_overview.pdf"}'
+
+# Inspect status and results
+curl -s http://127.0.0.1:8000/pipeline/status/<doc_id>
+curl -s http://127.0.0.1:8000/pipeline/results/<doc_id>
+```
+
+Artifacts, manifests, and pass payloads will be written beneath the configured `ARTIFACT_ROOT` (defaults to `rag-app/data/artifacts`).
+
+## Testing & Linting
+
+Run from the repository root (`rag-app/`):
+
+```bash
+pytest -q --maxfail=1 --disable-warnings
+pytest --cov=backend/app --cov-report=term-missing
+mypy backend/app --pretty --show-error-codes
+ruff check backend/app --fix
+ruff format backend/app
+```
+
+The curated fixtures ensure tests remain deterministic offline. The backend suite now spans 96 tests with
+approximately 91% line coverage. All commands above are wired into the `pre-commit` configuration along
+with a guard that fails when any source file exceeds 500 lines.
 
 ## Configuration
 

@@ -31,8 +31,7 @@ logger = get_logger(__name__)
 class PromptTemplate(Protocol):
     """Protocol describing prompt renderers."""
 
-    def render(self, context: str) -> tuple[str, str]:
-        ...
+    def render(self, context: str) -> tuple[str, str]: ...
 
 
 class PassJobsInternal(BaseModel):

@@ -178,9 +178,7 @@ def test_chat_sync_offline_guard(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_chat_sync_retries_then_succeeds(
     monkeypatch: pytest.MonkeyPatch, online_env: None
 ) -> None:
-    monkeypatch.setattr(
-        "backend.app.llm.clients.openrouter.httpx.Client", MockClient
-    )
+    monkeypatch.setattr("backend.app.llm.clients.openrouter.httpx.Client", MockClient)
     MockClient.queue = [
         DummyResponse(429, {"error": {"message": "retry"}}),
         DummyResponse(200, {"id": "ok", "choices": []}),
@@ -243,9 +241,7 @@ def test_chat_stream_idle_timeout(
 def test_embed_sync_parses_vectors(
     monkeypatch: pytest.MonkeyPatch, online_env: None
 ) -> None:
-    monkeypatch.setattr(
-        "backend.app.llm.clients.openrouter.httpx.Client", MockClient
-    )
+    monkeypatch.setattr("backend.app.llm.clients.openrouter.httpx.Client", MockClient)
     MockClient.queue = [
         DummyResponse(200, {"data": [{"embedding": [1, 2, 3]}]}),
     ]
@@ -256,9 +252,7 @@ def test_embed_sync_parses_vectors(
 def test_chat_sync_propagates_auth_error(
     monkeypatch: pytest.MonkeyPatch, online_env: None
 ) -> None:
-    monkeypatch.setattr(
-        "backend.app.llm.clients.openrouter.httpx.Client", MockClient
-    )
+    monkeypatch.setattr("backend.app.llm.clients.openrouter.httpx.Client", MockClient)
     MockClient.queue = [DummyResponse(401, {"error": {"message": "bad key"}})]
     with pytest.raises(OpenRouterAuthError):
         chat_sync("gpt", [{"role": "user", "content": "hi"}], retries=0)

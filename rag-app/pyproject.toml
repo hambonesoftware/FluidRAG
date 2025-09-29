@@ -29,4 +29,8 @@ pythonpath = ["rag-app"]
 markers = [
     "phase4: marks tests that exercise Phase 4 functionality",
     "phase5: marks tests that exercise Phase 5 functionality",
+    "phase6: marks tests that exercise Phase 6 functionality",
+    "phase7: marks tests that exercise Phase 7 functionality",
+    "phase8: marks tests that exercise Phase 8 functionality",
+    "phase9: marks tests that exercise Phase 9 functionality",
 ]

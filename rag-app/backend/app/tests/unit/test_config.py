@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib import reload
+from pathlib import Path
 
 import pytest
 
@@ -50,3 +51,21 @@ def test_uvicorn_and_frontend_options(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     frontend_opts = settings.frontend_options()
     assert frontend_opts == {"host": "127.0.0.1", "port": 3123}
+
+
+def test_address_and_artifact_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir()
+    settings = Settings(artifact_root=str(artifact_root))
+    assert settings.backend_address == "127.0.0.1:8000"
+    assert settings.frontend_address == "127.0.0.1:3000"
+    assert settings.artifact_root_path.is_absolute()
+
+    absolute_root = (tmp_path / "absolute").resolve()
+    absolute_root.mkdir()
+    monkeypatch.setenv("ARTIFACT_ROOT", str(absolute_root))
+    reset_settings_cache()
+    settings = get_settings()
+    assert settings.artifact_root_path == absolute_root

@@ -58,7 +58,8 @@ async def _load_json(path: str) -> dict[str, Any]:
     if isinstance(payload, dict):
         return payload
     logger.warning(
-        "pipeline.load_json.invalid_type", extra={"path": path, "type": type(payload).__name__}
+        "pipeline.load_json.invalid_type",
+        extra={"path": path, "type": type(payload).__name__},
     )
     return {}
 
@@ -136,7 +137,8 @@ async def status(doc_id: str) -> dict[str, Any]:
     manifest = json.loads(record_path.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
         logger.error(
-            "pipeline.status.manifest_invalid", extra={"doc_id": doc_id, "path": str(record_path)}
+            "pipeline.status.manifest_invalid",
+            extra={"doc_id": doc_id, "path": str(record_path)},
         )
         raise HTTPException(status_code=500, detail="invalid document manifest")
     passes_manifest_path = doc_root / "passes" / "manifest.json"

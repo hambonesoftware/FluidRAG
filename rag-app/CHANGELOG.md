@@ -1,5 +1,33 @@
 # Changelog
 
+## [Phase 9] - 2025-10-01
+### Added
+- Curated backend test fixtures under `backend/app/tests/data/` including an engineering text sample
+  that materialises into a pseudo-PDF at runtime plus JSON expectations leveraged by the new Phase 9
+  suites.
+- Shared pytest `conftest.py` to isolate artifact roots, enforce offline mode, and expose fixture
+  helpers for the pipeline tests.
+- Comprehensive backend tests exercising upload normalization, parser enrichment, chunking,
+  header join, RAG passes, and the orchestrator endpoint against the curated fixture.
+- Expanded unit coverage for storage adapters, hybrid vector retrieval, pass manifest routes,
+  route-level error handling, identifier helpers, and the offline LLM client to harden edge cases.
+
+### Changed
+- End-to-end pipeline test now runs the real orchestrator stack and verifies status/results
+  responses plus artifact streaming using the curated document.
+- Existing unit tests were refactored to rely on reusable fixtures, improving determinism and
+  asserting richer invariants across the pipeline stages.
+
+### Documentation
+- README updated with guidance for running the full pipeline using the curated fixture, refreshed
+  test/coverage commands, and a description of the new data assets.
+- Recorded scope and outcomes in `PHASE_9_SCOPE.lock` and `reports/phase_9_outcome.md`.
+
+### Verification
+- Backend pytest suite expanded to 96 passing tests covering phases 1–9 with 91% line coverage
+  across `backend/app`.
+- Ruff, mypy, and pytest coverage reports executed to satisfy repo quality bars.
+
 ## [Phase 8] - 2025-09-30
 ### Added
 - Frontend MVVM dashboard with upload controls, pipeline status polling, and pass result rendering.
