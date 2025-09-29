@@ -1,0 +1,4374 @@
+[
+  {
+    "file_path": "rag-app/run.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "start_backend",
+        "type": "function",
+        "line": 1,
+        "docstring": "Start FastAPI backend using uvicorn.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "",
+            "type": "Any",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "start_frontend",
+        "type": "function",
+        "line": 1,
+        "docstring": "Serve static frontend via SimpleHTTPServer.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/.env",
+    "language": "text",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/README.md",
+    "language": "markdown",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/.gitignore",
+    "language": "text",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/data/.gitkeep",
+    "language": "text",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/main.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "create_app",
+        "type": "function",
+        "line": 1,
+        "docstring": "App factory; registers routers and returns FastAPI instance.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "FastAPI",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/config.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "Settings",
+        "type": "class",
+        "line": 1,
+        "docstring": "Application settings resolved from environment.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseSettings"
+        ],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Pydantic settings init",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "Settings",
+                "default": null
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/orchestrator.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "PipelineRunRequest",
+        "type": "class",
+        "line": 1,
+        "docstring": "Orchestrator pipeline input contract.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "run_pipeline",
+        "type": "function",
+        "line": 1,
+        "docstring": "Execute full pipeline: upload→parse→chunk→headers→passes.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "req",
+            "type": "PipelineRunRequest",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "dict",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "status",
+        "type": "function",
+        "line": 1,
+        "docstring": "Aggregate status for given document.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "dict",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "results",
+        "type": "function",
+        "line": 1,
+        "docstring": "Return artifact manifest for given document.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "dict",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "stream_artifact",
+        "type": "function",
+        "line": 1,
+        "docstring": "Stream artifact bytes to client using chunked transfer.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str"
+          }
+        ],
+        "returns": {
+          "type": "StreamingResponse",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/upload.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/parser.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/chunk.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/headers.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/routes/passes.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/main.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "NormalizedDoc",
+        "type": "class",
+        "line": 1,
+        "docstring": "Normalized document artifact.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "ensure_normalized",
+        "type": "function",
+        "line": 1,
+        "docstring": "Validate/normalize upload and emit normalize.json",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "file_id",
+            "type": "Optional[str]",
+            "default": null
+          },
+          {
+            "name": "file_name",
+            "type": "Optional[str]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "NormalizedDoc",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/upload_controller.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "NormalizedDocInternal",
+        "type": "class",
+        "line": 1,
+        "docstring": "Internal normalized result.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "ensure_normalized",
+        "type": "function",
+        "line": 1,
+        "docstring": "Controller: orchestrates validators, pdf normalize, OCR, manifest & DB.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "file_id",
+            "type": "Optional[str]",
+            "default": null
+          },
+          {
+            "name": "file_name",
+            "type": "Optional[str]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "NormalizedDocInternal",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "make_doc_id",
+        "type": "function",
+        "line": 1,
+        "docstring": "Generate stable doc_id from inputs/time.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "file_id",
+            "type": "Optional[str]",
+            "default": null
+          },
+          {
+            "name": "file_name",
+            "type": "Optional[str]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "str",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "handle_upload_errors",
+        "type": "function",
+        "line": 1,
+        "docstring": "Normalize and raise application errors for upload stage.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "e",
+            "type": "Exception"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/guards/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/guards/validators.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "validate_upload_inputs",
+        "type": "function",
+        "line": 1,
+        "docstring": "Raise on invalid upload inputs.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "file_id",
+            "type": "Optional[str]",
+            "default": null
+          },
+          {
+            "name": "file_name",
+            "type": "Optional[str]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/normalize/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/normalize/pdf_reader.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "normalize_pdf",
+        "type": "function",
+        "line": 1,
+        "docstring": "Extract text/layout/style into a normalized JSON.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "file_id",
+            "type": "Optional[str]",
+            "default": null
+          },
+          {
+            "name": "file_name",
+            "type": "Optional[str]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/normalize/ocr.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "try_ocr_if_needed",
+        "type": "function",
+        "line": 1,
+        "docstring": "OCR fallback & merge layer.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalized",
+            "type": "Dict[str, Any]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/emit/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/upload_service/packages/emit/manifest.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "write_manifest",
+        "type": "function",
+        "line": 1,
+        "docstring": "Emit artifact manifest with checksum.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "artifact_path",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "kind",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/main.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "ParseResult",
+        "type": "class",
+        "line": 1,
+        "docstring": "Parser enriched artifact.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "parse_and_enrich",
+        "type": "function",
+        "line": 1,
+        "docstring": "Fan-out/fan-in parser; returns enriched parse path.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "normalize_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "ParseResult",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/parser_controller.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "ParseInternal",
+        "type": "class",
+        "line": 1,
+        "docstring": "Internal parsed artifact descriptor.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "parse_and_enrich",
+        "type": "function",
+        "line": 1,
+        "docstring": "Controller: async fan-out of parse subtasks; fan-in, merge, write JSON.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "normalize_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "ParseInternal",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "handle_parser_errors",
+        "type": "function",
+        "line": 1,
+        "docstring": "Normalize and raise parser errors.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "e",
+            "type": "Exception"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/detect/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/detect/language.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "detect_language",
+        "type": "function",
+        "line": 1,
+        "docstring": "Detect language/script for document.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/extract/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/extract/pdf_text.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "extract_text_blocks",
+        "type": "function",
+        "line": 1,
+        "docstring": "Extract text blocks with bbox/font.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/extract/tables.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "extract_tables",
+        "type": "function",
+        "line": 1,
+        "docstring": "Extract tables with cell grid.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/extract/images.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "extract_images",
+        "type": "function",
+        "line": 1,
+        "docstring": "Extract images & captions.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/extract/links.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "extract_links",
+        "type": "function",
+        "line": 1,
+        "docstring": "Extract hyperlinks/crossrefs.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/ocr/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/ocr/ocr_router.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "maybe_ocr",
+        "type": "function",
+        "line": 1,
+        "docstring": "Decide OCR & provide tokens layer.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "text_blocks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/reading_order.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "build_reading_order",
+        "type": "function",
+        "line": 1,
+        "docstring": "Compute reading order for blocks.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "text_blocks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "ocr_layer",
+            "type": "Dict[str, Any]",
+            "default": null
+          },
+          {
+            "name": "images",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[int]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/semantics.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "infer_semantics",
+        "type": "function",
+        "line": 1,
+        "docstring": "Label blocks by semantic role.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "text_blocks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "tables",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "images",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/lists_bullets.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "detect_lists_bullets",
+        "type": "function",
+        "line": 1,
+        "docstring": "Detect ordered/unordered lists & bullets.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "text_blocks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/merge/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/parser_service/packages/merge/merger.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "merge_all",
+        "type": "function",
+        "line": 1,
+        "docstring": "Merge parsing facets into a single enriched artifact.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "language",
+            "type": "Dict[str, Any]",
+            "default": null
+          },
+          {
+            "name": "text_blocks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "tables",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "images",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "links",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "ocr_layer",
+            "type": "Dict[str, Any]",
+            "default": null
+          },
+          {
+            "name": "reading_order",
+            "type": "List[int]",
+            "default": null
+          },
+          {
+            "name": "semantics",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "lists",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/main.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "ChunkResult",
+        "type": "class",
+        "line": 1,
+        "docstring": "UF chunking result.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "run_uf_chunking",
+        "type": "function",
+        "line": 1,
+        "docstring": "Create UF chunks from enriched parse.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "normalize_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "ChunkResult",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/chunk_controller.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "ChunkInternal",
+        "type": "class",
+        "line": 1,
+        "docstring": "Internal chunk descriptor.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "run_uf_chunking",
+        "type": "function",
+        "line": 1,
+        "docstring": "Controller for chunking & local index building.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "normalize_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "ChunkInternal",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "handle_chunk_errors",
+        "type": "function",
+        "line": 1,
+        "docstring": "Normalize and raise chunk errors.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "e",
+            "type": "Exception"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/segment/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/segment/sentences.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "split_sentences",
+        "type": "function",
+        "line": 1,
+        "docstring": "Segment text into sentences using punctuation and layout.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[str]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/segment/uf_chunker.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "uf_chunk",
+        "type": "function",
+        "line": 1,
+        "docstring": "Produce UF micro-chunks with metadata.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "sentences",
+            "type": "List[str]",
+            "default": null
+          },
+          {
+            "name": "typography",
+            "type": "Dict[str, Any]",
+            "default": null
+          },
+          {
+            "name": "target_tokens",
+            "type": "int",
+            "default": null
+          },
+          {
+            "name": "overlap",
+            "type": "int",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/features/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/features/typography.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "extract_typography",
+        "type": "function",
+        "line": 1,
+        "docstring": "Compute typography features.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "normalize_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/index/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/chunk_service/packages/index/local_vss.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "build_local_index",
+        "type": "function",
+        "line": 1,
+        "docstring": "Optionally build per-doc vector index.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "chunks_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/main.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "HeaderJoinResult",
+        "type": "class",
+        "line": 1,
+        "docstring": "Header and rechunking outputs.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "join_and_rechunk",
+        "type": "function",
+        "line": 1,
+        "docstring": "Heuristics+LLM headers, sequence repair, section rechunk.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "chunks_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "HeaderJoinResult",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/header_controller.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "HeaderJoinInternal",
+        "type": "class",
+        "line": 1,
+        "docstring": "Internal header join result.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "join_and_rechunk",
+        "type": "function",
+        "line": 1,
+        "docstring": "Controller: regex/typo scoring, stitching, repair, emit headers & rechunk.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "chunks_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "HeaderJoinInternal",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "handle_header_errors",
+        "type": "function",
+        "line": 1,
+        "docstring": "Normalize and raise header errors.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "e",
+            "type": "Exception"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/heur/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/heur/regex_bank.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "find_header_candidates",
+        "type": "function",
+        "line": 1,
+        "docstring": "Detect header candidates with patterns (A.1, Appendix A-1, etc.).",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "chunks_artifact_path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/score/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/score/typo_features.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "score_typo",
+        "type": "function",
+        "line": 1,
+        "docstring": "Add typography-derived confidence.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "candidates",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/join/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/join/stitcher.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "stitch_headers",
+        "type": "function",
+        "line": 1,
+        "docstring": "EFHG stitching merges split headers across UF boundaries.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "candidates",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/repair/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/repair/sequence.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "repair_sequence",
+        "type": "function",
+        "line": 1,
+        "docstring": "Aggressive hole detection & recovery (e.g., A5/A6).",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "headers",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/rechunk/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/header_service/packages/rechunk/by_headers.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "rechunk_by_headers",
+        "type": "function",
+        "line": 1,
+        "docstring": "Map chunks to section ranges; output section-aligned chunks.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "chunks_artifact_path",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "headers",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/main.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "PassJobs",
+        "type": "class",
+        "line": 1,
+        "docstring": "Pass job identifiers or artifact paths.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "run_all",
+        "type": "function",
+        "line": 1,
+        "docstring": "Execute five domain passes asynchronously.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "rechunk_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "PassJobs",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/passes_controller.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "PassJobsInternal",
+        "type": "class",
+        "line": 1,
+        "docstring": "Internal pass job bundle.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "BaseModel"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "run_all",
+        "type": "function",
+        "line": 1,
+        "docstring": "Retrieve, compose context, LLM calls, emit results.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "rechunk_artifact",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "PassJobsInternal",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "handle_pass_errors",
+        "type": "function",
+        "line": 1,
+        "docstring": "Normalize and raise rag pass errors.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "e",
+            "type": "Exception"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/retrieval/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/retrieval/hybrid.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "retrieve_ranked",
+        "type": "function",
+        "line": 1,
+        "docstring": "Hybrid BM25 + dense + physics scores + graph proximity.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "chunks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "domain",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "List[Dict[str, Any]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/fluid.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "flow_score",
+        "type": "function",
+        "line": 1,
+        "docstring": "Fluid-inspired flow scoring based on continuity & gradients.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "chunk",
+            "type": "Dict[str, Any]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "float",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/hep.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "energy_score",
+        "type": "function",
+        "line": 1,
+        "docstring": "High-entropy/variance scoring for spec-dense spans.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "chunk",
+            "type": "Dict[str, Any]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "float",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/graph.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "graph_score",
+        "type": "function",
+        "line": 1,
+        "docstring": "Graph proximity to header/section nodes.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "chunk",
+            "type": "Dict[str, Any]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "float",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/compose/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/compose/context.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "compose_window",
+        "type": "function",
+        "line": 1,
+        "docstring": "Assemble ordered, de-duped chunk window respecting token budget.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "ranked_chunks",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          },
+          {
+            "name": "budget_tokens",
+            "type": "int",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "str",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/mechanical.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "Prompt",
+        "type": "class",
+        "line": 1,
+        "docstring": "Holds system/user prompt strings for a pass.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/electrical.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "Prompt",
+        "type": "class",
+        "line": 1,
+        "docstring": "Holds system/user prompt strings for a pass.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/software.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "Prompt",
+        "type": "class",
+        "line": 1,
+        "docstring": "Holds system/user prompt strings for a pass.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/controls.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "Prompt",
+        "type": "class",
+        "line": 1,
+        "docstring": "Holds system/user prompt strings for a pass.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/project_mgmt.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "Prompt",
+        "type": "class",
+        "line": 1,
+        "docstring": "Holds system/user prompt strings for a pass.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/emit/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/services/rag_pass_service/packages/emit/results.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "write_pass_results",
+        "type": "function",
+        "line": 1,
+        "docstring": "Persist pass outputs with retrieval debug.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "pass_name",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "answer",
+            "type": "Any",
+            "default": null
+          },
+          {
+            "name": "ranked",
+            "type": "List[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "str",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/adapters/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/adapters/storage.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "write_json",
+        "type": "function",
+        "line": 1,
+        "docstring": "Write a JSON file with directories ensured.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "payload",
+            "type": "Dict[str, Any]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "write_jsonl",
+        "type": "function",
+        "line": 1,
+        "docstring": "Write JSONL lines safely.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "rows",
+            "type": "Iterable[Dict[str, Any]]",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "read_jsonl",
+        "type": "function",
+        "line": 1,
+        "docstring": "Read JSONL into list of dicts.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "list[dict]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "ensure_parent_dirs",
+        "type": "function",
+        "line": 1,
+        "docstring": "Create parent directories if missing.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "stream_read",
+        "type": "function",
+        "line": 1,
+        "docstring": "Async stream file bytes in chunks.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str"
+          },
+          {
+            "name": "chunk_size",
+            "type": "int",
+            "default": 65536
+          }
+        ],
+        "returns": {
+          "type": "AsyncIterator[bytes]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "stream_write",
+        "type": "function",
+        "line": 1,
+        "docstring": "Async write bytes from stream to file.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "path",
+            "type": "str"
+          },
+          {
+            "name": "aiter",
+            "type": "AsyncIterator[bytes]"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/adapters/vectors.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "EmbeddingModel",
+        "type": "class",
+        "line": 1,
+        "docstring": "Abstraction for embedding backends.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "embed_texts",
+            "type": "function",
+            "line": 1,
+            "docstring": "Batch embed texts",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "EmbeddingModel"
+              },
+              {
+                "name": "texts",
+                "type": "list[str]"
+              }
+            ],
+            "returns": {
+              "type": "list[list[float]]",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      },
+      {
+        "name": "BM25Index",
+        "type": "class",
+        "line": 1,
+        "docstring": "Sparse BM25 index over chunks.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Init BM25 index",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "BM25Index"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "add",
+            "type": "function",
+            "line": 1,
+            "docstring": "Add docs",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "BM25Index"
+              },
+              {
+                "name": "docs",
+                "type": "list[str]"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "search",
+            "type": "function",
+            "line": 1,
+            "docstring": "Search top-k",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "BM25Index"
+              },
+              {
+                "name": "query",
+                "type": "str"
+              },
+              {
+                "name": "k",
+                "type": "int",
+                "default": 20
+              }
+            ],
+            "returns": {
+              "type": "list[tuple[int,float]]",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      },
+      {
+        "name": "FaissIndex",
+        "type": "class",
+        "line": 1,
+        "docstring": "Local FAISS dense vector index.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Create or load index",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "FaissIndex"
+              },
+              {
+                "name": "dim",
+                "type": "int"
+              },
+              {
+                "name": "index_path",
+                "type": "str|None"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "add",
+            "type": "function",
+            "line": 1,
+            "docstring": "Add vectors",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "FaissIndex"
+              },
+              {
+                "name": "vectors",
+                "type": "list[list[float]]"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "search",
+            "type": "function",
+            "line": 1,
+            "docstring": "Search top-k",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "FaissIndex"
+              },
+              {
+                "name": "query_vec",
+                "type": "list[float]"
+              },
+              {
+                "name": "k",
+                "type": "int",
+                "default": 20
+              }
+            ],
+            "returns": {
+              "type": "list[tuple[int,float]]",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "save",
+            "type": "function",
+            "line": 1,
+            "docstring": "Persist index",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "FaissIndex"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      },
+      {
+        "name": "QdrantIndex",
+        "type": "class",
+        "line": 1,
+        "docstring": "Qdrant remote dense vector index.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Init client/collection",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "QdrantIndex"
+              },
+              {
+                "name": "collection",
+                "type": "str"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "add",
+            "type": "function",
+            "line": 1,
+            "docstring": "Add vectors",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "QdrantIndex"
+              },
+              {
+                "name": "vectors",
+                "type": "list[list[float]]"
+              },
+              {
+                "name": "payloads",
+                "type": "list[dict]|None"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "search",
+            "type": "function",
+            "line": 1,
+            "docstring": "Search",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "QdrantIndex"
+              },
+              {
+                "name": "query_vec",
+                "type": "list[float]"
+              },
+              {
+                "name": "k",
+                "type": "int",
+                "default": 20
+              }
+            ],
+            "returns": {
+              "type": "list[dict]",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      },
+      {
+        "name": "hybrid_search",
+        "type": "function",
+        "line": 1,
+        "docstring": "Fuse sparse+dense scores",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "bm25",
+            "type": "BM25Index|None"
+          },
+          {
+            "name": "dense",
+            "type": "FaissIndex|QdrantIndex|None"
+          },
+          {
+            "name": "query",
+            "type": "str"
+          },
+          {
+            "name": "query_vec",
+            "type": "list[float]|None"
+          },
+          {
+            "name": "alpha",
+            "type": "float",
+            "default": 0.5
+          },
+          {
+            "name": "k",
+            "type": "int",
+            "default": 20
+          }
+        ],
+        "returns": {
+          "type": "list[dict]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/adapters/llm.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "call_llm",
+        "type": "function",
+        "line": 1,
+        "docstring": "Call configured LLM provider and return parsed result.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "system",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "user",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "context",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "Any",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "LLMClient",
+        "type": "class",
+        "line": 1,
+        "docstring": "Provider-agnostic LLM client with retries.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Init client",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "LLMClient"
+              },
+              {
+                "name": "provider",
+                "type": "str",
+                "default": "openai"
+              },
+              {
+                "name": "api_key",
+                "type": "str|None"
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "chat",
+            "type": "function",
+            "line": 1,
+            "docstring": "Chat completion with retry policy",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "LLMClient"
+              },
+              {
+                "name": "system",
+                "type": "str"
+              },
+              {
+                "name": "user",
+                "type": "str"
+              },
+              {
+                "name": "context",
+                "type": "str"
+              },
+              {
+                "name": "temperature",
+                "type": "float",
+                "default": 0.0
+              },
+              {
+                "name": "max_tokens",
+                "type": "int",
+                "default": 1024
+              }
+            ],
+            "returns": {
+              "type": "dict",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "embed",
+            "type": "function",
+            "line": 1,
+            "docstring": "Batch embed via provider",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "LLMClient"
+              },
+              {
+                "name": "texts",
+                "type": "list[str]"
+              }
+            ],
+            "returns": {
+              "type": "list[list[float]]",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/adapters/db.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "upsert_document_record",
+        "type": "function",
+        "line": 1,
+        "docstring": "Upsert doc record in persistence store.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "doc_id",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "normalize_path",
+            "type": "str",
+            "default": null
+          },
+          {
+            "name": "manifest",
+            "type": "dict",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/ids.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/ingest.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/parsing.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/chunking.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/headers.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/contracts/passes.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/util/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/util/logging.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "get_logger",
+        "type": "function",
+        "line": 1,
+        "docstring": "Return configured JSON logger.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "name",
+            "type": "str",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "logging.Logger",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/util/audit.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "stage_record",
+        "type": "function",
+        "line": 1,
+        "docstring": "Build a normalized stage audit record.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "**kwargs",
+            "type": "Any",
+            "default": null
+          }
+        ],
+        "returns": {
+          "type": "dict",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/e2e/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/e2e/test_pipeline_e2e.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_pipeline_e2e",
+        "type": "function",
+        "line": 1,
+        "docstring": "E2E pipeline test placeholder.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "load_test_pdf_paths",
+        "type": "function",
+        "line": 1,
+        "docstring": "Return list of sample PDFs from tests/data/pdf/.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "list[str]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_pipeline_real_pdf",
+        "type": "function",
+        "line": 1,
+        "docstring": "Run pipeline on a real PDF from data; assert artifacts produced.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_upload.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_test_upload",
+        "type": "function",
+        "line": 1,
+        "docstring": "Unit test placeholder.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_parser.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_test_parser",
+        "type": "function",
+        "line": 1,
+        "docstring": "Unit test placeholder.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_parser_with_tables_and_ocr",
+        "type": "function",
+        "line": 1,
+        "docstring": "Ensure parser handles scanned pages and tables using sample PDFs.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_chunk.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_test_chunk",
+        "type": "function",
+        "line": 1,
+        "docstring": "Unit test placeholder.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_uf_chunk_boundaries",
+        "type": "function",
+        "line": 1,
+        "docstring": "Validate chunk boundaries respect sentence and header edges.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_headers.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_test_headers",
+        "type": "function",
+        "line": 1,
+        "docstring": "Unit test placeholder.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_sequence_repair_recovers_missing_headers",
+        "type": "function",
+        "line": 1,
+        "docstring": "Confirm A5/A6 hole repair using curated sample.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_passes.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_test_passes",
+        "type": "function",
+        "line": 1,
+        "docstring": "Unit test placeholder.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_hybrid_retrieval_ranking",
+        "type": "function",
+        "line": 1,
+        "docstring": "Validate BM25+dense+physics re-ranking on sample corpus.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/contracts/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/contracts/test_contract_shapes.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_contract_shapes",
+        "type": "function",
+        "line": 1,
+        "docstring": "Contract shapes validation.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/index.html",
+    "language": "html",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/frontend/styles/app.css",
+    "language": "css",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/frontend/js/main.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/frontend/js/apiClient.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "ApiClient",
+        "type": "class",
+        "line": 1,
+        "docstring": "Fetch wrapper for orchestrator endpoints.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "constructor",
+            "type": "function",
+            "line": 1,
+            "docstring": "Initialize with base URL.",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "ApiClient",
+                "default": null
+              },
+              {
+                "name": "{ baseUrl }",
+                "type": "Object",
+                "default": null
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "runPipeline",
+            "type": "function",
+            "line": 1,
+            "docstring": "POST pipeline run.",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "{ fileId, fileName }",
+                "type": "Object",
+                "default": null
+              }
+            ],
+            "returns": {
+              "type": "Promise<any>",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "status",
+            "type": "function",
+            "line": 1,
+            "docstring": "GET status.",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "docId",
+                "type": "string",
+                "default": null
+              }
+            ],
+            "returns": {
+              "type": "Promise<any>",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "results",
+            "type": "function",
+            "line": 1,
+            "docstring": "GET results.",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "docId",
+                "type": "string",
+                "default": null
+              }
+            ],
+            "returns": {
+              "type": "Promise<any>",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/models/JobModel.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "JobModel",
+        "type": "class",
+        "line": 1,
+        "docstring": "Represents pipeline job state.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/models/PassResultModel.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "PassResultModel",
+        "type": "class",
+        "line": 1,
+        "docstring": "Represents a pass result.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/viewmodels/UploadVM.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "UploadVM",
+        "type": "class",
+        "line": 1,
+        "docstring": "Upload view-model; exposes state/actions.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/viewmodels/PipelineVM.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "PipelineVM",
+        "type": "class",
+        "line": 1,
+        "docstring": "Pipeline view-model; orchestration from UI.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "pollProgress",
+        "type": "function",
+        "line": 1,
+        "docstring": "Poll status and update observable state.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "this",
+            "type": "PipelineVM"
+          },
+          {
+            "name": "docId",
+            "type": "string"
+          }
+        ],
+        "returns": {
+          "type": "Promise<void>",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/views/UploadView.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "UploadView",
+        "type": "class",
+        "line": 1,
+        "docstring": "Upload UI view; DOM-only.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/views/PipelineView.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "PipelineView",
+        "type": "class",
+        "line": 1,
+        "docstring": "Pipeline UI view.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/frontend/js/views/ResultsView.js",
+    "language": "javascript",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "ResultsView",
+        "type": "class",
+        "line": 1,
+        "docstring": "Results UI view.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "downloadArtifact",
+        "type": "function",
+        "line": 1,
+        "docstring": "Trigger browser download from streaming endpoint.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "this",
+            "type": "ResultsView"
+          },
+          {
+            "name": "path",
+            "type": "string"
+          }
+        ],
+        "returns": {
+          "type": "void",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/util/errors.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "AppError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Base application error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "Exception"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "ValidationError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Input validation error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "AppError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "NotFoundError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Resource not found.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "AppError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "ExternalServiceError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Downstream service failure.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "AppError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "RetryExhaustedError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Retries exhausted.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "AppError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/util/retry.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "RetryPolicy",
+        "type": "class",
+        "line": 1,
+        "docstring": "Configurable retry policy with backoff.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Initialize policy",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "RetryPolicy"
+              },
+              {
+                "name": "retries",
+                "type": "int",
+                "default": 3
+              },
+              {
+                "name": "base_delay",
+                "type": "float",
+                "default": 0.5
+              },
+              {
+                "name": "max_delay",
+                "type": "float",
+                "default": 8.0
+              },
+              {
+                "name": "jitter",
+                "type": "bool",
+                "default": true
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "sleep_durations",
+            "type": "function",
+            "line": 1,
+            "docstring": "Yield backoff durations",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "RetryPolicy"
+              }
+            ],
+            "returns": {
+              "type": "Iterable[float]",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      },
+      {
+        "name": "CircuitBreaker",
+        "type": "class",
+        "line": 1,
+        "docstring": "Simple circuit breaker.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": null,
+        "members": [
+          {
+            "name": "__init__",
+            "type": "function",
+            "line": 1,
+            "docstring": "Init",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "CircuitBreaker"
+              },
+              {
+                "name": "fail_threshold",
+                "type": "int",
+                "default": 5
+              },
+              {
+                "name": "reset_timeout",
+                "type": "float",
+                "default": 30.0
+              }
+            ],
+            "returns": {
+              "type": "None",
+              "description": ""
+            },
+            "members": []
+          },
+          {
+            "name": "call",
+            "type": "function",
+            "line": 1,
+            "docstring": "Protect call with breaker",
+            "modifiers": [],
+            "decorators": [],
+            "extends": [],
+            "args": [
+              {
+                "name": "self",
+                "type": "CircuitBreaker"
+              },
+              {
+                "name": "fn",
+                "type": "Callable"
+              },
+              {
+                "name": "*args",
+                "type": "Any"
+              },
+              {
+                "name": "**kwargs",
+                "type": "Any"
+              }
+            ],
+            "returns": {
+              "type": "Any",
+              "description": ""
+            },
+            "members": []
+          }
+        ]
+      },
+      {
+        "name": "with_retries",
+        "type": "function",
+        "line": 1,
+        "docstring": "Execute with retries/backoff and optional circuit breaker",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "fn",
+            "type": "Callable"
+          },
+          {
+            "name": "exceptions",
+            "type": "tuple"
+          },
+          {
+            "name": "policy",
+            "type": "RetryPolicy|None"
+          },
+          {
+            "name": "breaker",
+            "type": "CircuitBreaker|None"
+          },
+          {
+            "name": "*args",
+            "type": "Any"
+          },
+          {
+            "name": "**kwargs",
+            "type": "Any"
+          }
+        ],
+        "returns": {
+          "type": "Any",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/llm/utils.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "windows_curl",
+        "type": "function",
+        "line": 1,
+        "docstring": "Build Windows-friendly curl command.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "url",
+            "type": "str"
+          },
+          {
+            "name": "headers",
+            "type": "Dict[str, str]"
+          },
+          {
+            "name": "payload",
+            "type": "Dict[str, Any]"
+          }
+        ],
+        "returns": {
+          "type": "str",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "log_prompt",
+        "type": "function",
+        "line": 1,
+        "docstring": "Build compact request meta for logging.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "prefix",
+            "type": "str"
+          },
+          {
+            "name": "payload",
+            "type": "Dict[str, Any]"
+          },
+          {
+            "name": "hdrs",
+            "type": "Dict[str, str]"
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/llm/utils/envsafe.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "mask_bearer",
+        "type": "function",
+        "line": 1,
+        "docstring": "Mask bearer tokens for logs.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "token",
+            "type": "str | None"
+          }
+        ],
+        "returns": {
+          "type": "str",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "openrouter_headers",
+        "type": "function",
+        "line": 1,
+        "docstring": "Build OpenRouter headers from env.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "Dict[str, str]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "masked_headers",
+        "type": "function",
+        "line": 1,
+        "docstring": "Return a copy with Authorization masked.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "headers",
+            "type": "Dict[str, str]"
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, str]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/llm/openrouter.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "OpenRouterAuthError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Auth error (401).",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "Exception"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "OpenRouterHTTPError",
+        "type": "class",
+        "line": 1,
+        "docstring": "HTTP/transport error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "Exception"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "chat",
+        "type": "function",
+        "line": 1,
+        "docstring": "Synchronous chat call to OpenRouter /chat/completions.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "model",
+            "type": "str"
+          },
+          {
+            "name": "messages",
+            "type": "List[Dict[str, str]]"
+          },
+          {
+            "name": "temperature",
+            "type": "float",
+            "default": 0.0
+          },
+          {
+            "name": "top_p",
+            "type": "float | None"
+          },
+          {
+            "name": "max_tokens",
+            "type": "int | None"
+          },
+          {
+            "name": "extra",
+            "type": "Dict[str, Any] | None"
+          },
+          {
+            "name": "timeout",
+            "type": "float",
+            "default": 60.0
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/llm/clients/openrouter.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "OpenRouterError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Base error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "Exception"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "OpenRouterAuthError",
+        "type": "class",
+        "line": 1,
+        "docstring": "401 error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "OpenRouterError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "OpenRouterHTTPError",
+        "type": "class",
+        "line": 1,
+        "docstring": "HTTP status/transport error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "OpenRouterError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "OpenRouterStreamError",
+        "type": "class",
+        "line": 1,
+        "docstring": "Streaming idle/format error.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [
+          "OpenRouterError"
+        ],
+        "args": [],
+        "returns": null,
+        "members": []
+      },
+      {
+        "name": "_backoff",
+        "type": "function",
+        "line": 1,
+        "docstring": "Yield jittered backoff durations.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "retries",
+            "type": "int",
+            "default": 3
+          },
+          {
+            "name": "base",
+            "type": "float",
+            "default": 0.5
+          },
+          {
+            "name": "max_delay",
+            "type": "float",
+            "default": 8.0
+          }
+        ],
+        "returns": {
+          "type": "Iterable[float]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "chat_sync",
+        "type": "function",
+        "line": 1,
+        "docstring": "Sync chat with retries and masked logging.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "model",
+            "type": "str"
+          },
+          {
+            "name": "messages",
+            "type": "List[Dict[str, str]]"
+          },
+          {
+            "name": "temperature",
+            "type": "float",
+            "default": 0.0
+          },
+          {
+            "name": "top_p",
+            "type": "float | None"
+          },
+          {
+            "name": "max_tokens",
+            "type": "int | None"
+          },
+          {
+            "name": "extra",
+            "type": "Dict[str, Any] | None"
+          },
+          {
+            "name": "timeout",
+            "type": "float",
+            "default": 60.0
+          },
+          {
+            "name": "retries",
+            "type": "int",
+            "default": 3
+          }
+        ],
+        "returns": {
+          "type": "Dict[str, Any]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "chat_stream_async",
+        "type": "function",
+        "line": 1,
+        "docstring": "Async SSE streaming, yields deltas/meta/done.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "model",
+            "type": "str"
+          },
+          {
+            "name": "messages",
+            "type": "List[Dict[str, str]]"
+          },
+          {
+            "name": "temperature",
+            "type": "float",
+            "default": 0.0
+          },
+          {
+            "name": "top_p",
+            "type": "float | None"
+          },
+          {
+            "name": "max_tokens",
+            "type": "int | None"
+          },
+          {
+            "name": "extra",
+            "type": "Dict[str, Any] | None"
+          },
+          {
+            "name": "timeout",
+            "type": "float",
+            "default": 60.0
+          },
+          {
+            "name": "retries",
+            "type": "int",
+            "default": 3
+          },
+          {
+            "name": "idle_timeout",
+            "type": "float",
+            "default": 30.0
+          }
+        ],
+        "returns": {
+          "type": "AsyncGenerator[Dict[str, Any], None]",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "embed_sync",
+        "type": "function",
+        "line": 1,
+        "docstring": "Sync embeddings with retries.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "model",
+            "type": "str"
+          },
+          {
+            "name": "inputs",
+            "type": "List[str]"
+          },
+          {
+            "name": "timeout",
+            "type": "float",
+            "default": 60.0
+          },
+          {
+            "name": "retries",
+            "type": "int",
+            "default": 3
+          }
+        ],
+        "returns": {
+          "type": "List[List[float]]",
+          "description": ""
+        },
+        "members": []
+      }
+    ]
+  }
+]
