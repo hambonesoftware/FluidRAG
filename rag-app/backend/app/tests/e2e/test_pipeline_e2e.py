@@ -15,6 +15,8 @@ from ...services.header_service import HeaderJoinResult
 from ...services.parser_service import ParseResult
 from ...services.upload_service import NormalizedDoc
 
+pytestmark = pytest.mark.phase6
+
 
 @pytest.fixture(autouse=True)
 def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from ...contracts import (
     Citation,
     NormalizedManifest,
@@ -11,6 +13,8 @@ from ...contracts import (
     PassResult,
     RetrievalTrace,
 )
+
+pytestmark = pytest.mark.phase6
 
 
 def test_pass_result_schema_roundtrip() -> None:
