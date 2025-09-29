@@ -1,0 +1,5 @@
+"""Context composition helpers for RAG passes."""
+
+from __future__ import annotations
+
+__all__: list[str] = []
