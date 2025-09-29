@@ -8,9 +8,12 @@ from pathlib import Path
 import pytest
 
 from ...config import get_settings
+from ...contracts.passes import PassResult
 from ...services.rag_pass_service import run_all
 from ...services.rag_pass_service.packages.emit.results import write_pass_results
 from ...services.rag_pass_service.packages.retrieval import retrieve_ranked
+
+pytestmark = pytest.mark.phase6
 
 
 @pytest.fixture(autouse=True)
@@ -93,3 +96,42 @@ def test_run_all_emits_all_passes(tmp_path: Path) -> None:
     }
     for artifact in jobs.passes.values():
         assert Path(artifact).exists()
+
+
+def test_run_all_outputs_validate_schema_and_content(tmp_path: Path) -> None:
+    """Generated pass artifacts validate against schema and retain context."""
+
+    chunks_path = tmp_path / "header_chunks.jsonl"
+    lines = [json.dumps(row) for row in _sample_chunks()]
+    chunks_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    jobs = run_all("doc", str(chunks_path))
+    manifest_data = json.loads(Path(jobs.manifest_path).read_text(encoding="utf-8"))
+    assert set(manifest_data["passes"].keys()) == {
+        "mechanical",
+        "electrical",
+        "software",
+        "controls",
+        "project_mgmt",
+    }
+
+    for name, artifact in manifest_data["passes"].items():
+        payload = Path(artifact).read_text(encoding="utf-8")
+        result = PassResult.model_validate_json(payload)
+        assert result.pass_name == name
+        assert result.doc_id == "doc"
+        assert result.answer, "answers should not be empty"
+        assert result.context, "context window should be present"
+        assert result.retrieval, "retrieval trace should be populated"
+        assert result.citations, "citations should include supporting chunks"
+        for citation in result.citations:
+            assert citation.chunk_id.startswith(
+                "doc:"
+            ), "citation chunk id should include doc prefix"
+            assert citation.header_path, "citation header path is required"
+        top_header = result.retrieval[0].header_path
+        if top_header:
+            assert top_header in result.context
+        preview = result.retrieval[0].text_preview.strip()
+        if preview:
+            assert preview in result.answer
