@@ -7,29 +7,24 @@ import PipelineView from "./views/PipelineView.js";
 const button = document.getElementById("ping-backend");
 const output = document.getElementById("health-response");
 
-function isOffline() {
-  const meta = document.querySelector('meta[name="fluidrag-offline"]');
-  return (
-    meta && String(meta.getAttribute("content")).toLowerCase() === "true"
-  );
-}
-
-const offline = isOffline();
-const offlineNotice = document.getElementById("offlineNotice");
-if (offline && offlineNotice) {
-  offlineNotice.style.display = "block";
-}
-
 const backendPort = document.body.dataset.backendPort || "8000";
 const backendHost = window.location.hostname || "localhost";
 const backendProtocol = window.location.protocol.startsWith("http")
   ? window.location.protocol
   : "http:";
-const healthEndpoint = `${backendProtocol}//${backendHost}:${backendPort}/health`;
+const baseUrl = `${backendProtocol}//${backendHost}:${backendPort}`;
+const healthEndpoint = `${baseUrl}/health`;
+
+const apiClient = new ApiClient({ baseUrl });
+const offline = apiClient.offline;
+
+const offlineNotice = document.getElementById("offlineNotice");
+if (offlineNotice) {
+  offlineNotice.hidden = !offline;
+}
 
 async function pingBackend() {
   if (offline) {
-    console.log("Offline mode: skipping network request");
     if (output) {
       output.textContent = "Offline mode: skipping network request";
     }
@@ -56,19 +51,47 @@ async function pingBackend() {
 }
 
 if (button) {
-  button.addEventListener("click", pingBackend);
+  button.addEventListener("click", () => {
+    void pingBackend();
+  });
 }
 
-const apiClient = new ApiClient({
-  baseUrl: `${backendProtocol}//${backendHost}:${backendPort}`,
-});
+function restoreLastDocId() {
+  try {
+    return window.localStorage.getItem("fluidrag:lastDocId");
+  } catch (err) {
+    console.warn("Unable to read stored doc id", err);
+    return null;
+  }
+}
+
 const pipelineRoot = document.querySelector("[data-pipeline-root]");
 const uploadRoot = document.querySelector("[data-upload-root]");
+let pipelineView = null;
 if (pipelineRoot) {
   const pipelineVM = new PipelineVM(apiClient);
-  const pipelineView = new PipelineView(pipelineVM, pipelineRoot);
-  if (uploadRoot) {
-    const uploadVM = new UploadVM(apiClient);
-    new UploadView(uploadVM, uploadRoot, { pipelineView });
+  pipelineView = new PipelineView(pipelineVM, pipelineRoot);
+}
+
+if (uploadRoot && pipelineView) {
+  const uploadVM = new UploadVM(apiClient);
+  new UploadView(uploadVM, uploadRoot, {
+    pipelineView,
+    onRun: (docId) => {
+      if (!offline && docId) {
+        pipelineView.poll(docId).catch((err) => {
+          console.warn("Polling failed", err);
+        });
+      }
+    },
+  });
+}
+
+if (pipelineView && !offline) {
+  const lastDocId = restoreLastDocId();
+  if (lastDocId) {
+    pipelineView.poll(lastDocId).catch(() => {
+      void pipelineView.refresh(lastDocId);
+    });
   }
 }
