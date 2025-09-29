@@ -125,7 +125,7 @@ def with_retries(
             if breaker is not None:
                 return breaker.call(fn, *args, **kwargs)
             return fn(*args, **kwargs)
-        except exceptions as exc:  # type: ignore[misc]
+        except exceptions as exc:
             last_exc = exc
             try:
                 delay = next(delays)

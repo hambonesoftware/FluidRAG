@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,9 @@ pytestmark = pytest.mark.phase6
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _reset_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Iterator[None]:
     monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
     monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
     get_settings.cache_clear()
@@ -28,7 +31,7 @@ def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
 
 def test_pipeline_run_endpoint(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    artifact_root = Path(get_settings().artifact_root_path)
+    artifact_root = get_settings().artifact_root_path
     doc_root = artifact_root / "doc"
     doc_root.mkdir(parents=True, exist_ok=True)
 

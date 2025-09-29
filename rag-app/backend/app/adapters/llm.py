@@ -13,7 +13,7 @@ from ..util.logging import get_logger
 logger = get_logger(__name__)
 
 
-def call_llm(system: str, user: str, context: str) -> Any:
+def call_llm(system: str, user: str, context: str) -> dict[str, Any]:
     """Call configured LLM provider and return parsed result."""
 
     client = LLMClient()
@@ -44,7 +44,7 @@ class LLMClient:
         context: str,
         temperature: float = 0.0,
         max_tokens: int = 1024,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Chat completion with retry policy."""
 
         if self._settings.offline:

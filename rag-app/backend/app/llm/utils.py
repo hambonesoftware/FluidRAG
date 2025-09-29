@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+from importlib.machinery import ModuleSpec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 __path__ = [str(Path(__file__).with_name("utils"))]
-if __spec__ is not None:  # pragma: no cover - package wiring
-    __spec__.submodule_search_locations = __path__
-    __package__ = __spec__.parent  # type: ignore[assignment]
+module_spec = cast(ModuleSpec | None, globals().get("__spec__"))
+if module_spec is not None:  # pragma: no cover - package wiring
+    module_spec.submodule_search_locations = __path__
+    __package__ = module_spec.parent  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from backend.app.llm.utils.envsafe import masked_headers as masked_headers

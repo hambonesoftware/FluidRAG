@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,9 @@ pytestmark = pytest.mark.phase6
 
 
 @pytest.fixture(autouse=True)
-def _configure_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _configure_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Iterator[None]:
     monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
     monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
     get_settings.cache_clear()

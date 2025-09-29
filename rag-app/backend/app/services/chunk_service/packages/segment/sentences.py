@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import Any
 
 from .....util.logging import get_logger
 
@@ -14,18 +15,29 @@ logger = get_logger(__name__)
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
-def _iter_block_text(payload: dict) -> Iterable[str]:
+def _iter_block_text(payload: Mapping[str, Any]) -> Iterable[str]:
     blocks = payload.get("blocks")
     if isinstance(blocks, list):
         for block in blocks:
-            text = block.get("text", "") if isinstance(block, dict) else ""
+            if isinstance(block, Mapping):
+                text = str(block.get("text", ""))
+            else:
+                text = ""
             if text:
                 yield text
     pages = payload.get("pages")
     if isinstance(pages, list):
         for page in pages:
-            for block in page.get("blocks", []):
-                text = block.get("text", "") if isinstance(block, dict) else ""
+            if not isinstance(page, Mapping):
+                continue
+            nested = page.get("blocks", [])
+            if not isinstance(nested, list):
+                continue
+            for block in nested:
+                if isinstance(block, Mapping):
+                    text = str(block.get("text", ""))
+                else:
+                    text = ""
                 if text:
                     yield text
 

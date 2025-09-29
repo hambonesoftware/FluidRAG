@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,9 @@ async def _fan_out(
     normalize_path: Path,
     timeout: float,
 ) -> tuple[dict[str, Any], dict[str, float]]:
-    async def run(name: str, func, *args) -> tuple[str, Any, float]:
+    async def run(
+        name: str, func: Callable[..., Any], *args: Any
+    ) -> tuple[str, Any, float]:
         start = time.perf_counter()
         result = await asyncio.wait_for(asyncio.to_thread(func, *args), timeout=timeout)
         return name, result, time.perf_counter() - start

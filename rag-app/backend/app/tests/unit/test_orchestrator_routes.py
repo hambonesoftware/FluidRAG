@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,9 @@ pytestmark = pytest.mark.phase7
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _reset_settings(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> Iterator[None]:
     """Ensure tests run with a clean offline settings cache."""
 
     monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
@@ -41,7 +44,7 @@ def client() -> TestClient:
 
 
 def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
-    artifact_root = Path(get_settings().artifact_root_path)
+    artifact_root = get_settings().artifact_root_path
     doc_root = artifact_root / doc_id
     doc_root.mkdir(parents=True, exist_ok=True)
 
@@ -57,7 +60,7 @@ def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
         "generated_at": "2024-01-01T00:00:00Z",
         "manifest_path": str(doc_root / "normalize.manifest.json"),
     }
-    manifest_path = Path(manifest_payload["manifest_path"])
+    manifest_path = Path(str(manifest_payload["manifest_path"]))
     manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
 
     return NormalizedDoc(
@@ -75,7 +78,7 @@ def test_pipeline_run_creates_manifest_and_results(
 ) -> None:
     doc_id = "doc-123"
     normalized_doc = _prepare_normalized_doc(doc_id)
-    doc_root = Path(get_settings().artifact_root_path) / doc_id
+    doc_root = get_settings().artifact_root_path / doc_id
     passes_dir = doc_root / "passes"
     passes_dir.mkdir(parents=True, exist_ok=True)
 
@@ -213,7 +216,7 @@ def test_run_pipeline_handles_unexpected_errors(
 
 def test_results_missing_manifest_returns_404(client: TestClient) -> None:
     doc_id = "unknown"
-    artifact_root = Path(get_settings().artifact_root_path)
+    artifact_root = get_settings().artifact_root_path
     doc_root = artifact_root / doc_id
     doc_root.mkdir(parents=True, exist_ok=True)
     with pytest.raises(FileNotFoundError):
@@ -232,6 +235,6 @@ def test_stream_artifact_guards_against_escape(
     resp = client.get("/pipeline/artifacts", params={"path": str(outside)})
     assert resp.status_code == 403
 
-    missing = Path(get_settings().artifact_root_path) / "doc" / "missing.json"
+    missing = get_settings().artifact_root_path / "doc" / "missing.json"
     resp_missing = client.get("/pipeline/artifacts", params={"path": str(missing)})
     assert resp_missing.status_code == 404
