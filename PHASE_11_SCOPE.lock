@@ -1,0 +1,9 @@
+Phase 11 Checklist
+- Add rag-app/scripts/release_checklist.py providing a release-readiness CLI that validates docs, env templates, and quality commands.
+- Add rag-app/scripts/offline_pipeline_demo.py as a common-task example for triggering the orchestrator run/status/results offline.
+- Add rag-app/tests/phase_11/test_release_scripts.py covering the helper logic for the new scripts and enforcing documentation sections.
+- Refresh rag-app/README.md with quickstart, environment setup, troubleshooting guidance, and references to the handover scripts.
+- Update rag-app/CHANGELOG.md with the Phase 11 release summary and final version tag.
+- Create rag-app/reports/phase_11_outcome.md documenting checklist completion, quality gates, and migration status.
+- Create rag-app/reports/post_phase_backlog.md capturing triaged nice-to-haves for the next iteration.
+- Update pytest.ini so Phase 11 tests under rag-app/tests are executed alongside existing suites.

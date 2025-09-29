@@ -1,5 +1,29 @@
 # Changelog
 
+## [Phase 11] - 2025-10-03
+### Added
+- `scripts/release_checklist.py` for validating release readiness (docs, templates,
+  backlog) with JSON output for automation.
+- `scripts/offline_pipeline_demo.py` driving orchestrator run/status/results for
+  offline smoke tests and demos.
+- Python tests under `tests/phase_11` covering the new scripts plus README/CHANGELOG
+  guards to keep handover docs intact.
+- Backlog triage report outlining next-iteration opportunities after release.
+
+### Changed
+- README reorganised around quickstart, environment setup, troubleshooting, and
+  release tooling to support handover scenarios.
+- `pytest.ini` now executes frontend/test harness suites under `rag-app/tests`
+  alongside backend tests to keep Phase 8+ coverage active.
+
+### Documentation
+- Phase 11 outcome report summarising readiness checks, quality gates, and
+  cross-phase notes.
+
+### Verification
+- Release checklist CLI emits a zero exit code only when required artifacts are
+  present, with Phase 11 tests enforcing expectations.
+
 ## [Phase 10] - 2025-10-02
 ### Added
 - Request-scoped observability middleware emitting `X-Correlation-ID` headers, structured JSON request logs, and timing spans for the FastAPI backend.
