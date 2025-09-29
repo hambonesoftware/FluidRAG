@@ -66,7 +66,7 @@ def read_jsonl(path: str) -> list[dict[str, Any]]:
 
 
 async def stream_read(path: str, chunk_size: int = 65536) -> AsyncIterator[bytes]:
-    """Async stream file bytes in chunks."""
+    """Async stream file bytes in chunks from disk."""
 
     target = Path(path)
     if not target.exists():

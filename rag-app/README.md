@@ -1,4 +1,4 @@
-Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults. Phase 3 introduces the upload normalization + parser fan-out/fan-in services, FastAPI routes, and an offline benchmark harness.
+Phase 1 established the project skeleton (tooling, boot scripts, static frontend). Phase 2 adds a production-ready OpenRouter client with retry logic, structured streaming, and embedding support while preserving the offline-first defaults. Phase 3 introduces the upload normalization + parser fan-out/fan-in services, FastAPI routes, and an offline benchmark harness. Phase 7 wires the orchestrator API layer so the entire pipeline can be triggered and inspected through dedicated routes.
 
 ## Getting Started
 
@@ -44,6 +44,36 @@ curl -s -X POST http://127.0.0.1:8000/chunk/uf \
 ```
 
 The response echoes the chunk artifact path (`uf_chunks.jsonl`) and, if enabled, the index manifest. The chunk controller writes a `chunk.audit.json` record alongside the JSONL file and persists sparse+dense index metadata when offline-safe hashing is enabled by default.
+
+## Pipeline Orchestrator & Artifact Access
+
+With Phase 7 the orchestrator coordinates every stage:
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/pipeline/run \
+  -H 'Content-Type: application/json' \
+  -d '{"file_name": "<path-or-handle-to-source>"}'
+```
+
+The response bundles the normalized, parsed, chunked, header-joined, and pass metadata along with the audit record location written to `<ARTIFACT_ROOT>/<doc_id>/pipeline.audit.json`.
+
+Query the aggregated status for a document (manifest snapshot + audit trail):
+
+```bash
+curl -s http://127.0.0.1:8000/pipeline/status/<doc_id>
+```
+
+Fetch the pass manifest and fully validated pass payloads:
+
+```bash
+curl -s http://127.0.0.1:8000/pipeline/results/<doc_id>
+```
+
+Artifacts can be streamed back without loading them into memory. The route enforces that all paths stay within the configured `ARTIFACT_ROOT`.
+
+```bash
+curl -s -G http://127.0.0.1:8000/pipeline/artifacts --data-urlencode "path=<absolute-or-relative-artifact>" -o artifact.json
+```
 
 ## Benchmark Harness
 

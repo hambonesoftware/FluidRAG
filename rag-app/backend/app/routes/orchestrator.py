@@ -10,10 +10,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, model_validator
+from pydantic import ValidationError as PydanticValidationError
 
 from ..adapters import stream_read
 from ..adapters.db import upsert_document_record
 from ..config import get_settings
+from ..contracts.passes import PassManifest, PassResult
 from ..services.chunk_service import run_uf_chunking
 from ..services.header_service import join_and_rechunk
 from ..services.parser_service import parse_and_enrich
@@ -46,7 +48,13 @@ async def _load_json(path: str) -> dict[str, Any]:
     target = Path(path)
     if not target.exists():
         return {}
-    return json.loads(target.read_text(encoding="utf-8"))
+    try:
+        return json.loads(target.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:  # pragma: no cover - corrupted artifact
+        logger.warning(
+            "pipeline.load_json.decode_failed", extra={"path": path, "error": str(exc)}
+        )
+        return {}
 
 
 @router.post("/run", response_model=dict)
@@ -98,6 +106,7 @@ async def run_pipeline(req: PipelineRunRequest) -> dict[str, Any]:
             "chunks": chunk_result.model_dump(),
             "headers": headers_result.model_dump(),
             "passes": pass_jobs.model_dump(),
+            "audit_path": str(audit_path),
         }
     except ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -105,6 +114,8 @@ async def run_pipeline(req: PipelineRunRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AppError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except PydanticValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/status/{doc_id}", response_model=dict)
@@ -118,13 +129,25 @@ async def status(doc_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="document not found")
     manifest = json.loads(record_path.read_text(encoding="utf-8"))
     passes_manifest_path = doc_root / "passes" / "manifest.json"
-    passes_manifest = {}
+    passes_manifest: dict[str, Any] = {}
     if passes_manifest_path.exists():
-        passes_manifest = json.loads(passes_manifest_path.read_text(encoding="utf-8"))
+        try:
+            pass_manifest = PassManifest(
+                **json.loads(passes_manifest_path.read_text(encoding="utf-8"))
+            )
+        except (json.JSONDecodeError, PydanticValidationError) as exc:
+            logger.warning(
+                "pipeline.status.pass_manifest_invalid",
+                extra={"doc_id": doc_id, "error": str(exc)},
+            )
+        else:
+            passes_manifest = pass_manifest.model_dump()
+    pipeline_audit = await _load_json(str(doc_root / "pipeline.audit.json"))
     return {
         "doc_id": doc_id,
         "manifest": manifest,
         "passes": passes_manifest.get("passes", {}),
+        "pipeline_audit": pipeline_audit,
     }
 
 
@@ -137,17 +160,49 @@ async def results(doc_id: str) -> dict[str, Any]:
     manifest_path = doc_root / "passes" / "manifest.json"
     if not manifest_path.exists():
         raise HTTPException(status_code=404, detail="pass manifest missing")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        manifest_model = PassManifest(
+            **json.loads(manifest_path.read_text(encoding="utf-8"))
+        )
+    except (json.JSONDecodeError, PydanticValidationError) as exc:
+        logger.error(
+            "pipeline.results.manifest_invalid",
+            extra={"doc_id": doc_id, "error": str(exc)},
+        )
+        raise HTTPException(status_code=500, detail="invalid pass manifest") from exc
+
     passes: dict[str, Any] = {}
-    for name, path in manifest.get("passes", {}).items():
+    for name, path in manifest_model.passes.items():
         candidate = Path(path)
         if not candidate.is_absolute():
-            candidate = doc_root / "passes" / candidate.name
+            candidate = doc_root / "passes" / path
+        candidate = candidate.expanduser().resolve()
+        try:
+            candidate.relative_to(doc_root)
+        except ValueError:
+            logger.warning(
+                "pipeline.results.path_outside_root",
+                extra={"doc_id": doc_id, "path": str(candidate)},
+            )
+            continue
         if not candidate.exists():
             logger.warning("pipeline.results.missing", extra={"path": str(candidate)})
             continue
-        passes[name] = json.loads(candidate.read_text(encoding="utf-8"))
-    return {"doc_id": doc_id, "passes": passes}
+        try:
+            payload = json.loads(candidate.read_text(encoding="utf-8"))
+            pass_result = PassResult(**payload)
+        except (json.JSONDecodeError, PydanticValidationError) as exc:
+            logger.warning(
+                "pipeline.results.payload_invalid",
+                extra={"doc_id": doc_id, "path": str(candidate), "error": str(exc)},
+            )
+            continue
+        passes[name] = pass_result.model_dump()
+    return {
+        "doc_id": doc_id,
+        "manifest": manifest_model.model_dump(),
+        "passes": passes,
+    }
 
 
 @router.get("/artifacts")
@@ -155,9 +210,19 @@ async def stream_artifact(path: str) -> StreamingResponse:
     """Stream artifact bytes to client using chunked transfer."""
 
     settings = get_settings()
+    artifact_root = Path(settings.artifact_root_path).expanduser().resolve()
     candidate = Path(path)
     if not candidate.is_absolute():
-        candidate = Path(settings.artifact_root_path) / path
+        candidate = artifact_root / path
+    candidate = candidate.expanduser().resolve()
+    try:
+        candidate.relative_to(artifact_root)
+    except ValueError as exc:
+        logger.warning(
+            "pipeline.artifact.denied",
+            extra={"requested": path, "resolved": str(candidate)},
+        )
+        raise HTTPException(status_code=403, detail="artifact access denied") from exc
     if not candidate.exists():
         raise HTTPException(status_code=404, detail="artifact not found")
     iterator = stream_read(str(candidate))
