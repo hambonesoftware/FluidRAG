@@ -1,0 +1,49 @@
+Phase 3 Scope Selection — Upload & Parser Fan-Out/Fan-In
+========================================================
+Scope rationale: deliver the full upload normalization and parser enrichment pipeline defined in the Phase 3 plan, including FastAPI routes, service packages, tests, tooling, and documentation updates. No database migrations are required; artifacts are file-based.
+
+Files to add or modify:
+- PHASE_3_SCOPE.lock (this declaration)
+- PHASE_3_NOTES.md
+- app_finalstubs/finalstubs_latest.json (append benchmark/script/test stubs if missing)
+- rag-app/.env.example
+- rag-app/README.md
+- rag-app/scripts/bench_phase3.py
+- rag-app/backend/app/config.py
+- rag-app/backend/app/main.py
+- rag-app/backend/app/routes/__init__.py
+- rag-app/backend/app/routes/upload.py
+- rag-app/backend/app/routes/parser.py
+- rag-app/backend/app/services/__init__.py
+- rag-app/backend/app/services/upload_service/__init__.py
+- rag-app/backend/app/services/upload_service/main.py
+- rag-app/backend/app/services/upload_service/upload_controller.py
+- rag-app/backend/app/services/upload_service/packages/__init__.py
+- rag-app/backend/app/services/upload_service/packages/guards/__init__.py
+- rag-app/backend/app/services/upload_service/packages/guards/validators.py
+- rag-app/backend/app/services/upload_service/packages/normalize/__init__.py
+- rag-app/backend/app/services/upload_service/packages/normalize/pdf_reader.py
+- rag-app/backend/app/services/upload_service/packages/normalize/ocr.py
+- rag-app/backend/app/services/upload_service/packages/emit/__init__.py
+- rag-app/backend/app/services/upload_service/packages/emit/manifest.py
+- rag-app/backend/app/services/parser_service/__init__.py
+- rag-app/backend/app/services/parser_service/main.py
+- rag-app/backend/app/services/parser_service/parser_controller.py
+- rag-app/backend/app/services/parser_service/packages/__init__.py
+- rag-app/backend/app/services/parser_service/packages/detect/__init__.py
+- rag-app/backend/app/services/parser_service/packages/detect/language.py
+- rag-app/backend/app/services/parser_service/packages/extract/__init__.py
+- rag-app/backend/app/services/parser_service/packages/extract/pdf_text.py
+- rag-app/backend/app/services/parser_service/packages/extract/tables.py
+- rag-app/backend/app/services/parser_service/packages/extract/images.py
+- rag-app/backend/app/services/parser_service/packages/extract/links.py
+- rag-app/backend/app/services/parser_service/packages/ocr/__init__.py
+- rag-app/backend/app/services/parser_service/packages/ocr/ocr_router.py
+- rag-app/backend/app/services/parser_service/packages/enhance/__init__.py
+- rag-app/backend/app/services/parser_service/packages/enhance/reading_order.py
+- rag-app/backend/app/services/parser_service/packages/enhance/semantics.py
+- rag-app/backend/app/services/parser_service/packages/enhance/lists_bullets.py
+- rag-app/backend/app/services/parser_service/packages/merge/__init__.py
+- rag-app/backend/app/services/parser_service/packages/merge/merger.py
+- rag-app/backend/app/tests/unit/test_upload.py
+- rag-app/backend/app/tests/unit/test_parser.py

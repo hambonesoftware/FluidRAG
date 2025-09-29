@@ -1,0 +1,22 @@
+"""Backend API routes for FluidRAG."""
+
+from . import chunk, headers, parser, upload
+from .chunk import router as chunk_router
+from .headers import router as headers_router
+from .orchestrator import router as orchestrator_router
+from .parser import router as parser_router
+from .passes import router as passes_router
+from .upload import router as upload_router
+
+__all__ = [
+    "upload",
+    "parser",
+    "chunk",
+    "headers",
+    "upload_router",
+    "parser_router",
+    "chunk_router",
+    "headers_router",
+    "orchestrator_router",
+    "passes_router",
+]

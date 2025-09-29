@@ -44,7 +44,7 @@
     ]
   },
   {
-    "file_path": "rag-app/.env",
+    "file_path": "rag-app/.env.example",
     "language": "text",
     "imported_types": [],
     "imports": [],
@@ -58,11 +58,51 @@
     "declared_types": []
   },
   {
+    "file_path": "rag-app/PHASE_1_NOTES.md",
+    "language": "markdown",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
     "file_path": "rag-app/.gitignore",
     "language": "text",
     "imported_types": [],
     "imports": [],
     "declared_types": []
+  },
+  {
+    "file_path": "rag-app/.pre-commit-config.yaml",
+    "language": "yaml",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/pyproject.toml",
+    "language": "toml",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/requirements.txt",
+    "language": "text",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/scripts/check_file_lengths.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
   },
   {
     "file_path": "rag-app/data/.gitkeep",
@@ -183,7 +223,7 @@
         "name": "run_pipeline",
         "type": "function",
         "line": 1,
-        "docstring": "Execute full pipeline: upload→parse→chunk→headers→passes.",
+        "docstring": "Execute full pipeline: upload\u2192parse\u2192chunk\u2192headers\u2192passes.",
         "modifiers": [],
         "decorators": [],
         "extends": [],
@@ -4368,6 +4408,644 @@
           "description": ""
         },
         "members": []
+      }
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_config.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "reset_settings_cache",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_settings_defaults",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_environment_overrides",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_uvicorn_and_frontend_options",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_settings_defaults",
+      "test_environment_overrides",
+      "test_uvicorn_and_frontend_options"
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_retry.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_retry_policy_generates_backoff_sequence",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_with_retries_eventually_succeeds",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_with_retries_raises_after_exhaustion",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_circuit_breaker_trips_and_resets",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_retry_policy_generates_backoff_sequence",
+      "test_with_retries_eventually_succeeds",
+      "test_with_retries_raises_after_exhaustion",
+      "test_circuit_breaker_trips_and_resets"
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_logging.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "test_get_logger_emits_json",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "capsys",
+            "type": "pytest.CaptureFixture[str]"
+          },
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_get_logger_emits_json"
+    ]
+  },
+  {
+    "file_path": "PHASE_2_NOTES.md",
+    "language": "markdown",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [],
+    "spec_entry": true
+  },
+  {
+    "file_path": "rag-app/backend/app/llm/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/llm/clients/__init__.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_llm_envsafe.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "_clear_env",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_mask_bearer_masks_middle",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_mask_bearer_handles_short_values",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_openrouter_headers_requires_key",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_masked_headers_masks_authorization",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_mask_bearer_masks_middle",
+      "test_mask_bearer_handles_short_values",
+      "test_openrouter_headers_requires_key",
+      "test_masked_headers_masks_authorization"
+    ]
+  },
+  {
+    "file_path": "rag-app/backend/app/tests/unit/test_openrouter_client.py",
+    "language": "python",
+    "imported_types": [],
+    "imports": [],
+    "declared_types": [
+      {
+        "name": "DummyResponse",
+        "type": "class",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "members": []
+      },
+      {
+        "name": "MockClient",
+        "type": "class",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "members": []
+      },
+      {
+        "name": "DummyStreamResponse",
+        "type": "class",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "members": []
+      },
+      {
+        "name": "MockAsyncClient",
+        "type": "class",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [],
+        "members": []
+      },
+      {
+        "name": "_reset_settings",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "_patch_sleep",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "online_env",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_chat_sync_offline_guard",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_chat_sync_retries_then_succeeds",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          },
+          {
+            "name": "online_env",
+            "type": "Any"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_chat_stream_async_yields_events",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          },
+          {
+            "name": "online_env",
+            "type": "Any"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_chat_stream_idle_timeout",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          },
+          {
+            "name": "online_env",
+            "type": "Any"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_embed_sync_parses_vectors",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          },
+          {
+            "name": "online_env",
+            "type": "Any"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      },
+      {
+        "name": "test_chat_sync_propagates_auth_error",
+        "type": "function",
+        "line": 1,
+        "docstring": "",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "monkeypatch",
+            "type": "pytest.MonkeyPatch"
+          },
+          {
+            "name": "online_env",
+            "type": "Any"
+          }
+        ],
+        "returns": {
+          "type": "None",
+          "description": ""
+        },
+        "members": []
+      }
+    ],
+    "spec_entry": true,
+    "test_functions": [
+      "test_chat_sync_offline_guard",
+      "test_chat_sync_retries_then_succeeds",
+      "test_chat_stream_async_yields_events",
+      "test_chat_stream_idle_timeout",
+      "test_embed_sync_parses_vectors",
+      "test_chat_sync_propagates_auth_error"
+    ]
+  },
+  {
+    "file_path": "PHASE_3_NOTES.md",
+    "language": "markdown",
+    "imports": [],
+    "imported_types": [],
+    "declared_types": []
+  },
+  {
+    "file_path": "rag-app/scripts/bench_phase3.py",
+    "language": "python",
+    "imports": [],
+    "imported_types": [],
+    "declared_types": [
+      {
+        "type": "function",
+        "name": "run_benchmark",
+        "line": 1,
+        "docstring": "Run upload\u2192parser benchmark and return stats.",
+        "modifiers": [],
+        "decorators": [],
+        "extends": [],
+        "args": [
+          {
+            "name": "iterations",
+            "type": "int",
+            "default": 5
+          }
+        ],
+        "returns": {
+          "type": "dict[str, float]",
+          "description": ""
+        }
       }
     ]
   }

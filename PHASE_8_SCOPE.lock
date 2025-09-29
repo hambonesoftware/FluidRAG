@@ -1,0 +1,22 @@
+Phase 8 Scope — Frontend MVVM
+
+Implementation Targets (rag-app/)
+- frontend/index.html
+- frontend/styles/app.css
+- frontend/js/main.js
+- frontend/js/apiClient.js
+- frontend/js/models/JobModel.js
+- frontend/js/models/PassResultModel.js
+- frontend/js/viewmodels/UploadVM.js
+- frontend/js/viewmodels/PipelineVM.js
+- frontend/js/views/UploadView.js
+- frontend/js/views/PipelineView.js
+- frontend/js/views/ResultsView.js
+
+Tests
+- tests/phase_8/test_frontend_viewmodels.py (Node-backed)
+
+Documentation & Reports
+- CHANGELOG.md (Phase 8 entry)
+- README.md (frontend usage)
+- reports/phase_8_outcome.md

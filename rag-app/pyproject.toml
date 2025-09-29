@@ -1,0 +1,36 @@
+[project]
+name = "fluidrag"
+version = "0.1.0"
+description = "FluidRAG development workspace"
+authors = [{ name = "FluidRAG Team" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 88
+exclude = ["rag-app/frontend", "rag-app/data"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "RET"]
+ignore = ["E203", "E266", "E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/app/tests"]
+pythonpath = ["rag-app"]
+markers = [
+    "phase4: marks tests that exercise Phase 4 functionality",
+    "phase5: marks tests that exercise Phase 5 functionality",
+    "phase6: marks tests that exercise Phase 6 functionality",
+    "phase7: marks tests that exercise Phase 7 functionality",
+    "phase8: marks tests that exercise Phase 8 functionality",
+    "phase9: marks tests that exercise Phase 9 functionality",
+]

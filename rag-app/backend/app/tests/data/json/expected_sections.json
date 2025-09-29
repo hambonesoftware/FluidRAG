@@ -1,0 +1,16 @@
+{
+  "expected_headers": [
+    "1. Introduction",
+    "1.1 Mechanics",
+    "1.2 Materials",
+    "2. Controls",
+    "Appendix A"
+  ],
+  "expected_passes": [
+    "mechanical",
+    "electrical",
+    "software",
+    "controls",
+    "project_mgmt"
+  ]
+}

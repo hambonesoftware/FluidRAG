@@ -1,0 +1,20 @@
+Phase 2 Scope Selection — OpenRouter Vertical Slice
+===================================================
+
+Files confirmed in-scope for implementation + verification:
+- PHASE_2_NOTES.md — runbook + testing recap.
+- PHASE_2_SCOPE.lock — scope declaration (this file).
+- app_finalstubs/finalstubs_latest.json — sync spec entries with the realized modules/tests.
+- rag-app/.env.example — document OpenRouter env variables.
+- rag-app/README.md — update setup + smoke test guidance.
+- rag-app/backend/app/llm/__init__.py — expose client helpers for downstream imports.
+- rag-app/backend/app/llm/utils.py — logging metadata + curl helpers.
+- rag-app/backend/app/llm/utils/envsafe.py — env/header masking utilities.
+- rag-app/backend/app/llm/openrouter.py — thin sync wrapper raising typed errors.
+- rag-app/backend/app/llm/clients/__init__.py — package exports for the OpenRouter client.
+- rag-app/backend/app/llm/clients/openrouter.py — sync client with retries, streaming, embeddings.
+- rag-app/backend/app/tests/unit/test_llm_envsafe.py — env/header helper coverage.
+- rag-app/backend/app/tests/unit/test_openrouter_client.py — retry/backoff, streaming, offline guards.
+
+Rationale: This set covers the full OpenRouter integration vertical slice described in Phase 2, including configuration, docs, 
+client implementation, exports, and deterministic tests, while keeping upstream/downstream services untouched.
