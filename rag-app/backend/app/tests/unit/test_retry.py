@@ -13,6 +13,23 @@ def test_retry_policy_generates_backoff_sequence() -> None:
     assert list(policy.sleep_durations()) == [0.1, 0.2, 0.4]
 
 
+def test_retry_policy_validation_errors() -> None:
+    with pytest.raises(ValueError):
+        RetryPolicy(retries=0)
+    with pytest.raises(ValueError):
+        RetryPolicy(base_delay=0.0)
+    with pytest.raises(ValueError):
+        RetryPolicy(base_delay=0.5, max_delay=0.25)
+
+
+def test_retry_policy_jitter_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    policy = RetryPolicy(retries=3, base_delay=0.2, jitter=True)
+    policy._rng.seed(1)
+    durations = list(policy.sleep_durations())
+    assert len(durations) == 2
+    assert all(0 < value <= policy.max_delay for value in durations)
+
+
 def test_with_retries_eventually_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     attempts = {"count": 0}
 
@@ -44,6 +61,37 @@ def test_with_retries_raises_after_exhaustion(monkeypatch: pytest.MonkeyPatch) -
             (RuntimeError,),
             policy=RetryPolicy(retries=2, base_delay=0.01, jitter=False),
         )
+
+
+def test_with_retries_uses_default_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    attempts = {"count": 0}
+
+    def flaky() -> str:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ValueError("retry")
+        return "ok"
+
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    result = with_retries(flaky, (ValueError,))
+    assert result == "ok"
+    assert attempts["count"] == 2
+
+
+def test_with_retries_reraises_breaker_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    breaker = CircuitBreaker(fail_threshold=1, reset_timeout=100.0)
+    breaker._state = "open"
+    now = 1234.5
+    monkeypatch.setattr("backend.app.util.retry.time.monotonic", lambda: now)
+    breaker._opened_at = now
+
+    def noop() -> None:
+        return None
+
+    with pytest.raises(RetryExhaustedError):
+        with_retries(noop, (RuntimeError,), breaker=breaker)
 
 
 def test_circuit_breaker_trips_and_resets(monkeypatch: pytest.MonkeyPatch) -> None:

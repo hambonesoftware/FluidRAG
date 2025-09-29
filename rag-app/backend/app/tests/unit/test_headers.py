@@ -23,19 +23,13 @@ from ...services.upload_service import ensure_normalized
 pytestmark = pytest.mark.phase5
 
 
-@pytest.fixture(autouse=True)
-def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
-    monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
-    monkeypatch.setenv("CHUNK_TARGET_TOKENS", "18")
+def _build_pipeline(
+    sample_pdf_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, str]:
+    monkeypatch.setenv("CHUNK_TARGET_TOKENS", "22")
     monkeypatch.setenv("CHUNK_TOKEN_OVERLAP", "6")
     get_settings.cache_clear()
-
-
-def _build_pipeline(tmp_path: Path, text: str) -> tuple[str, str]:
-    source = tmp_path / "doc.txt"
-    source.write_text(text, encoding="utf-8")
-    normalized = ensure_normalized(file_name=str(source))
+    normalized = ensure_normalized(file_name=str(sample_pdf_path))
     parsed = parse_and_enrich(normalized.doc_id, normalized.normalized_path)
     chunks = run_uf_chunking(parsed.doc_id, parsed.enriched_path)
     return parsed.doc_id, chunks.chunks_path
@@ -53,20 +47,14 @@ def _write_chunks(tmp_path: Path, rows: list[dict[str, Any]]) -> Path:
     return path
 
 
-def test_test_headers(tmp_path: Path) -> None:
-    """End-to-end header join writes artifacts and section map."""
+def test_header_pipeline(
+    sample_pdf_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expected_sections: dict[str, list[str]],
+) -> None:
+    """End-to-end header join writes artifacts and section map for curated fixture."""
 
-    doc_id, chunks_path = _build_pipeline(
-        tmp_path,
-        (
-            "Executive Summary\nKey metrics overview for leadership.\n\n"
-            "1. Introduction\nBaseline context for the reader.\n\n"
-            "1.1 Scope\nBoundaries of the initiative.\n\n"
-            "1.2 Background\nLegacy insights and dependencies.\n\n"
-            "2. Results\nPrimary outcomes and KPIs.\n\n"
-            "Appendix A – Tables\nSupporting quantitative tables."
-        ),
-    )
+    doc_id, chunks_path = _build_pipeline(sample_pdf_path, monkeypatch)
 
     result: HeaderJoinResult = join_and_rechunk(doc_id, chunks_path)
 
@@ -86,6 +74,9 @@ def test_test_headers(tmp_path: Path) -> None:
     )
     assert intro_header is not None, "numbered headings should survive the pipeline"
     assert result.header_count == len(headers_payload)
+    detected_text = [row["text"] for row in headers_payload]
+    for header in expected_sections["headers"]:
+        assert any(text.startswith(header) for text in detected_text), header
 
     section_map = json.loads(section_map_path.read_text(encoding="utf-8"))
     assert section_map, "section map should map chunks to headers"
@@ -100,10 +91,14 @@ def test_test_headers(tmp_path: Path) -> None:
         if line
     ]
     assert len(lines) == result.header_count
+    has_chunk_ids = False
     for row in lines:
         payload = json.loads(row)
         assert payload["text"].strip(), "header chunks must include aggregated text"
         assert payload["header_text"], "header text should be preserved in aggregation"
+        if payload.get("chunk_ids"):
+            has_chunk_ids = True
+    assert has_chunk_ids, "at least one header chunk should list contributing chunk ids"
 
 
 def test_sequence_repair_recovers_missing_headers() -> None:

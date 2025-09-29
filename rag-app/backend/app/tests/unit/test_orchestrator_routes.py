@@ -24,9 +24,7 @@ pytestmark = pytest.mark.phase7
 
 
 @pytest.fixture(autouse=True)
-def _reset_settings(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> Iterator[None]:
+def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     """Ensure tests run with a clean offline settings cache."""
 
     monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")

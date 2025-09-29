@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,123 +9,55 @@ from fastapi.testclient import TestClient
 
 from ...config import get_settings
 from ...main import create_app
-from ...services.chunk_service import ChunkResult
-from ...services.header_service import HeaderJoinResult
-from ...services.parser_service import ParseResult
-from ...services.upload_service import NormalizedDoc
 
 pytestmark = pytest.mark.phase6
 
 
-@pytest.fixture(autouse=True)
-def _reset_settings(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> Iterator[None]:
-    monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
-    monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
+@pytest.fixture
+def client() -> TestClient:
+    """Return a FastAPI test client bound to the orchestrator routes."""
+
+    return TestClient(create_app())
 
 
-def test_pipeline_run_endpoint(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    artifact_root = get_settings().artifact_root_path
-    doc_root = artifact_root / "doc"
-    doc_root.mkdir(parents=True, exist_ok=True)
+def test_pipeline_run_endpoint(
+    sample_pdf_path: Path,
+    expected_sections: dict[str, list[str]],
+    client: TestClient,
+) -> None:
+    """Run the full pipeline against the curated fixture and assert artifacts."""
 
-    normalized_path = doc_root / "normalize.json"
-    normalized_path.write_text(json.dumps({"doc_id": "doc"}), encoding="utf-8")
-    manifest_path = doc_root / "manifest.json"
-    manifest_payload = {"doc_id": "doc", "checksum": "abc"}
-    manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
-
-    enriched_path = doc_root / "parse.enriched.json"
-    enriched_path.write_text("{}", encoding="utf-8")
-
-    chunks_path = doc_root / "header_chunks.jsonl"
-    chunks = [
-        {
-            "chunk_id": "doc:c1",
-            "text": "Torque requirement is 50 Nm with 200 RPM limit.",
-            "token_count": 9,
-            "sentence_start": 0,
-            "sentence_end": 0,
-            "header_path": "Mechanics/Drive",
-        },
-        {
-            "chunk_id": "doc:c2",
-            "text": "Controller monitors pressure and temperature sensors.",
-            "token_count": 8,
-            "sentence_start": 1,
-            "sentence_end": 1,
-            "header_path": "Controls/Safety",
-        },
-    ]
-    chunks_path.write_text(
-        "\n".join(json.dumps(row) for row in chunks) + "\n", encoding="utf-8"
-    )
-
-    normalized_doc = NormalizedDoc(
-        doc_id="doc",
-        normalized_path=str(normalized_path),
-        manifest_path=str(manifest_path),
-        avg_coverage=0.5,
-        block_count=3,
-        ocr_performed=False,
-    )
-    parse_result = ParseResult(
-        doc_id="doc",
-        enriched_path=str(enriched_path),
-        language="en",
-        summary={},
-        metrics={},
-    )
-    chunk_result = ChunkResult(
-        doc_id="doc",
-        chunks_path=str(chunks_path),
-        chunk_count=len(chunks),
-        index_manifest_path=None,
-    )
-    headers_result = HeaderJoinResult(
-        doc_id="doc",
-        headers_path=str(doc_root / "headers.json"),
-        section_map_path=str(doc_root / "section_map.json"),
-        header_chunks_path=str(chunks_path),
-        header_count=2,
-        recovered_count=0,
-    )
-
-    from ...routes import orchestrator as orchestrator_routes
-
-    monkeypatch.setattr(
-        orchestrator_routes, "ensure_normalized", lambda *args, **kwargs: normalized_doc
-    )
-    monkeypatch.setattr(
-        orchestrator_routes,
-        "parse_and_enrich",
-        lambda *args, **kwargs: parse_result,
-    )
-    monkeypatch.setattr(
-        orchestrator_routes,
-        "run_uf_chunking",
-        lambda *args, **kwargs: chunk_result,
-    )
-    monkeypatch.setattr(
-        orchestrator_routes,
-        "join_and_rechunk",
-        lambda *args, **kwargs: headers_result,
-    )
-
-    app = create_app()
-    client = TestClient(app)
-
-    response = client.post("/pipeline/run", json={"file_name": "sample.txt"})
+    response = client.post("/pipeline/run", json={"file_name": str(sample_pdf_path)})
     assert response.status_code == 200
     payload = response.json()
-    assert payload["doc_id"] == "doc"
-    assert payload["passes"]["passes"], "passes manifest should not be empty"
+    doc_id = payload["doc_id"]
+    assert doc_id
+    assert payload["normalize"]["block_count"] >= 4
+    assert set(payload["passes"]["passes"].keys()) == set(expected_sections["passes"])
 
-    results = client.get("/pipeline/results/doc")
-    assert results.status_code == 200
-    body = results.json()
-    assert "mechanical" in body["passes"]
+    settings = get_settings()
+    doc_root = Path(settings.artifact_root_path) / doc_id
+    assert doc_root.exists()
+
+    status_response = client.get(f"/pipeline/status/{doc_id}")
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["doc_id"] == doc_id
+    assert status_payload["pipeline_audit"]["stage"] == "pipeline.run"
+    assert set(status_payload["passes"].keys()) == set(expected_sections["passes"])
+
+    results_response = client.get(f"/pipeline/results/{doc_id}")
+    assert results_response.status_code == 200
+    results_payload = results_response.json()
+    assert set(results_payload["passes"].keys()) == set(expected_sections["passes"])
+    sample_pass = next(iter(results_payload["passes"].values()))
+    assert sample_pass["answer"], "passes should include synthesized answers"
+
+    manifest = results_payload["manifest"]
+    first_pass = expected_sections["passes"][0]
+    artifact_path = Path(manifest["passes"][first_pass])
+    stream_response = client.get(
+        "/pipeline/artifacts", params={"path": str(artifact_path)}
+    )
+    assert stream_response.status_code == 200
+    assert stream_response.content == artifact_path.read_bytes()

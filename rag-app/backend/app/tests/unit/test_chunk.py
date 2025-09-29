@@ -15,35 +15,23 @@ from ...util.errors import NotFoundError
 pytestmark = pytest.mark.phase4
 
 
-@pytest.fixture(autouse=True)
-def _reset_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
-    monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
-    monkeypatch.setenv("CHUNK_TARGET_TOKENS", "18")
-    monkeypatch.setenv("CHUNK_TOKEN_OVERLAP", "10")
+def _build_pipeline(
+    sample_pdf_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, str]:
+    monkeypatch.setenv("CHUNK_TARGET_TOKENS", "24")
+    monkeypatch.setenv("CHUNK_TOKEN_OVERLAP", "8")
     get_settings.cache_clear()
-
-
-def _build_pipeline(tmp_path: Path, text: str) -> tuple[str, str]:
-    source = tmp_path / "doc.txt"
-    source.write_text(text, encoding="utf-8")
-    normalized = ensure_normalized(file_name=str(source))
+    normalized = ensure_normalized(file_name=str(sample_pdf_path))
     parsed = parse_and_enrich(normalized.doc_id, normalized.normalized_path)
     return parsed.doc_id, parsed.enriched_path
 
 
-def test_test_chunk(tmp_path: Path) -> None:
-    """Unit test placeholder."""
-    doc_id, enriched_path = _build_pipeline(
-        tmp_path,
-        (
-            "Executive Summary introduces the strategy. This section highlights key metrics with figures and ratios. "
-            "Detailed analysis follows with multiple insights and supporting evidence. "
-            "Mid-course adjustments are enumerated alongside risks. "
-            "Appendix covers supplemental materials and citations. "
-            "Final thoughts reinforce the narrative and call to action."
-        ),
-    )
+def test_uf_chunk_pipeline(
+    sample_pdf_path: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """UF chunking emits artifacts and builds local index using curated fixture."""
+
+    doc_id, enriched_path = _build_pipeline(sample_pdf_path, monkeypatch)
 
     result: ChunkResult = run_uf_chunking(doc_id, enriched_path)
     chunks_path = Path(result.chunks_path)
@@ -66,6 +54,7 @@ def test_test_chunk(tmp_path: Path) -> None:
         rows[1]["sentence_start"] <= rows[0]["sentence_end"]
     ), "overlap should reuse context"
     assert rows[0]["token_count"] <= 40
+    assert any("Controls" in row["text"] for row in rows)
 
     with pytest.raises(NotFoundError):
         run_uf_chunking("doc-123", str(tmp_path / "missing.json"))
@@ -89,17 +78,11 @@ def test_test_chunk(tmp_path: Path) -> None:
     assert top["dense"] >= top["sparse"], "dense score should influence ranking"
 
 
-def test_uf_chunk_boundaries(tmp_path: Path) -> None:
+def test_uf_chunk_boundaries(
+    sample_pdf_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Validate chunk boundaries respect sentence and header edges."""
-    doc_id, enriched_path = _build_pipeline(
-        tmp_path,
-        (
-            "Heading: Context overview. "
-            "First section describes the setup and parameters. "
-            "Second section provides results and insights. "
-            "Conclusion reiterates findings and next steps."
-        ),
-    )
+    doc_id, enriched_path = _build_pipeline(sample_pdf_path, monkeypatch)
 
     result: ChunkResult = run_uf_chunking(doc_id, enriched_path)
     chunks_path = Path(result.chunks_path)

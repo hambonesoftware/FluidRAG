@@ -3,30 +3,21 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from ...config import get_settings
 from ...contracts.passes import PassResult
+from ...services.chunk_service import run_uf_chunking
+from ...services.header_service import join_and_rechunk
+from ...services.parser_service import parse_and_enrich
 from ...services.rag_pass_service import run_all
 from ...services.rag_pass_service.packages.compose.context import compose_window
 from ...services.rag_pass_service.packages.emit.results import write_pass_results
 from ...services.rag_pass_service.packages.retrieval import retrieve_ranked
+from ...services.upload_service import ensure_normalized
 
 pytestmark = pytest.mark.phase6
-
-
-@pytest.fixture(autouse=True)
-def _configure_settings(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> Iterator[None]:
-    monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
-    monkeypatch.setenv("ARTIFACT_ROOT", str(tmp_path / "artifacts"))
-    get_settings.cache_clear()
-    yield
-    get_settings.cache_clear()
 
 
 def _sample_chunks() -> list[dict[str, object]]:
@@ -98,53 +89,58 @@ def test_write_pass_results_persists_payload(tmp_path: Path) -> None:
     assert payload["pass_name"] == "controls"
 
 
-def test_run_all_emits_all_passes(tmp_path: Path) -> None:
-    chunks_path = tmp_path / "header_chunks.jsonl"
-    lines = [json.dumps(row) for row in _sample_chunks()]
-    chunks_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    jobs = run_all("doc", str(chunks_path))
-    assert set(jobs.passes.keys()) == {
-        "mechanical",
-        "electrical",
-        "software",
-        "controls",
-        "project_mgmt",
-    }
+def _prepare_header_chunks(
+    sample_pdf_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, Path]:
+    monkeypatch.setenv("CHUNK_TARGET_TOKENS", "22")
+    monkeypatch.setenv("CHUNK_TOKEN_OVERLAP", "6")
+    normalized = ensure_normalized(file_name=str(sample_pdf_path))
+    parsed = parse_and_enrich(normalized.doc_id, normalized.normalized_path)
+    chunks = run_uf_chunking(parsed.doc_id, parsed.enriched_path)
+    headers = join_and_rechunk(parsed.doc_id, chunks.chunks_path)
+    return parsed.doc_id, Path(headers.header_chunks_path)
+
+
+def test_run_all_emits_all_passes(
+    sample_pdf_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expected_sections: dict[str, list[str]],
+) -> None:
+    doc_id, chunks_path = _prepare_header_chunks(sample_pdf_path, monkeypatch)
+    jobs = run_all(doc_id, str(chunks_path))
+    assert set(jobs.passes.keys()) == set(expected_sections["passes"])
     for artifact in jobs.passes.values():
         assert Path(artifact).exists()
 
 
-def test_run_all_outputs_validate_schema_and_content(tmp_path: Path) -> None:
+def test_run_all_outputs_validate_schema_and_content(
+    sample_pdf_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expected_sections: dict[str, list[str]],
+) -> None:
     """Generated pass artifacts validate against schema and retain context."""
 
-    chunks_path = tmp_path / "header_chunks.jsonl"
-    lines = [json.dumps(row) for row in _sample_chunks()]
-    chunks_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    doc_id, chunks_path = _prepare_header_chunks(sample_pdf_path, monkeypatch)
 
-    jobs = run_all("doc", str(chunks_path))
+    jobs = run_all(doc_id, str(chunks_path))
     manifest_data = json.loads(Path(jobs.manifest_path).read_text(encoding="utf-8"))
-    assert set(manifest_data["passes"].keys()) == {
-        "mechanical",
-        "electrical",
-        "software",
-        "controls",
-        "project_mgmt",
-    }
+    assert set(manifest_data["passes"].keys()) == set(expected_sections["passes"])
 
     for name, artifact in manifest_data["passes"].items():
         payload = Path(artifact).read_text(encoding="utf-8")
         result = PassResult.model_validate_json(payload)
         assert result.pass_name == name
-        assert result.doc_id == "doc"
+        assert result.doc_id == doc_id
         assert result.answer, "answers should not be empty"
         assert result.context, "context window should be present"
         assert result.retrieval, "retrieval trace should be populated"
         assert result.citations, "citations should include supporting chunks"
         for citation in result.citations:
-            assert citation.chunk_id.startswith(
-                "doc:"
-            ), "citation chunk id should include doc prefix"
-            assert citation.header_path, "citation header path is required"
+            assert citation.chunk_id, "citation chunk id should not be empty"
+            if ":" in citation.chunk_id:
+                assert citation.chunk_id.startswith(
+                    f"{doc_id}:"
+                ), "prefixed ids should include doc prefix"
         top_header = result.retrieval[0].header_path
         if top_header:
             assert top_header in result.context

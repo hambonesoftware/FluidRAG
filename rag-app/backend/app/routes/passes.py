@@ -31,7 +31,8 @@ async def list_passes(doc_id: str) -> dict[str, Any]:
     manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(manifest_data, dict):
         logger.error(
-            "passes.manifest_invalid", extra={"doc_id": doc_id, "path": str(manifest_path)}
+            "passes.manifest_invalid",
+            extra={"doc_id": doc_id, "path": str(manifest_path)},
         )
         raise HTTPException(status_code=500, detail="invalid pass manifest")
     passes = manifest_data.get("passes", {})
