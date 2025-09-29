@@ -16,6 +16,14 @@ cp .env.example .env
 python run.py  # backend on :8000, frontend on :3000
 ```
 
+When running inside a container or remote workspace where the preview needs to
+be accessed from another process (for example, Playwright-driven screenshots),
+export the host bindings first:
+
+```bash
+FRONTEND_HOST=0.0.0.0 BACKEND_HOST=0.0.0.0 python run.py
+```
+
 ## Testing
 ```bash
 pytest -q
