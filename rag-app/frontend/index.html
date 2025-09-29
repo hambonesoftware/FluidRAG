@@ -4,39 +4,69 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FluidRAG</title>
-    <meta name="fluidrag-offline" content="true" />
+    <meta name="fluidrag-offline" content="false" />
     <link rel="stylesheet" href="styles/app.css" />
   </head>
   <body data-backend-port="8000">
     <header class="app-header">
       <h1>FluidRAG</h1>
-      <p class="subtitle">Phase 1 scaffolding ready to go.</p>
+      <p class="subtitle">Upload a document and watch the retrieval pipeline progress.</p>
     </header>
     <main>
-      <section class="card">
-        <h2>Pipeline Runner</h2>
-        <p>Run the ingestion pipeline and inspect domain pass results.</p>
-        <div id="offlineNotice" style="display:none;">
+      <section class="card pipeline-card">
+        <header class="card-header">
+          <h2>Pipeline Runner</h2>
+          <p>Run the ingestion pipeline and monitor retrieval progress.</p>
+        </header>
+        <div id="offlineNotice" role="alert" class="offline-banner" hidden>
           Offline mode is enabled — network calls are disabled.
         </div>
-        <div data-upload-root class="pipeline-upload">
-          <label for="pipeline-input">Document path or ID</label>
-          <input
-            id="pipeline-input"
-            type="text"
-            placeholder="rag-app/data/artifacts/sample.txt"
-            data-upload-input
-          />
-          <button type="button" data-upload-run>Run Pipeline</button>
-          <p class="status" data-upload-status></p>
+        <div class="pipeline-grid">
+          <form data-upload-root class="pipeline-upload" novalidate>
+            <label class="field-label" for="pipeline-input">Document path or ID</label>
+            <div class="field-row">
+              <input
+                id="pipeline-input"
+                type="text"
+                placeholder="rag-app/data/artifacts/sample.txt"
+                data-upload-input
+                autocomplete="off"
+              />
+              <button type="submit" data-upload-run>Run Pipeline</button>
+            </div>
+            <p class="status" data-upload-status aria-live="polite"></p>
+          </form>
+          <section data-pipeline-root class="pipeline-results" aria-live="polite">
+            <div class="pipeline-meta">
+              <div class="meta-row">
+                <span class="meta-label">Document</span>
+                <span class="meta-value" data-pipeline-doc>—</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Status</span>
+                <span class="meta-value" data-pipeline-status>Idle</span>
+              </div>
+              <div class="meta-row">
+                <span class="meta-label">Last updated</span>
+                <span class="meta-value" data-pipeline-updated>—</span>
+              </div>
+            </div>
+            <div class="pipeline-progress">
+              <div class="progress-bar" data-pipeline-progress role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+            </div>
+            <div class="pipeline-actions">
+              <button type="button" data-pipeline-refresh>Refresh Now</button>
+            </div>
+            <div class="pipeline-empty" data-pipeline-empty hidden>
+              Pass results will appear here once the pipeline completes.
+            </div>
+            <div class="pipeline-pass-results" data-pass-results></div>
+          </section>
         </div>
-        <div data-pipeline-root class="pipeline-results">
-          <button type="button" data-pipeline-refresh>Refresh Results</button>
-          <p class="status" data-pipeline-status></p>
-          <div data-pass-results></div>
-        </div>
-        <button id="ping-backend" type="button">Ping Backend</button>
-        <pre id="health-response" aria-live="polite"></pre>
+        <section class="card-footer">
+          <button id="ping-backend" type="button">Ping Backend</button>
+          <pre id="health-response" aria-live="polite"></pre>
+        </section>
       </section>
     </main>
     <script src="js/main.js" type="module"></script>

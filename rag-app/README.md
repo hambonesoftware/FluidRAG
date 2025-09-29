@@ -11,7 +11,7 @@ pre-commit install
 python run.py  # launches FastAPI on :8000 and static frontend on :3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to load the static shell and ping the backend health endpoint.
+Open [http://localhost:3000](http://localhost:3000) to load the frontend dashboard, trigger pipeline runs, monitor progress, and download artifacts.
 
 ## Upload & Parser Pipeline
 
@@ -74,6 +74,15 @@ Artifacts can be streamed back without loading them into memory. The route enfor
 ```bash
 curl -s -G http://127.0.0.1:8000/pipeline/artifacts --data-urlencode "path=<absolute-or-relative-artifact>" -o artifact.json
 ```
+
+## Frontend MVVM Dashboard
+
+- **Upload panel** — enter a path or document identifier and click **Run Pipeline**. The upload view-model persists the most recent `doc_id` in `localStorage` and surfaces job errors inline.
+- **Pipeline monitor** — the dashboard polls `/pipeline/status/{doc_id}` and `/pipeline/results/{doc_id}` until the audit record reports completion. Progress, last updated timestamps, and the active document id are shown in real time.
+- **Pass results** — each pass renders its answer, citation list, and top retrieval traces. Download buttons call `/pipeline/artifacts` while respecting the offline flag.
+- **Offline mode** — when the `<meta name="fluidrag-offline">` flag is `true`, the UI short-circuits network calls and emits banner messaging while still allowing users to explore previously cached results.
+
+Reloading the page restores the last processed document and resumes polling automatically as long as offline mode remains disabled.
 
 ## Benchmark Harness
 

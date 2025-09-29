@@ -1,4 +1,4 @@
-/* Upload view model bridging API + job state. */
+/** Upload view-model; exposes state/actions. */
 
 import JobModel from "../models/JobModel.js";
 
@@ -10,24 +10,28 @@ export class UploadVM {
     this.error = null;
   }
 
-  async run({ fileId, fileName }) {
+  async run({ fileId, fileName } = {}) {
+    if (this.loading) {
+      return null;
+    }
     this.loading = true;
     this.error = null;
+    this.job.markRunning();
     try {
       const response = await this.api.runPipeline({ fileId, fileName });
-      if (response.offline) {
-        this.job.status = "offline";
+      if (response && response.offline) {
+        this.job.markOffline();
         return response;
       }
       this.job.updateFromStatus({
-        doc_id: response.doc_id,
-        passes: (response.passes && response.passes.passes) || {},
+        doc_id: response?.doc_id,
+        passes: response?.passes?.passes || {},
         status: "completed",
       });
       return response;
     } catch (err) {
       this.error = err;
-      this.job.status = "error";
+      this.job.markError(err);
       throw err;
     } finally {
       this.loading = false;

@@ -1,9 +1,10 @@
-/* Model representing a single pass result. */
+/** Represents a pass result. */
 
 export class PassResultModel {
-  constructor({ name, payload }) {
+  constructor({ name, payload, artifactPath = null }) {
     this.name = name;
     this.payload = payload || {};
+    this.artifactPath = artifactPath;
   }
 
   get answer() {
@@ -16,6 +17,14 @@ export class PassResultModel {
 
   get retrieval() {
     return this.payload.retrieval || [];
+  }
+
+  get hasCitations() {
+    return this.citations.length > 0;
+  }
+
+  get hasRetrieval() {
+    return this.retrieval.length > 0;
   }
 }
 
