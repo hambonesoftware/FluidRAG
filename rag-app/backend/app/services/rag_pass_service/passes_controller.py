@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel
 
@@ -26,6 +26,13 @@ from .packages.prompts import (
 from .packages.retrieval import retrieve_ranked
 
 logger = get_logger(__name__)
+
+
+class PromptTemplate(Protocol):
+    """Protocol describing prompt renderers."""
+
+    def render(self, context: str) -> tuple[str, str]:
+        ...
 
 
 class PassJobsInternal(BaseModel):
@@ -64,7 +71,7 @@ def run_all(doc_id: str, rechunk_artifact: str) -> PassJobsInternal:
     try:
         settings = get_settings()
         chunks = _load_chunks(path)
-        prompts = {
+        prompts: dict[str, PromptTemplate] = {
             "mechanical": MechanicalPrompt(),
             "electrical": ElectricalPrompt(),
             "software": SoftwarePrompt(),

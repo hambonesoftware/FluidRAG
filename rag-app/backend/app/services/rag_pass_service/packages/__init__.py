@@ -1,3 +1,5 @@
 """Helper packages used by the RAG pass service."""
 
-__all__ = []
+from __future__ import annotations
+
+__all__: list[str] = []

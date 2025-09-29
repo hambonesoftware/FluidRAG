@@ -163,7 +163,9 @@ class QdrantIndex:
                 extra={"collection": collection, "mode": "offline"},
             )
 
-    def add(self, vectors: list[list[float]], payloads: list[dict] | None) -> None:
+    def add(
+        self, vectors: list[list[float]], payloads: list[dict[str, Any]] | None
+    ) -> None:
         """Add vectors."""
         self._vectors.extend([list(map(float, vector)) for vector in vectors])
         payloads = payloads or [{} for _ in vectors]
@@ -171,14 +173,18 @@ class QdrantIndex:
             raise ValueError("payload count must match vectors")
         self._payloads.extend(payloads)
 
-    def search(self, query_vec: list[float], k: int = 20) -> list[dict]:
+    def search(self, query_vec: list[float], k: int = 20) -> list[dict[str, Any]]:
         """Search."""
         faiss = FaissIndex(len(query_vec))
         faiss.add(self._vectors)
         results = faiss.search(query_vec, k=k)
         response: list[dict[str, Any]] = []
         for idx, score in results:
-            payload = self._payloads[idx] if idx < len(self._payloads) else {}
+            payload: dict[str, Any]
+            if idx < len(self._payloads):
+                payload = self._payloads[idx]
+            else:
+                payload = {}
             response.append({"id": idx, "score": score, "payload": payload})
         return response
 

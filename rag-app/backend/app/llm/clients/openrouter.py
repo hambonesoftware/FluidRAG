@@ -7,7 +7,7 @@ import json
 import os
 import random
 import time
-from collections.abc import AsyncGenerator, Iterable
+from collections.abc import AsyncGenerator, Iterable, Mapping
 from typing import Any
 
 import httpx
@@ -75,9 +75,11 @@ def _parse_error(response: httpx.Response) -> str:
     try:
         data = response.json()
         if isinstance(data, dict) and data.get("error"):
-            if isinstance(data["error"], dict):
-                return data["error"].get("message", str(data["error"]))
-            return str(data["error"])
+            error_payload = data["error"]
+            if isinstance(error_payload, Mapping):
+                message = error_payload.get("message")
+                return str(message) if message is not None else str(error_payload)
+            return str(error_payload)
     except json.JSONDecodeError:
         pass
     return response.text
@@ -159,7 +161,10 @@ def chat_sync(
                 raise OpenRouterHTTPError(
                     f"OpenRouter error {response.status_code}: {_parse_error(response)}"
                 )
-            return response.json()
+            data = response.json()
+            if not isinstance(data, dict):
+                raise OpenRouterHTTPError("Unexpected OpenRouter response payload.")
+            return data
         except OpenRouterAuthError:
             raise
         except httpx.HTTPError as exc:
@@ -311,9 +316,14 @@ def embed_sync(
                 raise OpenRouterHTTPError(
                     f"OpenRouter error {response.status_code}: {_parse_error(response)}"
                 )
-            data = response.json().get("data", [])
+            body = response.json()
+            if not isinstance(body, dict):
+                raise OpenRouterHTTPError("Unexpected embeddings response payload.")
+            data = body.get("data", [])
             embeddings: list[list[float]] = []
             for row in data:
+                if not isinstance(row, Mapping):
+                    continue
                 embedding = row.get("embedding")
                 if isinstance(embedding, list):
                     embeddings.append([float(val) for val in embedding])

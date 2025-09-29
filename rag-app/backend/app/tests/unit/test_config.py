@@ -11,7 +11,9 @@ from backend.app.config import Settings, get_settings
 
 
 def reset_settings_cache() -> None:
-    get_settings.cache_clear()  # type: ignore[attr-defined]
+    cache_clear = getattr(get_settings, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
     reload(config)
 
 

@@ -14,7 +14,14 @@
 - README instructions for the new dashboard workflow and offline behavior.
 
 ### Verification
-- `pytest -q --maxfail=1 --disable-warnings` (includes Node-backed tests).
+- **Features:** Completed Phase 8 audit confirming MVVM models, view-models, and views match the
+  plan; traceability captured in `reports/phase_8_verification.md`.
+- **Fixes:** Added pytest markers for phases 7–8, switched FastAPI startup/shutdown hooks to the
+  lifespan API to eliminate deprecation warnings, and made normalization manifests emit
+  timezone-aware timestamps.
+- **Migrations:** Not applicable.
+- **Compatibility:** Backend test suite now runs with `-W error`; Node.js remains required for the
+  frontend harness.
 
 ## [Phase 7] - 2025-09-29
 ### Added

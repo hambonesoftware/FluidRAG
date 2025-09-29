@@ -91,9 +91,7 @@ class tempfile_directory:
         self._dir = Path(tempfile.mkdtemp(prefix="fluidrag-bench-"))
         return self._dir
 
-    def __exit__(
-        self, exc_type, exc, tb
-    ) -> None:  # noqa: D401 - standard context manager signature
+    def __exit__(self, exc_type, exc, tb) -> None:  # noqa: D401 - standard context manager signature
         import shutil
 
         shutil.rmtree(self._dir, ignore_errors=True)

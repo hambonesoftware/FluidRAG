@@ -49,12 +49,18 @@ async def _load_json(path: str) -> dict[str, Any]:
     if not target.exists():
         return {}
     try:
-        return json.loads(target.read_text(encoding="utf-8"))
+        payload = json.loads(target.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:  # pragma: no cover - corrupted artifact
         logger.warning(
             "pipeline.load_json.decode_failed", extra={"path": path, "error": str(exc)}
         )
         return {}
+    if isinstance(payload, dict):
+        return payload
+    logger.warning(
+        "pipeline.load_json.invalid_type", extra={"path": path, "type": type(payload).__name__}
+    )
+    return {}
 
 
 @router.post("/run", response_model=dict)
@@ -128,6 +134,11 @@ async def status(doc_id: str) -> dict[str, Any]:
     if not record_path.exists():
         raise HTTPException(status_code=404, detail="document not found")
     manifest = json.loads(record_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        logger.error(
+            "pipeline.status.manifest_invalid", extra={"doc_id": doc_id, "path": str(record_path)}
+        )
+        raise HTTPException(status_code=500, detail="invalid document manifest")
     passes_manifest_path = doc_root / "passes" / "manifest.json"
     passes_manifest: dict[str, Any] = {}
     if passes_manifest_path.exists():

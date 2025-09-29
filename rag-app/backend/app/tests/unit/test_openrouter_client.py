@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncGenerator, Iterator
-from typing import Any
+from types import TracebackType
+from typing import Any, ClassVar
 
 import pytest
 
@@ -21,6 +22,12 @@ from ...llm.clients.openrouter import (
 )
 
 
+def _clear_settings_cache() -> None:
+    cache_clear = getattr(get_settings, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
+
+
 class DummyResponse:
     def __init__(self, status_code: int, payload: dict[str, Any] | None = None) -> None:
         self.status_code = status_code
@@ -32,7 +39,7 @@ class DummyResponse:
 
 
 class MockClient:
-    queue: list[Any] = []
+    queue: ClassVar[list[Any]] = []
 
     def __init__(
         self, *args: Any, **kwargs: Any
@@ -42,7 +49,12 @@ class MockClient:
     def __enter__(self) -> MockClient:  # pragma: no cover - context stub
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - context stub
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:  # pragma: no cover - context stub
         return None
 
     def post(
@@ -53,6 +65,8 @@ class MockClient:
         response = self.queue.pop(0)
         if isinstance(response, Exception):
             raise response
+        if not isinstance(response, DummyResponse):
+            raise TypeError("MockClient queue must yield DummyResponse instances")
         return response
 
 
@@ -70,7 +84,10 @@ class DummyStreamResponse:
         return self
 
     async def __aexit__(
-        self, exc_type, exc, tb
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
     ) -> None:  # pragma: no cover - context stub
         return None
 
@@ -90,7 +107,7 @@ class DummyStreamResponse:
 
 
 class MockAsyncClient:
-    queue: list[Any] = []
+    queue: ClassVar[list[Any]] = []
 
     def __init__(
         self, *args: Any, **kwargs: Any
@@ -101,7 +118,10 @@ class MockAsyncClient:
         return self
 
     async def __aexit__(
-        self, exc_type, exc, tb
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
     ) -> None:  # pragma: no cover - context stub
         return None
 
@@ -113,14 +133,16 @@ class MockAsyncClient:
         response = self.queue.pop(0)
         if isinstance(response, Exception):
             raise response
+        if not isinstance(response, DummyStreamResponse):
+            raise TypeError("MockAsyncClient queue must yield DummyStreamResponse")
         return response
 
 
 @pytest.fixture(autouse=True)
 def _reset_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    get_settings.cache_clear()
+    _clear_settings_cache()
     yield
-    get_settings.cache_clear()
+    _clear_settings_cache()
     monkeypatch.delenv("FLUIDRAG_OFFLINE", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_HTTP_REFERER", raising=False)
@@ -143,20 +165,22 @@ def online_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     monkeypatch.setenv("OPENROUTER_HTTP_REFERER", "https://example.com")
     monkeypatch.setenv("OPENROUTER_APP_TITLE", "FluidRAG Tests")
-    get_settings.cache_clear()
+    _clear_settings_cache()
 
 
 def test_chat_sync_offline_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FLUIDRAG_OFFLINE", "true")
-    get_settings.cache_clear()
+    _clear_settings_cache()
     with pytest.raises(OpenRouterHTTPError):
         chat_sync("gpt", [{"role": "user", "content": "hi"}])
 
 
 def test_chat_sync_retries_then_succeeds(
-    monkeypatch: pytest.MonkeyPatch, online_env
+    monkeypatch: pytest.MonkeyPatch, online_env: None
 ) -> None:
-    monkeypatch.setattr(client_module.httpx, "Client", MockClient)
+    monkeypatch.setattr(
+        "backend.app.llm.clients.openrouter.httpx.Client", MockClient
+    )
     MockClient.queue = [
         DummyResponse(429, {"error": {"message": "retry"}}),
         DummyResponse(200, {"id": "ok", "choices": []}),
@@ -166,9 +190,11 @@ def test_chat_sync_retries_then_succeeds(
 
 
 def test_chat_stream_async_yields_events(
-    monkeypatch: pytest.MonkeyPatch, online_env
+    monkeypatch: pytest.MonkeyPatch, online_env: None
 ) -> None:
-    monkeypatch.setattr(client_module.httpx, "AsyncClient", MockAsyncClient)
+    monkeypatch.setattr(
+        "backend.app.llm.clients.openrouter.httpx.AsyncClient", MockAsyncClient
+    )
     MockAsyncClient.queue = [
         DummyStreamResponse(
             200,
@@ -193,8 +219,12 @@ def test_chat_stream_async_yields_events(
     assert events[-1]["type"] == "done"
 
 
-def test_chat_stream_idle_timeout(monkeypatch: pytest.MonkeyPatch, online_env) -> None:
-    monkeypatch.setattr(client_module.httpx, "AsyncClient", MockAsyncClient)
+def test_chat_stream_idle_timeout(
+    monkeypatch: pytest.MonkeyPatch, online_env: None
+) -> None:
+    monkeypatch.setattr(
+        "backend.app.llm.clients.openrouter.httpx.AsyncClient", MockAsyncClient
+    )
     MockAsyncClient.queue = [DummyStreamResponse(200, [0.05])]
 
     async def _consume() -> None:
@@ -210,8 +240,12 @@ def test_chat_stream_idle_timeout(monkeypatch: pytest.MonkeyPatch, online_env) -
         asyncio.run(_consume())
 
 
-def test_embed_sync_parses_vectors(monkeypatch: pytest.MonkeyPatch, online_env) -> None:
-    monkeypatch.setattr(client_module.httpx, "Client", MockClient)
+def test_embed_sync_parses_vectors(
+    monkeypatch: pytest.MonkeyPatch, online_env: None
+) -> None:
+    monkeypatch.setattr(
+        "backend.app.llm.clients.openrouter.httpx.Client", MockClient
+    )
     MockClient.queue = [
         DummyResponse(200, {"data": [{"embedding": [1, 2, 3]}]}),
     ]
@@ -220,9 +254,11 @@ def test_embed_sync_parses_vectors(monkeypatch: pytest.MonkeyPatch, online_env) 
 
 
 def test_chat_sync_propagates_auth_error(
-    monkeypatch: pytest.MonkeyPatch, online_env
+    monkeypatch: pytest.MonkeyPatch, online_env: None
 ) -> None:
-    monkeypatch.setattr(client_module.httpx, "Client", MockClient)
+    monkeypatch.setattr(
+        "backend.app.llm.clients.openrouter.httpx.Client", MockClient
+    )
     MockClient.queue = [DummyResponse(401, {"error": {"message": "bad key"}})]
     with pytest.raises(OpenRouterAuthError):
         chat_sync("gpt", [{"role": "user", "content": "hi"}], retries=0)

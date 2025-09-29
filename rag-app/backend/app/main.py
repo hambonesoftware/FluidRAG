@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,7 +23,19 @@ logger = get_logger(__name__)
 def create_app() -> FastAPI:
     """App factory; registers routers and returns FastAPI instance."""
     settings = get_settings()
-    app = FastAPI(title=settings.app_name)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        logger.info(
+            "backend.startup",
+            extra={"backend": settings.backend_address, "offline": settings.offline},
+        )
+        try:
+            yield
+        finally:
+            logger.info("backend.shutdown")
+
+    app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -41,20 +56,6 @@ def create_app() -> FastAPI:
     async def healthcheck() -> dict[str, str]:
         """Simple readiness probe."""
         return {"status": "ok", "service": settings.app_name}
-
-    @app.on_event("startup")
-    async def _startup_event() -> None:
-        logger.info(
-            "backend.startup",
-            extra={
-                "backend": settings.backend_address,
-                "offline": settings.offline,
-            },
-        )
-
-    @app.on_event("shutdown")
-    async def _shutdown_event() -> None:
-        logger.info("backend.shutdown")
 
     return app
 
