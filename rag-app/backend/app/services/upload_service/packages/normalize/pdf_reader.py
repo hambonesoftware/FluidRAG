@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from typing import Any
 
 from .....util.audit import stage_record
@@ -14,16 +13,14 @@ logger = get_logger(__name__)
 _IMAGE_PATTERN = re.compile(r"\[image:(?P<name>[^\]]+)\]", re.IGNORECASE)
 
 
-def _load_source_text(file_id: str | None, file_name: str | None) -> str:
-    if file_name:
-        path = Path(file_name)
-        if path.exists() and path.is_file():
-            try:
-                return path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                return path.read_bytes().decode("latin-1", errors="ignore")
-    if file_id:
-        return file_id
+def _decode_source_text(payload: bytes, fallback: str | None = None) -> str:
+    if payload:
+        try:
+            return payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return payload.decode("latin-1", errors="ignore")
+    if fallback:
+        return fallback
     return ""
 
 
@@ -66,10 +63,15 @@ def _infer_font(text: str) -> dict[str, Any]:
 
 
 def normalize_pdf(
-    doc_id: str, file_id: str | None = None, file_name: str | None = None
+    doc_id: str,
+    *,
+    file_id: str | None = None,
+    file_name: str | None = None,
+    source_bytes: bytes | None = None,
 ) -> dict[str, Any]:
     """Extract text/layout/style into a normalized JSON."""
-    source_text = _load_source_text(file_id=file_id, file_name=file_name)
+    payload = source_bytes or b""
+    source_text = _decode_source_text(payload, fallback=file_id)
     pages_raw = _split_pages(source_text)
 
     normalized: dict[str, Any] = {
@@ -81,9 +83,15 @@ def normalize_pdf(
             "block_count": 0,
             "avg_coverage": 0.0,
             "images": 0,
+            "source_bytes": len(payload),
         },
         "audit": [
-            stage_record(stage="normalize.load", status="ok", chars=len(source_text)),
+            stage_record(
+                stage="normalize.load",
+                status="ok",
+                chars=len(source_text),
+                bytes=len(payload),
+            ),
         ],
     }
 

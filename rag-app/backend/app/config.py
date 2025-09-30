@@ -53,6 +53,17 @@ class Settings(BaseSettings):
         default=0.85,
         validation_alias=AliasChoices("UPLOAD_OCR_THRESHOLD", "upload_ocr_threshold"),
     )
+    upload_allowed_extensions: tuple[str, ...] = Field(
+        default=(".pdf", ".txt"),
+        validation_alias=AliasChoices(
+            "UPLOAD_ALLOWED_EXTENSIONS", "upload_allowed_extensions"
+        ),
+    )
+    upload_max_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1,
+        validation_alias=AliasChoices("UPLOAD_MAX_BYTES", "upload_max_bytes"),
+    )
     chunk_target_tokens: int = Field(
         default=90,
         ge=10,

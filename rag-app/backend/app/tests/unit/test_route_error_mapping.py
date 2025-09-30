@@ -22,6 +22,8 @@ def _make_normalized_doc() -> NormalizedDoc:
         doc_id="doc",
         normalized_path="/tmp/normalize.json",
         manifest_path="/tmp/manifest.json",
+        source_checksum="abc123",
+        source_bytes=10,
     )
 
 
