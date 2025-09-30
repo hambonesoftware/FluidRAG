@@ -36,6 +36,20 @@ def repair_sequence(headers: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for h in ordered
             if _MIN_RECOVERY_SCORE <= float(h.get("score", 0.0)) < _MIN_STRONG_SCORE
         ]
+        weak_lookup: dict[int, dict[str, Any]] = {}
+        for weak_header in weak:
+            ordinal = weak_header.get("ordinal")
+            if ordinal is None:
+                continue
+            try:
+                ordinal_int = int(ordinal)
+            except (TypeError, ValueError):
+                continue
+            existing = weak_lookup.get(ordinal_int)
+            if existing is None or float(weak_header.get("score", 0.0)) > float(
+                existing.get("score", 0.0)
+            ):
+                weak_lookup[ordinal_int] = weak_header
         if not strong:
             # Promote the best weak candidate to ensure coverage if it looks plausible.
             if weak:
@@ -63,18 +77,47 @@ def repair_sequence(headers: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for missing in range(int(current_ord) + 1, int(next_ord)):
                 if missing in recovered_ordinals:
                     continue
-                candidate = None
-                for weak_header in weak:
-                    if int(weak_header.get("ordinal") or -1) == missing:
-                        candidate = dict(weak_header)
-                        break
+                candidate = weak_lookup.get(missing)
                 if candidate:
+                    candidate = dict(candidate)
                     candidate["recovered"] = True
                     candidate["score"] = max(
                         candidate.get("score", 0.0), _MIN_RECOVERY_SCORE
                     )
                     recovered_ordinals.add(missing)
                     repaired.append(candidate)
+        ordinal_values = [
+            int(header.get("ordinal"))
+            for header in strong_sorted
+            if header.get("ordinal") is not None
+        ]
+        if ordinal_values:
+            min_strong = min(ordinal_values)
+            max_strong = max(ordinal_values)
+            for missing in sorted(
+                ord_val
+                for ord_val in weak_lookup
+                if ord_val < min_strong and ord_val not in recovered_ordinals
+            ):
+                candidate = dict(weak_lookup[missing])
+                candidate["recovered"] = True
+                candidate["score"] = max(
+                    candidate.get("score", 0.0), _MIN_RECOVERY_SCORE
+                )
+                recovered_ordinals.add(missing)
+                repaired.append(candidate)
+            for missing in sorted(
+                ord_val
+                for ord_val in weak_lookup
+                if ord_val > max_strong and ord_val not in recovered_ordinals
+            ):
+                candidate = dict(weak_lookup[missing])
+                candidate["recovered"] = True
+                candidate["score"] = max(
+                    candidate.get("score", 0.0), _MIN_RECOVERY_SCORE
+                )
+                recovered_ordinals.add(missing)
+                repaired.append(candidate)
         logger.debug(
             "headers.repair.series",
             extra={
