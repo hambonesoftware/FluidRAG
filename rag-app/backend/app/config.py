@@ -5,10 +5,16 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from pydantic import AliasChoices, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+try:  # pragma: no cover - Python <3.11 fallback
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover
+    import tomli as tomllib  # type: ignore[import-not-found]
 
 
 class Settings(BaseSettings):
@@ -38,8 +44,15 @@ class Settings(BaseSettings):
     frontend_port: int = Field(
         default=3000, validation_alias=AliasChoices("FRONTEND_PORT", "frontend_port")
     )
-    log_level: str = Field(
-        default="info", validation_alias=AliasChoices("LOG_LEVEL", "log_level")
+    logging_level: str = Field(
+        default="INFO",
+        validation_alias=AliasChoices(
+            "LOG_LEVEL", "logging_level", "logging.level"
+        ),
+    )
+    logging_json: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("LOG_JSON", "logging_json", "logging.json"),
     )
     offline: bool = Field(
         default=True,
@@ -53,16 +66,43 @@ class Settings(BaseSettings):
         default=0.85,
         validation_alias=AliasChoices("UPLOAD_OCR_THRESHOLD", "upload_ocr_threshold"),
     )
-    upload_allowed_extensions: tuple[str, ...] = Field(
-        default=(".pdf", ".txt"),
+    upload_max_mb: int = Field(
+        default=100,
+        ge=1,
+        validation_alias=AliasChoices("UPLOAD_MAX_MB", "upload.max_mb"),
+    )
+    upload_allowed_ext: tuple[str, ...] = Field(
+        default=(".pdf",),
         validation_alias=AliasChoices(
-            "UPLOAD_ALLOWED_EXTENSIONS", "upload_allowed_extensions"
+            "UPLOAD_ALLOWED_EXT", "upload_allowed_ext", "upload.allowed_ext"
         ),
     )
-    upload_max_bytes: int = Field(
-        default=10 * 1024 * 1024,
+    upload_allowed_mime: tuple[str, ...] = Field(
+        default=("application/pdf",),
+        validation_alias=AliasChoices(
+            "UPLOAD_ALLOWED_MIME",
+            "upload_allowed_mime",
+            "upload.allowed_mime",
+        ),
+    )
+    upload_storage_temp: str = Field(
+        default="storage/uploads/tmp",
+        validation_alias=AliasChoices(
+            "UPLOAD_STORAGE_TEMP", "upload.storage.temp"
+        ),
+    )
+    upload_storage_final: str = Field(
+        default="storage/uploads/final",
+        validation_alias=AliasChoices(
+            "UPLOAD_STORAGE_FINAL", "upload.storage.final"
+        ),
+    )
+    upload_rate_limit_per_minute: int = Field(
+        default=60,
         ge=1,
-        validation_alias=AliasChoices("UPLOAD_MAX_BYTES", "upload_max_bytes"),
+        validation_alias=AliasChoices(
+            "UPLOAD_RATE_LIMIT_PER_MINUTE", "upload.rate_limit.per_minute"
+        ),
     )
     chunk_target_tokens: int = Field(
         default=90,
@@ -73,6 +113,117 @@ class Settings(BaseSettings):
         default=12,
         ge=0,
         validation_alias=AliasChoices("CHUNK_TOKEN_OVERLAP", "chunk_token_overlap"),
+    )
+    parser_ocr_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("PARSER_OCR_ENABLED", "parser.ocr.enabled"),
+    )
+    parser_ocr_languages: tuple[str, ...] = Field(
+        default=("eng",),
+        validation_alias=AliasChoices(
+            "PARSER_OCR_LANGUAGES",
+            "parser_ocr_languages",
+            "parser.ocr.languages",
+        ),
+    )
+    parser_tuning_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "PARSER_TUNING_ENABLED", "parser.tuning.enabled"
+        ),
+    )
+    parser_efhg_weights_regex: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_WEIGHTS_REGEX", "parser.efhg.weights.regex"
+        ),
+    )
+    parser_efhg_weights_style: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_WEIGHTS_STYLE", "parser.efhg.weights.style"
+        ),
+    )
+    parser_efhg_weights_entropy: float = Field(
+        default=0.8,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_WEIGHTS_ENTROPY", "parser.efhg.weights.entropy"
+        ),
+    )
+    parser_efhg_weights_graph: float = Field(
+        default=1.1,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_WEIGHTS_GRAPH", "parser.efhg.weights.graph"
+        ),
+    )
+    parser_efhg_weights_fluid: float = Field(
+        default=0.9,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_WEIGHTS_FLUID", "parser.efhg.weights.fluid"
+        ),
+    )
+    parser_efhg_weights_llm_vote: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_WEIGHTS_LLM_VOTE",
+            "parser.efhg.weights.llm_vote",
+        ),
+    )
+    parser_efhg_thresholds_header: float = Field(
+        default=0.65,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_THRESHOLDS_HEADER",
+            "parser.efhg.thresholds.header",
+        ),
+    )
+    parser_efhg_thresholds_subheader: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_THRESHOLDS_SUBHEADER",
+            "parser.efhg.thresholds.subheader",
+        ),
+    )
+    parser_efhg_stitching_adjacency_weight: float = Field(
+        default=0.8,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_STITCHING_ADJACENCY_WEIGHT",
+            "parser.efhg.stitching.adjacency_weight",
+        ),
+    )
+    parser_efhg_stitching_entropy_join_delta: float = Field(
+        default=0.15,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_STITCHING_ENTROPY_JOIN_DELTA",
+            "parser.efhg.stitching.entropy_join_delta",
+        ),
+    )
+    parser_efhg_stitching_style_cont_threshold: float = Field(
+        default=0.7,
+        validation_alias=AliasChoices(
+            "PARSER_EFHG_STITCHING_STYLE_CONT_THRESHOLD",
+            "parser.efhg.stitching.style_cont_threshold",
+        ),
+    )
+    parser_sequence_repair_hole_penalty: float = Field(
+        default=0.4,
+        validation_alias=AliasChoices(
+            "PARSER_SEQUENCE_REPAIR_HOLE_PENALTY",
+            "parser.sequence_repair.hole_penalty",
+        ),
+    )
+    parser_sequence_repair_max_gap_span_pages: int = Field(
+        default=2,
+        validation_alias=AliasChoices(
+            "PARSER_SEQUENCE_REPAIR_MAX_GAP_SPAN_PAGES",
+            "parser.sequence_repair.max_gap_span_pages",
+        ),
+    )
+    parser_sequence_repair_min_schema_support: int = Field(
+        default=2,
+        validation_alias=AliasChoices(
+            "PARSER_SEQUENCE_REPAIR_MIN_SCHEMA_SUPPORT",
+            "parser.sequence_repair.min_schema_support",
+        ),
     )
     parser_timeout_seconds: float = Field(
         default=1.0,
@@ -147,10 +298,34 @@ class Settings(BaseSettings):
             "storage_stream_chunk_size",
         ),
     )
+    cors_allowed_origins: tuple[str, ...] = Field(
+        default=("*",),
+        validation_alias=AliasChoices(
+            "CORS_ALLOWED_ORIGINS", "cors.allowed_origins"
+        ),
+    )
+    cors_allowed_methods: tuple[str, ...] = Field(
+        default=("GET", "POST"),
+        validation_alias=AliasChoices(
+            "CORS_ALLOWED_METHODS", "cors.allowed_methods"
+        ),
+    )
+    cors_allowed_headers: tuple[str, ...] = Field(
+        default=("Authorization", "Content-Type"),
+        validation_alias=AliasChoices(
+            "CORS_ALLOWED_HEADERS", "cors.allowed_headers"
+        ),
+    )
 
     def __init__(self, **data: Any) -> None:
         """Pydantic settings init"""
         super().__init__(**data)
+
+    @property
+    def log_level(self) -> str:
+        """Return configured logging level."""
+
+        return str(self.logging_level).lower()
 
     @property
     def backend_address(self) -> str:
@@ -187,17 +362,76 @@ class Settings(BaseSettings):
             "port": self.frontend_port,
         }
 
-    def openrouter_retry_schedule(self) -> list[float]:
-        """Return deterministic exponential backoff durations in seconds."""
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Prepend TOML config sources before env and init data."""
 
-        retries = max(self.openrouter_max_retries, 0)
-        base = max(self.openrouter_backoff_base_seconds, 0.0)
-        cap = max(self.openrouter_backoff_cap_seconds, 0.0)
-        schedule: list[float] = [0.0]
-        for attempt in range(1, retries + 1):
-            delay = min(cap, base * (2 ** (attempt - 1)))
-            schedule.append(round(delay, 4))
-        return schedule
+        return (
+            cls._toml_settings_source(settings_cls),
+            env_settings,
+            dotenv_settings,
+            init_settings,
+            file_secret_settings,
+        )
+
+    @classmethod
+    def _toml_settings_source(
+        cls, settings_cls: type[BaseSettings]
+    ) -> PydanticBaseSettingsSource:
+        class TomlSource(PydanticBaseSettingsSource):
+            def __init__(self, settings_cls: type[BaseSettings]) -> None:
+                super().__init__(settings_cls)
+                self._cache: dict[str, Any] | None = None
+
+            def _load(self) -> dict[str, Any]:
+                if self._cache is None:
+                    base = Path(__file__).resolve().parents[3]
+                    config_path = base / "configs" / "app.toml"
+                    tuned_path = base / "configs" / "tuned" / "header_detector.toml"
+                    data: dict[str, Any] = {}
+                    if config_path.exists():
+                        with config_path.open("rb") as handle:
+                            data.update(cls._flatten_config(tomllib.load(handle)))
+                    if tuned_path.exists():
+                        with tuned_path.open("rb") as handle:
+                            tuned_flat = cls._flatten_config(tomllib.load(handle))
+                        data.update({k: v for k, v in tuned_flat.items() if k.startswith("parser_")})
+                    self._cache = data
+                return dict(self._cache)
+
+            def __call__(self) -> dict[str, Any]:
+                return self._load()
+
+            def get_field_value(
+                self,
+                field: FieldInfo,
+                field_name: str,
+            ) -> tuple[Any | None, str, bool]:
+                data = self._load()
+                if field_name in data:
+                    return data[field_name], field_name, True
+                return None, field_name, False
+
+        return TomlSource(settings_cls)
+
+    @staticmethod
+    def _flatten_config(config: Mapping[str, Any], prefix: str = "") -> dict[str, Any]:
+        flattened: dict[str, Any] = {}
+        for key, value in config.items():
+            safe_key = key.replace("-", "_")
+            composite = f"{prefix}_{safe_key}" if prefix else safe_key
+            if isinstance(value, Mapping):
+                flattened.update(Settings._flatten_config(value, composite))
+            else:
+                flattened[composite] = value
+        return flattened
 
     def audit_retention_window(self) -> timedelta:
         """Return retention window for audit artifacts as ``timedelta``."""

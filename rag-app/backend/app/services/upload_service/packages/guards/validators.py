@@ -20,17 +20,18 @@ def validate_upload_inputs(
     settings = get_settings()
     allowed_extensions = {
         ext if ext.startswith(".") else f".{ext}"
-        for ext in settings.upload_allowed_extensions
+        for ext in settings.upload_allowed_ext
     }
+    max_bytes = int(settings.upload_max_mb * 1024 * 1024)
 
     if upload_bytes is not None:
         if file_id or file_name:
             raise ValidationError("direct uploads cannot specify file_id or file_name")
         if not upload_bytes:
             raise ValidationError("uploaded file is empty")
-        if len(upload_bytes) > settings.upload_max_bytes:
+        if len(upload_bytes) > max_bytes:
             raise ValidationError(
-                f"file exceeds maximum size of {settings.upload_max_bytes} bytes"
+                f"file exceeds maximum size of {max_bytes} bytes"
             )
         candidate = (upload_filename or "uploaded.pdf").strip()
         if not candidate:
@@ -77,7 +78,7 @@ def validate_upload_inputs(
             f"unsupported file extension: {suffix or '[none]'}"
         )
     file_size = path.stat().st_size
-    if file_size > settings.upload_max_bytes:
+    if file_size > max_bytes:
         raise ValidationError(
-            f"file exceeds maximum size of {settings.upload_max_bytes} bytes"
+            f"file exceeds maximum size of {max_bytes} bytes"
         )

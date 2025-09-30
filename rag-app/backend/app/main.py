@@ -11,6 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .config import get_settings
 from .routes import (
     chunk_router,
+    docs_router,
     headers_router,
     orchestrator_router,
     parser_router,
@@ -29,6 +30,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         correlation_id = (
             request.headers.get("x-correlation-id") or generate_correlation_id()
         )
+        request.state.request_id = correlation_id
         with correlation_context(correlation_id):
             start = perf_counter()
             try:
@@ -46,6 +48,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
                 raise
             duration_ms = (perf_counter() - start) * 1000.0
             response.headers["x-correlation-id"] = correlation_id
+            response.headers["x-request-id"] = correlation_id
             response.headers["x-response-time-ms"] = f"{duration_ms:.3f}"
             logger.info(
                 "request.complete",
@@ -79,13 +82,14 @@ def create_app() -> FastAPI:
     app.add_middleware(ObservabilityMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=list(settings.cors_allowed_origins),
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=list(settings.cors_allowed_methods),
+        allow_headers=list(settings.cors_allowed_headers),
     )
 
     app.include_router(upload_router)
+    app.include_router(docs_router)
     app.include_router(parser_router)
     app.include_router(chunk_router)
     app.include_router(headers_router)
