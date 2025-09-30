@@ -1,0 +1,326 @@
+{
+  "timestamp": "2025-09-30T01:05:43.231085+00:00",
+  "server": {
+    "entrypoints": [
+      {
+        "path": "rag-app/run.py",
+        "symbol": "start_backend",
+        "factory_target": "backend.app.main:create_app",
+        "line_start": 23,
+        "line_end": 44
+      },
+      {
+        "path": "rag-app/run.py",
+        "symbol": "start_frontend",
+        "line_start": 47,
+        "line_end": 70
+      },
+      {
+        "path": "rag-app/run.py",
+        "symbol": "main",
+        "line_start": 89,
+        "line_end": 120
+      }
+    ],
+    "settings": {
+      "path": "rag-app/backend/app/config.py",
+      "fields": {
+        "backend_host": 8000,
+        "backend_port": 8000,
+        "frontend_port": 3000,
+        "artifact_root": "rag-app/data/artifacts",
+        "upload_ocr_threshold": 0.85,
+        "chunk_target_tokens": 90,
+        "chunk_token_overlap": 12,
+        "parser_timeout_seconds": 1.0
+      }
+    },
+    "health_routes": [
+      {
+        "path": "/health",
+        "method": "GET",
+        "module": "rag-app/backend/app/main.py",
+        "line_start": 96,
+        "line_end": 98
+      }
+    ]
+  },
+  "upload": {
+    "routes": [
+      {
+        "path": "/upload/normalize",
+        "method": "POST",
+        "request_model": "UploadRequest(file_id?: str, file_name?: str)",
+        "response_model": "NormalizedDoc",
+        "module": "rag-app/backend/app/routes/upload.py",
+        "line_start": 23,
+        "line_end": 34
+      }
+    ],
+    "validation": {
+      "function": "validate_upload_inputs",
+      "module": "rag-app/backend/app/services/upload_service/packages/guards/validators.py",
+      "guards": [
+        "requires file_id or file_name",
+        "rejects blank/whitespace file_id",
+        "rejects remote paths (contains //)",
+        "rejects path traversal (..)",
+        "rejects newline characters"
+      ],
+      "missing": [
+        "no extension allowlist",
+        "no MIME sniffing",
+        "no double-extension guard",
+        "no file size enforcement"
+      ],
+      "line_start": 10,
+      "line_end": 38
+    },
+    "storage": {
+      "doc_id": {
+        "generator": "make_doc_id",
+        "hash": "sha1(timestamp + seed)",
+        "line_start": 86,
+        "line_end": 91
+      },
+      "artifact_root": "Settings.artifact_root (rag-app/data/artifacts)",
+      "normalized_artifact": {
+        "path": "normalize.json",
+        "line_start": 35,
+        "line_end": 83
+      }
+    },
+    "normalization": {
+      "reader": "normalize_pdf",
+      "module": "rag-app/backend/app/services/upload_service/packages/normalize/pdf_reader.py",
+      "features": [
+        "treats input as text",
+        "splits on form-feed/double blank lines",
+        "infers headings via uppercase ratio",
+        "stub images via [image:name] markers"
+      ],
+      "line_start": 68,
+      "line_end": 153
+    },
+    "ocr": {
+      "function": "try_ocr_if_needed",
+      "threshold_env": "UPLOAD_OCR_THRESHOLD",
+      "line_start": 15,
+      "line_end": 83
+    },
+    "checksums": {
+      "function": "write_manifest",
+      "algorithm": "sha256",
+      "line_start": 12,
+      "line_end": 30
+    },
+    "response": {
+      "model": "NormalizedDoc",
+      "fields": [
+        "doc_id",
+        "normalized_path",
+        "manifest_path",
+        "avg_coverage",
+        "block_count",
+        "ocr_performed"
+      ],
+      "line_start": 11,
+      "line_end": 19
+    }
+  },
+  "parser": {
+    "routes": [
+      {
+        "path": "/parser/enrich",
+        "method": "POST",
+        "request_model": "ParserRequest(doc_id: str, normalize_artifact: str)",
+        "response_model": "ParseResult",
+        "module": "rag-app/backend/app/routes/parser.py",
+        "line_start": 23,
+        "line_end": 34
+      }
+    ],
+    "controller": {
+      "function": "parse_and_enrich",
+      "module": "rag-app/backend/app/services/parser_service/parser_controller.py",
+      "fan_out_tasks": [
+        "text",
+        "tables",
+        "images",
+        "links",
+        "language",
+        "ocr",
+        "reading_order",
+        "semantics",
+        "lists"
+      ],
+      "timeout_env": "PARSER_TIMEOUT_SECONDS",
+      "line_start": 110,
+      "line_end": 186
+    },
+    "extractors": [
+      {
+        "name": "extract_text_blocks",
+        "module": "rag-app/backend/app/services/parser_service/packages/extract/pdf_text.py",
+        "line_start": 8,
+        "line_end": 23
+      },
+      {
+        "name": "extract_tables",
+        "module": ".../extract/tables.py",
+        "line_start": 11,
+        "line_end": 31
+      },
+      {
+        "name": "extract_images",
+        "module": ".../extract/images.py",
+        "line_start": 8,
+        "line_end": 20
+      },
+      {
+        "name": "extract_links",
+        "module": ".../extract/links.py",
+        "line_start": 11,
+        "line_end": 25
+      },
+      {
+        "name": "maybe_ocr",
+        "module": ".../ocr/ocr_router.py",
+        "line_start": 10,
+        "line_end": 36
+      }
+    ],
+    "enhancements": [
+      {
+        "name": "build_reading_order",
+        "module": ".../enhance/reading_order.py",
+        "line_start": 18,
+        "line_end": 26
+      },
+      {
+        "name": "infer_semantics",
+        "module": ".../enhance/semantics.py",
+        "line_start": 8,
+        "line_end": 47
+      },
+      {
+        "name": "detect_lists_bullets",
+        "module": ".../enhance/lists_bullets.py",
+        "line_start": 11,
+        "line_end": 36
+      }
+    ],
+    "merger": {
+      "name": "merge_all",
+      "module": ".../merge/merger.py",
+      "line_start": 8,
+      "line_end": 42
+    },
+    "language_detection": {
+      "name": "detect_language",
+      "module": ".../detect/language.py",
+      "line_start": 16,
+      "line_end": 34
+    },
+    "config": {
+      "chunk_target_tokens": 90,
+      "chunk_token_overlap": 12,
+      "parser_timeout_seconds": 1.0,
+      "upload_ocr_threshold": 0.85
+    }
+  },
+  "results": {
+    "artifacts": [
+      {
+        "name": "normalize.json",
+        "source": "upload ensure_normalized",
+        "module": "rag-app/backend/app/services/upload_service/upload_controller.py"
+      },
+      {
+        "name": "parse.enriched.json",
+        "source": "parser parse_and_enrich",
+        "module": "rag-app/backend/app/services/parser_service/parser_controller.py"
+      },
+      {
+        "name": "pipeline.audit.json",
+        "source": "pipeline run",
+        "module": "rag-app/backend/app/routes/orchestrator.py"
+      },
+      {
+        "name": "document.manifest.json",
+        "source": "upsert_document_record",
+        "module": "rag-app/backend/app/adapters/db.py"
+      }
+    ],
+    "status_routes": [
+      {
+        "path": "/pipeline/status/{doc_id}",
+        "line_start": 232,
+        "line_end": 267
+      },
+      {
+        "path": "/pipeline/results/{doc_id}",
+        "line_start": 271,
+        "line_end": 321
+      },
+      {
+        "path": "/pipeline/artifacts",
+        "line_start": 325,
+        "line_end": 345
+      }
+    ]
+  },
+  "security": {
+    "cors": {
+      "allow_origins": "*",
+      "allow_methods": "*",
+      "allow_headers": "*",
+      "module": "rag-app/backend/app/main.py",
+      "line_start": 62,
+      "line_end": 100
+    },
+    "auth": "none",
+    "rate_limiting": "none",
+    "artifact_stream_guard": {
+      "path_validation": true,
+      "line_start": 325,
+      "line_end": 345
+    }
+  },
+  "observability": {
+    "structured_logging": {
+      "module": "rag-app/backend/app/util/logging.py",
+      "line_start": 20,
+      "line_end": 70
+    },
+    "correlation_ids": {
+      "middleware": "ObservabilityMiddleware",
+      "module": "rag-app/backend/app/main.py",
+      "line_start": 25,
+      "line_end": 59
+    },
+    "spans": {
+      "function": "log_span",
+      "line_start": 146,
+      "line_end": 185
+    },
+    "audit_records": {
+      "function": "stage_record",
+      "line_start": 18,
+      "line_end": 52
+    }
+  },
+  "tests": {
+    "paths": [
+      "rag-app/backend/app/tests/unit/test_upload.py",
+      "rag-app/backend/app/tests/unit/test_parser.py",
+      "rag-app/backend/app/tests/unit/test_orchestrator_routes.py",
+      "rag-app/backend/app/tests/e2e/test_pipeline_e2e.py"
+    ]
+  },
+  "finalstubs_conformance": {
+    "declared_symbols_present": 113,
+    "declared_symbols_missing": 19,
+    "files_tracked": 135
+  }
+}

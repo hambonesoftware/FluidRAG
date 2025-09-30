@@ -9,7 +9,10 @@ from pathlib import Path
 import pytest
 
 from ...services.upload_service import NormalizedDoc, ensure_normalized
-from ...services.upload_service.packages.guards.validators import validate_upload_inputs
+from ...services.upload_service.packages.guards.validators import (
+    validate_upload_inputs,
+    validate_uploaded_file,
+)
 from ...util.errors import ValidationError
 
 
@@ -35,6 +38,9 @@ def test_ensure_normalized_emits_manifest(sample_pdf_path: Path) -> None:
 
     assert normalized_path.exists(), "normalize.json should exist"
     assert manifest_path.exists(), "manifest should exist"
+    assert result.sha256
+    assert Path(result.source_path).exists()
+    assert result.size_bytes > 0
 
     normalized_payload = json.loads(normalized_path.read_text(encoding="utf-8"))
     assert normalized_payload["stats"]["block_count"] >= 4
@@ -54,7 +60,9 @@ def test_ensure_normalized_idempotent_files(sample_pdf_path: Path) -> None:
 
     assert Path(first.normalized_path).read_text(encoding="utf-8")
     assert Path(second.normalized_path).read_text(encoding="utf-8")
-    assert first.doc_id != second.doc_id, "doc ids should be unique across runs"
+    assert first.doc_id == second.doc_id, "doc ids should be stable across identical files"
+    assert first.sha256 == second.sha256
+    assert first.normalized_path == second.normalized_path
 
 
 def test_normalized_manifest_contains_expected_headers(
@@ -71,3 +79,30 @@ def test_normalized_manifest_contains_expected_headers(
     ]
     for header in expected_sections["headers"]:
         assert any(text.startswith(header) for text in header_candidates), header
+
+
+def test_validate_uploaded_file_guards(tmp_path: Path) -> None:
+    candidate = tmp_path / "document.pdf"
+    candidate.write_text("sample", encoding="utf-8")
+
+    result = validate_uploaded_file(
+        path=str(candidate),
+        original_filename="document.pdf",
+        content_type="application/pdf",
+        allowed_extensions=[".pdf"],
+        allowed_mimes=["application/pdf"],
+        max_bytes=1024,
+    )
+    assert result["size_bytes"] > 0
+
+    malicious = tmp_path / "trick.pdf.exe"
+    malicious.write_text("sample", encoding="utf-8")
+    with pytest.raises(ValidationError):
+        validate_uploaded_file(
+            path=str(malicious),
+            original_filename="trick.pdf.exe",
+            content_type="application/octet-stream",
+            allowed_extensions=[".pdf"],
+            allowed_mimes=["application/pdf"],
+            max_bytes=1024,
+        )

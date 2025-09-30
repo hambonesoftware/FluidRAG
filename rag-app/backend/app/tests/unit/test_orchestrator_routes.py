@@ -61,6 +61,11 @@ def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
     manifest_path = Path(str(manifest_payload["manifest_path"]))
     manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
 
+    source_dir = doc_root / "source"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    source_file = source_dir / "document.pdf"
+    source_file.write_bytes(b"%PDF-1.4")
+
     return NormalizedDoc(
         doc_id=doc_id,
         normalized_path=str(normalized_path),
@@ -68,6 +73,10 @@ def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
         avg_coverage=0.6,
         block_count=4,
         ocr_performed=False,
+        sha256="abc123",
+        source_path=str(source_file),
+        size_bytes=2048,
+        content_type="application/pdf",
     )
 
 
