@@ -46,6 +46,9 @@ def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
     doc_root = artifact_root / doc_id
     doc_root.mkdir(parents=True, exist_ok=True)
 
+    source_path = doc_root / "source.pdf"
+    source_path.write_bytes(b"%PDF-1.4 test")
+
     normalized_path = doc_root / "normalize.json"
     normalized_path.write_text("{}", encoding="utf-8")
 
@@ -70,6 +73,7 @@ def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
         ocr_performed=False,
         source_checksum="abc123",
         source_bytes=normalized_path.stat().st_size,
+        source_path=str(source_path),
     )
 
 

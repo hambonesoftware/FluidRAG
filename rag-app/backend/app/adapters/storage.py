@@ -1,10 +1,11 @@
-"""Filesystem utilities for persisting pipeline artifacts."""
+"""File storage helpers and guarded adapters."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 from collections.abc import AsyncIterator, Iterable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,118 @@ from ..config import get_settings
 from ..util.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class StorageEvent:
+    """Audit record describing a managed storage operation."""
+
+    doc_id: str | None
+    path: Path
+    operation: str
+
+
+class StorageWriteGuard:
+    """Track managed writes and detect unguarded PDF persistence."""
+
+    def __init__(self) -> None:
+        self.reset()
+
+    def reset(self) -> None:
+        self._events: list[StorageEvent] = []
+
+    def record(self, *, doc_id: str | None, path: Path, operation: str) -> None:
+        event = StorageEvent(doc_id=doc_id, path=path.resolve(), operation=operation)
+        self._events.append(event)
+
+    def recorded_paths(self) -> set[Path]:
+        return {event.path for event in self._events}
+
+    def calls_for(self, doc_id: str) -> int:
+        return sum(1 for event in self._events if event.doc_id == doc_id)
+
+    @property
+    def called(self) -> bool:
+        return bool(self._events)
+
+    def assert_no_unmanaged_pdfs(self, root: Path) -> None:
+        """Raise if any PDF exists under *root* without a managed record."""
+
+        recorded_pdf_paths = {
+            event.path for event in self._events if event.path.suffix.lower() == ".pdf"
+        }
+        for pdf_path in root.rglob("*.pdf"):
+            resolved = pdf_path.resolve()
+            if resolved not in recorded_pdf_paths:
+                raise RuntimeError(f"unmanaged PDF write detected: {resolved}")
+
+
+_STORAGE_GUARD = StorageWriteGuard()
+
+
+def get_storage_guard() -> StorageWriteGuard:
+    """Return the singleton storage guard."""
+
+    return _STORAGE_GUARD
+
+
+def reset_storage_guard() -> None:
+    """Clear the storage guard audit trail."""
+
+    _STORAGE_GUARD.reset()
+
+
+def assert_no_unmanaged_writes() -> None:
+    """Ensure all persisted PDFs were recorded by the storage adapter."""
+
+    root = get_settings().artifact_root_path
+    _STORAGE_GUARD.assert_no_unmanaged_pdfs(root)
+
+
+class StorageAdapter:
+    """Adapter responsible for persisting upload-stage artifacts."""
+
+    def __init__(self, root: Path | None = None) -> None:
+        settings = get_settings()
+        self.root = Path(root) if root is not None else settings.artifact_root_path
+
+    def _doc_root(self, doc_id: str) -> Path:
+        doc_root = Path(self.root) / doc_id
+        doc_root.mkdir(parents=True, exist_ok=True)
+        return doc_root
+
+    def save_source_pdf(
+        self, *, doc_id: str, filename: str | None, payload: bytes
+    ) -> Path:
+        """Persist the uploaded PDF payload in managed storage."""
+
+        target = self._doc_root(doc_id) / "source.pdf"
+        target.write_bytes(payload)
+        logger.info(
+            "storage.save_source_pdf",
+            extra={
+                "doc_id": doc_id,
+                "path": str(target),
+                "bytes": len(payload),
+                "upload_filename": filename or "source.pdf",
+            },
+        )
+        _STORAGE_GUARD.record(doc_id=doc_id, path=target, operation="save_source_pdf")
+        return target
+
+    def save_json(self, *, doc_id: str, name: str, payload: dict[str, Any]) -> Path:
+        """Persist a JSON artifact within the document directory."""
+
+        target = self._doc_root(doc_id) / name
+        target.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        logger.debug(
+            "storage.save_json",
+            extra={"doc_id": doc_id, "path": str(target)},
+        )
+        _STORAGE_GUARD.record(doc_id=doc_id, path=target, operation="save_json")
+        return target
 
 
 def ensure_parent_dirs(path: str) -> None:
@@ -98,10 +211,14 @@ async def stream_write(path: str, aiter: AsyncIterator[bytes]) -> None:
 
 
 __all__ = [
+    "StorageAdapter",
+    "assert_no_unmanaged_writes",
     "ensure_parent_dirs",
-    "write_json",
-    "write_jsonl",
+    "get_storage_guard",
     "read_jsonl",
+    "reset_storage_guard",
     "stream_read",
     "stream_write",
+    "write_json",
+    "write_jsonl",
 ]

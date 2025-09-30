@@ -10,9 +10,38 @@ from .....util.errors import ValidationError
 
 
 def validate_upload_inputs(
-    file_id: str | None = None, file_name: str | None = None
+    file_id: str | None = None,
+    file_name: str | None = None,
+    *,
+    upload_bytes: bytes | None = None,
+    upload_filename: str | None = None,
 ) -> None:
     """Raise on invalid upload inputs."""
+    settings = get_settings()
+    allowed_extensions = {
+        ext if ext.startswith(".") else f".{ext}"
+        for ext in settings.upload_allowed_extensions
+    }
+
+    if upload_bytes is not None:
+        if file_id or file_name:
+            raise ValidationError("direct uploads cannot specify file_id or file_name")
+        if not upload_bytes:
+            raise ValidationError("uploaded file is empty")
+        if len(upload_bytes) > settings.upload_max_bytes:
+            raise ValidationError(
+                f"file exceeds maximum size of {settings.upload_max_bytes} bytes"
+            )
+        candidate = (upload_filename or "uploaded.pdf").strip()
+        if not candidate:
+            raise ValidationError("upload_filename cannot be blank")
+        suffix = Path(candidate).suffix.lower() or ".pdf"
+        if suffix not in allowed_extensions:
+            raise ValidationError(
+                f"unsupported file extension: {suffix or '[none]'}"
+            )
+        return
+
     if not file_id and not file_name:
         raise ValidationError("either file_id or file_name must be provided")
 
@@ -38,12 +67,6 @@ def validate_upload_inputs(
         raise ValidationError("relative path traversal is not allowed")
     if "\n" in candidate or "\r" in candidate:
         raise ValidationError("file_name cannot contain newlines")
-
-    settings = get_settings()
-    allowed_extensions = {
-        ext if ext.startswith(".") else f".{ext}"
-        for ext in settings.upload_allowed_extensions
-    }
 
     path = Path(candidate).expanduser()
     if not path.exists() or not path.is_file():

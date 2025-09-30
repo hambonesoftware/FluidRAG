@@ -24,6 +24,7 @@ def _make_normalized_doc() -> NormalizedDoc:
         manifest_path="/tmp/manifest.json",
         source_checksum="abc123",
         source_bytes=10,
+        source_path="/tmp/source.pdf",
     )
 
 
