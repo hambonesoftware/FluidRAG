@@ -18,6 +18,7 @@ def extract_text_blocks(normalized: dict[str, Any]) -> list[dict[str, Any]]:
                 "bbox": block.get("bbox", [0.0, 0.0, 1.0, 1.0]),
                 "font": block.get("font", {}),
                 "confidence": float(block.get("confidence", 0.0)),
+                "token_count": len(block.get("text", "").split()),
             }
             blocks.append(record)
     return blocks

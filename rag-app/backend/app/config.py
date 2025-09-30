@@ -49,6 +49,30 @@ class Settings(BaseSettings):
         default="rag-app/data/artifacts",
         validation_alias=AliasChoices("ARTIFACT_ROOT", "artifact_root"),
     )
+    upload_allowed_extensions: list[str] = Field(
+        default_factory=lambda: [".pdf"],
+        validation_alias=AliasChoices(
+            "UPLOAD_ALLOWED_EXTENSIONS", "upload_allowed_extensions"
+        ),
+    )
+    upload_max_size_mb: int = Field(
+        default=64,
+        ge=1,
+        validation_alias=AliasChoices(
+            "UPLOAD_MAX_SIZE_MB", "upload_max_size_mb"
+        ),
+    )
+    upload_mime_allowlist: list[str] = Field(
+        default_factory=lambda: [
+            "application/pdf",
+            "application/x-pdf",
+            "application/octet-stream",
+        ],
+        validation_alias=AliasChoices(
+            "UPLOAD_MIME_ALLOWLIST",
+            "upload_mime_allowlist",
+        ),
+    )
     upload_ocr_threshold: float = Field(
         default=0.85,
         validation_alias=AliasChoices("UPLOAD_OCR_THRESHOLD", "upload_ocr_threshold"),

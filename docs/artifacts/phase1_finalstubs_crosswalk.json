@@ -1,0 +1,1622 @@
+{
+  "timestamp": "2025-09-30T01:04:47.086662Z",
+  "files": [
+    {
+      "file_path": "rag-app/run.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "start_backend",
+          "type": "function",
+          "status": "present",
+          "lineno": 23
+        },
+        {
+          "name": "start_frontend",
+          "type": "function",
+          "status": "present",
+          "lineno": 47
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/.env",
+      "exists": false,
+      "language": "text"
+    },
+    {
+      "file_path": "rag-app/README.md",
+      "exists": true,
+      "language": "markdown"
+    },
+    {
+      "file_path": "rag-app/.gitignore",
+      "exists": true,
+      "language": "text"
+    },
+    {
+      "file_path": "rag-app/data/.gitkeep",
+      "exists": true,
+      "language": "text"
+    },
+    {
+      "file_path": "rag-app/backend/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/main.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "create_app",
+          "type": "function",
+          "status": "present",
+          "lineno": 62
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/config.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "Settings",
+          "type": "class",
+          "status": "present",
+          "lineno": 14
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/orchestrator.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "PipelineRunRequest",
+          "type": "class",
+          "status": "present",
+          "lineno": 36
+        },
+        {
+          "name": "run_pipeline",
+          "type": "function",
+          "status": "present",
+          "lineno": 126
+        },
+        {
+          "name": "status",
+          "type": "function",
+          "status": "present",
+          "lineno": 232
+        },
+        {
+          "name": "results",
+          "type": "function",
+          "status": "present",
+          "lineno": 271
+        },
+        {
+          "name": "stream_artifact",
+          "type": "function",
+          "status": "present",
+          "lineno": 325
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/upload.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/parser.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/chunk.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/headers.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/routes/passes.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/main.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "NormalizedDoc",
+          "type": "class",
+          "status": "present",
+          "lineno": 11
+        },
+        {
+          "name": "ensure_normalized",
+          "type": "function",
+          "status": "present",
+          "lineno": 22
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/upload_controller.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "NormalizedDocInternal",
+          "type": "class",
+          "status": "present",
+          "lineno": 24
+        },
+        {
+          "name": "ensure_normalized",
+          "type": "function",
+          "status": "present",
+          "lineno": 35
+        },
+        {
+          "name": "make_doc_id",
+          "type": "function",
+          "status": "present",
+          "lineno": 86
+        },
+        {
+          "name": "handle_upload_errors",
+          "type": "function",
+          "status": "present",
+          "lineno": 94
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/guards/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/guards/validators.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "validate_upload_inputs",
+          "type": "function",
+          "status": "present",
+          "lineno": 10
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/normalize/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/normalize/pdf_reader.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "normalize_pdf",
+          "type": "function",
+          "status": "present",
+          "lineno": 68
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/normalize/ocr.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "try_ocr_if_needed",
+          "type": "function",
+          "status": "present",
+          "lineno": 15
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/emit/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/upload_service/packages/emit/manifest.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "write_manifest",
+          "type": "function",
+          "status": "present",
+          "lineno": 12
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/main.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "ParseResult",
+          "type": "class",
+          "status": "present",
+          "lineno": 11
+        },
+        {
+          "name": "parse_and_enrich",
+          "type": "function",
+          "status": "present",
+          "lineno": 21
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/parser_controller.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "ParseInternal",
+          "type": "class",
+          "status": "present",
+          "lineno": 32
+        },
+        {
+          "name": "parse_and_enrich",
+          "type": "function",
+          "status": "present",
+          "lineno": 110
+        },
+        {
+          "name": "handle_parser_errors",
+          "type": "function",
+          "status": "present",
+          "lineno": 189
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/detect/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/detect/language.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "detect_language",
+          "type": "function",
+          "status": "present",
+          "lineno": 16
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/extract/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/extract/pdf_text.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "extract_text_blocks",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/extract/tables.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "extract_tables",
+          "type": "function",
+          "status": "present",
+          "lineno": 11
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/extract/images.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "extract_images",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/extract/links.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "extract_links",
+          "type": "function",
+          "status": "present",
+          "lineno": 11
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/ocr/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/ocr/ocr_router.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "maybe_ocr",
+          "type": "function",
+          "status": "present",
+          "lineno": 10
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/reading_order.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "build_reading_order",
+          "type": "function",
+          "status": "present",
+          "lineno": 18
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/semantics.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "infer_semantics",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/enhance/lists_bullets.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "detect_lists_bullets",
+          "type": "function",
+          "status": "present",
+          "lineno": 11
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/merge/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/parser_service/packages/merge/merger.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "merge_all",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/main.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "ChunkResult",
+          "type": "class",
+          "status": "present",
+          "lineno": 11
+        },
+        {
+          "name": "run_uf_chunking",
+          "type": "function",
+          "status": "present",
+          "lineno": 20
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/chunk_controller.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "ChunkInternal",
+          "type": "class",
+          "status": "present",
+          "lineno": 24
+        },
+        {
+          "name": "run_uf_chunking",
+          "type": "function",
+          "status": "present",
+          "lineno": 41
+        },
+        {
+          "name": "handle_chunk_errors",
+          "type": "function",
+          "status": "present",
+          "lineno": 124
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/segment/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/segment/sentences.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "split_sentences",
+          "type": "function",
+          "status": "present",
+          "lineno": 45
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/segment/uf_chunker.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "uf_chunk",
+          "type": "function",
+          "status": "present",
+          "lineno": 27
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/features/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/features/typography.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "extract_typography",
+          "type": "function",
+          "status": "present",
+          "lineno": 35
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/index/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/chunk_service/packages/index/local_vss.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "build_local_index",
+          "type": "function",
+          "status": "present",
+          "lineno": 32
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/main.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "HeaderJoinResult",
+          "type": "class",
+          "status": "present",
+          "lineno": 11
+        },
+        {
+          "name": "join_and_rechunk",
+          "type": "function",
+          "status": "present",
+          "lineno": 22
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/header_controller.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "HeaderJoinInternal",
+          "type": "class",
+          "status": "present",
+          "lineno": 28
+        },
+        {
+          "name": "join_and_rechunk",
+          "type": "function",
+          "status": "present",
+          "lineno": 91
+        },
+        {
+          "name": "handle_header_errors",
+          "type": "function",
+          "status": "present",
+          "lineno": 188
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/heur/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/heur/regex_bank.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "find_header_candidates",
+          "type": "function",
+          "status": "present",
+          "lineno": 139
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/score/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/score/typo_features.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "score_typo",
+          "type": "function",
+          "status": "present",
+          "lineno": 12
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/join/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/join/stitcher.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "stitch_headers",
+          "type": "function",
+          "status": "present",
+          "lineno": 12
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/repair/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/repair/sequence.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "repair_sequence",
+          "type": "function",
+          "status": "present",
+          "lineno": 19
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/rechunk/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/header_service/packages/rechunk/by_headers.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "rechunk_by_headers",
+          "type": "function",
+          "status": "present",
+          "lineno": 35
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/main.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "PassJobs",
+          "type": "class",
+          "status": "present",
+          "lineno": 11
+        },
+        {
+          "name": "run_all",
+          "type": "function",
+          "status": "present",
+          "lineno": 19
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/passes_controller.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "PassJobsInternal",
+          "type": "class",
+          "status": "present",
+          "lineno": 38
+        },
+        {
+          "name": "run_all",
+          "type": "function",
+          "status": "present",
+          "lineno": 67
+        },
+        {
+          "name": "handle_pass_errors",
+          "type": "function",
+          "status": "present",
+          "lineno": 131
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/retrieval/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/retrieval/hybrid.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "retrieve_ranked",
+          "type": "function",
+          "status": "present",
+          "lineno": 17
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/fluid.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "flow_score",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/hep.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "energy_score",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/rank/graph.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "graph_score",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/compose/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/compose/context.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "compose_window",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/mechanical.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "Prompt",
+          "type": "class",
+          "status": "present",
+          "lineno": 9
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/electrical.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "Prompt",
+          "type": "class",
+          "status": "present",
+          "lineno": 9
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/software.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "Prompt",
+          "type": "class",
+          "status": "present",
+          "lineno": 9
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/controls.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "Prompt",
+          "type": "class",
+          "status": "present",
+          "lineno": 9
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/prompts/project_mgmt.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "Prompt",
+          "type": "class",
+          "status": "present",
+          "lineno": 9
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/emit/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/services/rag_pass_service/packages/emit/results.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "write_pass_results",
+          "type": "function",
+          "status": "present",
+          "lineno": 23
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/adapters/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/adapters/storage.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "write_json",
+          "type": "function",
+          "status": "present",
+          "lineno": 24
+        },
+        {
+          "name": "write_jsonl",
+          "type": "function",
+          "status": "present",
+          "lineno": 35
+        },
+        {
+          "name": "read_jsonl",
+          "type": "function",
+          "status": "present",
+          "lineno": 48
+        },
+        {
+          "name": "ensure_parent_dirs",
+          "type": "function",
+          "status": "present",
+          "lineno": 17
+        },
+        {
+          "name": "stream_read",
+          "type": "function",
+          "status": "present",
+          "lineno": 69
+        },
+        {
+          "name": "stream_write",
+          "type": "function",
+          "status": "present",
+          "lineno": 87
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/adapters/vectors.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "EmbeddingModel",
+          "type": "class",
+          "status": "present",
+          "lineno": 23
+        },
+        {
+          "name": "BM25Index",
+          "type": "class",
+          "status": "present",
+          "lineno": 36
+        },
+        {
+          "name": "FaissIndex",
+          "type": "class",
+          "status": "present",
+          "lineno": 96
+        },
+        {
+          "name": "QdrantIndex",
+          "type": "class",
+          "status": "present",
+          "lineno": 152
+        },
+        {
+          "name": "hybrid_search",
+          "type": "function",
+          "status": "present",
+          "lineno": 192
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/adapters/llm.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "call_llm",
+          "type": "function",
+          "status": "present",
+          "lineno": 16
+        },
+        {
+          "name": "LLMClient",
+          "type": "class",
+          "status": "present",
+          "lineno": 23
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/adapters/db.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "upsert_document_record",
+          "type": "function",
+          "status": "present",
+          "lineno": 16
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/ids.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/ingest.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/parsing.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/chunking.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/headers.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/contracts/passes.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/util/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/util/logging.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "get_logger",
+          "type": "function",
+          "status": "present",
+          "lineno": 109
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/util/audit.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "stage_record",
+          "type": "function",
+          "status": "present",
+          "lineno": 18
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/e2e/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/e2e/test_pipeline_e2e.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_pipeline_e2e",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "load_test_pdf_paths",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "test_pipeline_real_pdf",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/unit/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/unit/test_upload.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_test_upload",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/unit/test_parser.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_test_parser",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "test_parser_with_tables_and_ocr",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/unit/test_chunk.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_test_chunk",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "test_uf_chunk_boundaries",
+          "type": "function",
+          "status": "present",
+          "lineno": 81
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/unit/test_headers.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_test_headers",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "test_sequence_repair_recovers_missing_headers",
+          "type": "function",
+          "status": "present",
+          "lineno": 104
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/unit/test_passes.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_test_passes",
+          "type": "function",
+          "status": "present",
+          "lineno": 52
+        },
+        {
+          "name": "test_hybrid_retrieval_ranking",
+          "type": "function",
+          "status": "present",
+          "lineno": 59
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/contracts/__init__.py",
+      "exists": true,
+      "language": "python"
+    },
+    {
+      "file_path": "rag-app/backend/app/tests/contracts/test_contract_shapes.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "test_contract_shapes",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/index.html",
+      "exists": true,
+      "language": "html"
+    },
+    {
+      "file_path": "rag-app/frontend/styles/app.css",
+      "exists": true,
+      "language": "css"
+    },
+    {
+      "file_path": "rag-app/frontend/js/main.js",
+      "exists": true,
+      "language": "javascript"
+    },
+    {
+      "file_path": "rag-app/frontend/js/apiClient.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "ApiClient",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/models/JobModel.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "JobModel",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/models/PassResultModel.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "PassResultModel",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/viewmodels/UploadVM.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "UploadVM",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/viewmodels/PipelineVM.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "PipelineVM",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "pollProgress",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/views/UploadView.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "UploadView",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/views/PipelineView.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "PipelineView",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/frontend/js/views/ResultsView.js",
+      "exists": true,
+      "language": "javascript",
+      "declared_types": [
+        {
+          "name": "ResultsView",
+          "type": "class",
+          "status": "missing",
+          "lineno": null
+        },
+        {
+          "name": "downloadArtifact",
+          "type": "function",
+          "status": "missing",
+          "lineno": null
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/util/errors.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "AppError",
+          "type": "class",
+          "status": "present",
+          "lineno": 6
+        },
+        {
+          "name": "ValidationError",
+          "type": "class",
+          "status": "present",
+          "lineno": 10
+        },
+        {
+          "name": "NotFoundError",
+          "type": "class",
+          "status": "present",
+          "lineno": 14
+        },
+        {
+          "name": "ExternalServiceError",
+          "type": "class",
+          "status": "present",
+          "lineno": 18
+        },
+        {
+          "name": "RetryExhaustedError",
+          "type": "class",
+          "status": "present",
+          "lineno": 22
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/util/retry.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "RetryPolicy",
+          "type": "class",
+          "status": "present",
+          "lineno": 15
+        },
+        {
+          "name": "CircuitBreaker",
+          "type": "class",
+          "status": "present",
+          "lineno": 58
+        },
+        {
+          "name": "with_retries",
+          "type": "function",
+          "status": "present",
+          "lineno": 107
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/llm/utils.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "windows_curl",
+          "type": "function",
+          "status": "present",
+          "lineno": 22
+        },
+        {
+          "name": "log_prompt",
+          "type": "function",
+          "status": "present",
+          "lineno": 36
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/llm/utils/envsafe.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "mask_bearer",
+          "type": "function",
+          "status": "present",
+          "lineno": 8
+        },
+        {
+          "name": "openrouter_headers",
+          "type": "function",
+          "status": "present",
+          "lineno": 18
+        },
+        {
+          "name": "masked_headers",
+          "type": "function",
+          "status": "present",
+          "lineno": 39
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/llm/openrouter.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "OpenRouterAuthError",
+          "type": "class",
+          "status": "present",
+          "lineno": 18
+        },
+        {
+          "name": "OpenRouterHTTPError",
+          "type": "class",
+          "status": "present",
+          "lineno": 22
+        },
+        {
+          "name": "chat",
+          "type": "function",
+          "status": "present",
+          "lineno": 26
+        }
+      ]
+    },
+    {
+      "file_path": "rag-app/backend/app/llm/clients/openrouter.py",
+      "exists": true,
+      "language": "python",
+      "declared_types": [
+        {
+          "name": "OpenRouterError",
+          "type": "class",
+          "status": "present",
+          "lineno": 25
+        },
+        {
+          "name": "OpenRouterAuthError",
+          "type": "class",
+          "status": "present",
+          "lineno": 29
+        },
+        {
+          "name": "OpenRouterHTTPError",
+          "type": "class",
+          "status": "present",
+          "lineno": 33
+        },
+        {
+          "name": "OpenRouterStreamError",
+          "type": "class",
+          "status": "present",
+          "lineno": 37
+        },
+        {
+          "name": "_backoff",
+          "type": "function",
+          "status": "present",
+          "lineno": 108
+        },
+        {
+          "name": "chat_sync",
+          "type": "function",
+          "status": "present",
+          "lineno": 124
+        },
+        {
+          "name": "chat_stream_async",
+          "type": "function",
+          "status": "present",
+          "lineno": 240
+        },
+        {
+          "name": "embed_sync",
+          "type": "function",
+          "status": "present",
+          "lineno": 323
+        }
+      ]
+    }
+  ]
+}

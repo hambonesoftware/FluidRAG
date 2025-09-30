@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import time
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -39,71 +37,47 @@ class ParseInternal(BaseModel):
     metrics: dict[str, float]
 
 
-async def _fan_out(
+def _fan_out(
     normalized: dict[str, Any],
     normalize_path: Path,
-    timeout: float,
 ) -> tuple[dict[str, Any], dict[str, float]]:
-    async def run(
-        name: str, func: Callable[..., Any], *args: Any
-    ) -> tuple[str, Any, float]:
-        start = time.perf_counter()
-        result = await asyncio.wait_for(asyncio.to_thread(func, *args), timeout=timeout)
-        return name, result, time.perf_counter() - start
+    """Run parser fan-out sequentially with timing metrics."""
 
-    tasks = {
-        "text": asyncio.create_task(run("text", extract_text_blocks, normalized)),
-        "tables": asyncio.create_task(run("tables", extract_tables, normalized)),
-        "images": asyncio.create_task(run("images", extract_images, normalized)),
-        "links": asyncio.create_task(run("links", extract_links, normalized)),
-        "language": asyncio.create_task(
-            run("language", detect_language, normalized.get("pages", []))
-        ),
-    }
-    results: dict[str, Any] = {}
     metrics: dict[str, float] = {}
-    try:
-        for task in tasks.values():
-            key, value, duration = await task
-            results[key] = value
-            metrics[key] = duration
-    except Exception:
-        for task in tasks.values():
-            task.cancel()
-        raise
 
-    text_blocks = results.get("text", [])
-    ocr_name, ocr_result, ocr_duration = await run(
-        "ocr", maybe_ocr, str(normalize_path), text_blocks
-    )
-    metrics[ocr_name] = ocr_duration
-    results[ocr_name] = ocr_result
+    def timed(name: str, func: Any, *args: Any) -> Any:
+        start = time.perf_counter()
+        value = func(*args)
+        metrics[name] = time.perf_counter() - start
+        return value
 
-    order_name, reading_order, reading_duration = await run(
+    text_blocks = timed("text", extract_text_blocks, normalized)
+    tables = timed("tables", extract_tables, normalized)
+    images = timed("images", extract_images, normalized)
+    links = timed("links", extract_links, normalized)
+    language = timed("language", detect_language, normalized.get("pages", []))
+    ocr_result = timed("ocr", maybe_ocr, str(normalize_path), text_blocks)
+    reading_order = timed(
         "reading_order",
         build_reading_order,
         text_blocks,
         ocr_result,
-        results.get("images", []),
+        images,
     )
-    metrics[order_name] = reading_duration
-    results[order_name] = reading_order
+    semantics = timed("semantics", infer_semantics, text_blocks, tables, images)
+    lists_result = timed("lists", detect_lists_bullets, text_blocks)
 
-    semantics_name, semantics, semantics_duration = await run(
-        "semantics",
-        infer_semantics,
-        text_blocks,
-        results.get("tables", []),
-        results.get("images", []),
-    )
-    metrics[semantics_name] = semantics_duration
-    results[semantics_name] = semantics
-
-    lists_name, lists_result, lists_duration = await run(
-        "lists", detect_lists_bullets, text_blocks
-    )
-    metrics[lists_name] = lists_duration
-    results[lists_name] = lists_result
+    results = {
+        "text": text_blocks,
+        "tables": tables,
+        "images": images,
+        "links": links,
+        "language": language,
+        "ocr": ocr_result,
+        "reading_order": reading_order,
+        "semantics": semantics,
+        "lists": lists_result,
+    }
     return results, metrics
 
 
@@ -126,12 +100,9 @@ def parse_and_enrich(doc_id: str, normalize_artifact: str) -> ParseInternal:
             logger=logger,
             extra={"doc_id": doc_id, "timeout": timeout},
         ) as span_meta:
-            results, metrics = asyncio.run(
-                _fan_out(
-                    normalized=normalized,
-                    normalize_path=normalize_path,
-                    timeout=timeout,
-                )
+            results, metrics = _fan_out(
+                normalized=normalized,
+                normalize_path=normalize_path,
             )
             language = results.get("language", {"code": "und"})
             enriched = merge_all(
