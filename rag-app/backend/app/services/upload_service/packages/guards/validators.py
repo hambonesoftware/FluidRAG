@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import PurePath
+from pathlib import Path, PurePath
+
+from .....config import get_settings
 
 from .....util.errors import ValidationError
 
@@ -36,3 +38,23 @@ def validate_upload_inputs(
         raise ValidationError("relative path traversal is not allowed")
     if "\n" in candidate or "\r" in candidate:
         raise ValidationError("file_name cannot contain newlines")
+
+    settings = get_settings()
+    allowed_extensions = {
+        ext if ext.startswith(".") else f".{ext}"
+        for ext in settings.upload_allowed_extensions
+    }
+
+    path = Path(candidate).expanduser()
+    if not path.exists() or not path.is_file():
+        raise ValidationError("file_name does not reference an existing file")
+    suffix = path.suffix.lower()
+    if suffix not in allowed_extensions:
+        raise ValidationError(
+            f"unsupported file extension: {suffix or '[none]'}"
+        )
+    file_size = path.stat().st_size
+    if file_size > settings.upload_max_bytes:
+        raise ValidationError(
+            f"file exceeds maximum size of {settings.upload_max_bytes} bytes"
+        )

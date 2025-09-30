@@ -21,11 +21,25 @@ class PipelineRunResult:
     results_payload: dict[str, Any]
 
 
+def _ensure_response_ok(response: httpx.Response, *, context: str) -> None:
+    """Normalize HTTPX error handling for demo requests."""
+
+    if response.status_code >= 400:
+        raise RuntimeError(f"{context} failed with status {response.status_code}")
+    try:
+        request = response.request
+    except RuntimeError:
+        request = None
+    if request is None:
+        return
+    response.raise_for_status()
+
+
 def trigger_pipeline_run(client: httpx.Client, base_url: str, file_name: str) -> str:
     """Trigger the orchestrator run endpoint and return the document id."""
 
     response = client.post(f"{base_url}/pipeline/run", json={"file_name": file_name})
-    response.raise_for_status()
+    _ensure_response_ok(response, context="pipeline run")
     payload = response.json()
     doc_id = payload.get("doc_id")
     if not isinstance(doc_id, str) or not doc_id:
@@ -53,7 +67,7 @@ def poll_pipeline_status(
             if response.status_code == 404:
                 last_error = "document not ready"
             else:
-                response.raise_for_status()
+                _ensure_response_ok(response, context="pipeline status")
                 status_payload = response.json()
                 audit = status_payload.get("pipeline_audit", {})
                 pipeline_meta = audit.get("pipeline") if isinstance(audit, dict) else None
@@ -72,7 +86,7 @@ def fetch_pipeline_results(client: httpx.Client, base_url: str, doc_id: str) -> 
     """Fetch pipeline results for the document."""
 
     response = client.get(f"{base_url}/pipeline/results/{doc_id}")
-    response.raise_for_status()
+    _ensure_response_ok(response, context="pipeline results")
     return response.json()
 
 

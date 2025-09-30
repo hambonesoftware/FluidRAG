@@ -68,6 +68,8 @@ def _prepare_normalized_doc(doc_id: str) -> NormalizedDoc:
         avg_coverage=0.6,
         block_count=4,
         ocr_performed=False,
+        source_checksum="abc123",
+        source_bytes=normalized_path.stat().st_size,
     )
 
 

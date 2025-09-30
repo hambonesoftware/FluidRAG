@@ -17,6 +17,8 @@ class NormalizedDoc(BaseModel):
     avg_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
     block_count: int = 0
     ocr_performed: bool = False
+    source_checksum: str = Field(min_length=1)
+    source_bytes: int = Field(default=0, ge=0)
 
 
 def ensure_normalized(
