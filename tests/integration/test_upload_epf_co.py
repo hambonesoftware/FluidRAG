@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from backend.app.adapters.storage import (
     StorageAdapter,
     assert_no_unmanaged_writes,
+    get_storage_guard,
     reset_storage_guard,
 )
 from backend.app.config import get_settings
@@ -121,6 +122,8 @@ def test_upload_pdf_uses_app_functions_only(
 
     managed_path = test_environment / doc_id / "source.pdf"
     assert managed_path.is_file(), f"Missing managed source PDF at {managed_path}"
+    guard_paths = {path.resolve() for path in get_storage_guard().recorded_paths()}
+    assert managed_path.resolve() in guard_paths
 
     assert_no_unmanaged_writes()
 
