@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidrag.app/schemas/gaps_report.schema.json",
+  "title": "GapsReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["doc_id", "generated_at", "schemas", "holes_filled"],
+  "properties": {
+    "doc_id": {"type": "string"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "schemas": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["numeric", "appendix", "letter_numeric"]},
+      "uniqueItems": true
+    },
+    "holes_filled": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected", "evidence", "confidence"],
+        "properties": {
+          "expected": {"type": "string"},
+          "inserted_id": {"type": "string"},
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "left": {"type": ["string", "null"]},
+              "right": {"type": ["string", "null"]},
+              "style_sim": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+              "graph_adj": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+              "page_distance": {"type": "integer", "minimum": 0}
+            }
+          },
+          "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+          "notes": {"type": "string"}
+        }
+      }
+    },
+    "unresolved_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["expected", "reason"],
+        "properties": {
+          "expected": {"type": "string"},
+          "reason": {"type": "string"},
+          "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+        }
+      }
+    }
+  }
+}

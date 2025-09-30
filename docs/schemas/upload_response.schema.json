@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidrag.app/schemas/upload_response.schema.json",
+  "title": "UploadResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["doc_id", "filename", "size_bytes", "sha256", "stored_path"],
+  "properties": {
+    "doc_id": {
+      "type": "string",
+      "description": "Server-generated document identifier (ULID prefixed with doc_).",
+      "pattern": "^doc_[0-9A-HJKMNP-TV-Z]{26}$"
+    },
+    "filename": {
+      "type": "string",
+      "description": "Sanitized filename persisted to storage.",
+      "minLength": 1,
+      "maxLength": 180
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Size of the stored file in bytes."
+    },
+    "sha256": {
+      "type": "string",
+      "description": "Hex-encoded SHA-256 checksum computed during upload.",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "stored_path": {
+      "type": "string",
+      "description": "Absolute or app-relative path to the stored file."
+    },
+    "job_id": {
+      "type": ["string", "null"],
+      "description": "Optional parser job identifier when enqueued synchronously."
+    }
+  }
+}

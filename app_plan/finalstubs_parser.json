@@ -1,0 +1,235 @@
+{
+  "module": "parser_pipeline",
+  "version": "phase2.v1",
+  "overview": "Deterministic PDF parser that extracts text with style metadata, performs UF chunking, EFHG scoring, sequence repair, and emits audit artifacts beyond RAG-Anything capabilities.",
+  "extractors": {
+    "order": ["pymupdf", "pdfplumber", "pdfminer", "ocr_tesseract"],
+    "pymupdf": {
+      "enabled": true,
+      "notes": "Primary extractor; return page-level spans with font size/weight/flags and bounding boxes.",
+      "failure_modes": ["encrypted_pdf", "unsupported_font"]
+    },
+    "pdfplumber": {
+      "enabled": true,
+      "trigger": "Fallback when PyMuPDF raises extraction errors or returns <80% page coverage.",
+      "style_capture": "Capture font size approximations and line breaks."
+    },
+    "pdfminer": {
+      "enabled": true,
+      "trigger": "Used when both PyMuPDF and pdfplumber fail; ensures text extraction for unusual encodings.",
+      "limitations": "Style fidelity is reduced; normalization must reconcile inconsistent whitespace."
+    },
+    "ocr_tesseract": {
+      "enabled": true,
+      "config_key": "parser.ocr.enabled",
+      "trigger": "Pages flagged as image-only (<5 text characters) are routed through OCR.",
+      "output_format": "hOCR parsed into spans with bounding boxes and dummy style metadata",
+      "language_config": "parser.ocr.languages"
+    }
+  },
+  "normalization": {
+    "unicode_normalization": "NFKC",
+    "ligature_map": "Apply standard replacements (ﬁ -> fi, ﬂ -> fl, …)",
+    "whitespace_policy": "Preserve intentional line breaks; collapse internal sequences greater than one space unless style tokens indicate fixed width.",
+    "style_cues": ["font_size", "font_weight", "font_name", "leading", "bbox"],
+    "tokenization": {
+      "strategy": "Deterministic whitespace tokenizer with fallback to spaCy for debugging",
+      "seed": 0
+    }
+  },
+  "chunking": {
+    "type": "UF",
+    "max_tokens": 90,
+    "overlap_tokens": 12,
+    "id_policy": {
+      "format": "{doc_id}:uf:{page}:{index}",
+      "stability": "Ids must remain stable between runs for identical inputs."
+    }
+  },
+  "efhg_scoring": {
+    "components": [
+      {
+        "name": "regex",
+        "description": "Detect numbering schemas (numeric, appendix, letter-numeric) using compiled regex families.",
+        "weight_config_key": "parser.efhg.weights.regex",
+        "default_weight": 1.0
+      },
+      {
+        "name": "style",
+        "description": "Assess font size/weight/leading contrasts vs neighborhood text.",
+        "weight_config_key": "parser.efhg.weights.style",
+        "default_weight": 1.0
+      },
+      {
+        "name": "entropy",
+        "description": "Measure entropy troughs/peaks around candidate boundaries.",
+        "weight_config_key": "parser.efhg.weights.entropy",
+        "default_weight": 0.8
+      },
+      {
+        "name": "graph",
+        "description": "Use punctuation and line-break graph to score adjacency cues.",
+        "weight_config_key": "parser.efhg.weights.graph",
+        "default_weight": 1.1
+      },
+      {
+        "name": "fluid",
+        "description": "Model-based confidence that text is header-like vs body content.",
+        "weight_config_key": "parser.efhg.weights.fluid",
+        "default_weight": 0.9
+      },
+      {
+        "name": "llm_vote",
+        "description": "Soft agreement from lightweight LLM heuristics without literal strings.",
+        "weight_config_key": "parser.efhg.weights.llm_vote",
+        "default_weight": 1.0
+      }
+    ],
+    "thresholds": {
+      "t_header": {
+        "default": 0.65,
+        "config_key": "parser.efhg.thresholds.header"
+      },
+      "t_subheader": {
+        "default": 0.5,
+        "config_key": "parser.efhg.thresholds.subheader"
+      }
+    },
+    "stitching": {
+      "adjacency_weight": {
+        "default": 0.8,
+        "config_key": "parser.efhg.stitching.adjacency_weight"
+      },
+      "entropy_join_delta": {
+        "default": 0.15,
+        "config_key": "parser.efhg.stitching.entropy_join_delta"
+      },
+      "style_cont_threshold": {
+        "default": 0.7,
+        "config_key": "parser.efhg.stitching.style_cont_threshold"
+      },
+      "notes": "Stitch multi-line headers when adjacency_weight exceeds threshold and entropy drop is within delta."
+    }
+  },
+  "sequence_repair": {
+    "schemas": {
+      "numeric": "^\\d+(\\.\\d+)*$",
+      "appendix": "^Appendix\\s+[A-Z]$",
+      "letter_numeric": "^[A-Z]\\d+(\\.\\d+)*$"
+    },
+    "gap_detection": {
+      "continuity_window": 3,
+      "local_evidence": ["style_similarity", "graph_connectivity", "page_distance"],
+      "no_literal_promotion": true
+    },
+    "tuning_keys": {
+      "hole_penalty": {
+        "default": 0.4,
+        "config_key": "parser.sequence_repair.hole_penalty"
+      },
+      "max_gap_span_pages": {
+        "default": 2,
+        "config_key": "parser.sequence_repair.max_gap_span_pages"
+      },
+      "min_schema_support": {
+        "default": 2,
+        "config_key": "parser.sequence_repair.min_schema_support"
+      }
+    }
+  },
+  "tuning": {
+    "enabled_config": "parser.tuning.enabled",
+    "method": "bounded_coordinate_search",
+    "search_space": {
+      "parser.efhg.weights.regex": [0.8, 1.6],
+      "parser.efhg.weights.style": [0.6, 1.4],
+      "parser.efhg.weights.entropy": [0.4, 1.2],
+      "parser.efhg.weights.graph": [0.6, 1.6],
+      "parser.efhg.weights.fluid": [0.4, 1.2],
+      "parser.efhg.weights.llm_vote": [0.6, 1.6],
+      "parser.efhg.thresholds.header": [0.55, 0.80],
+      "parser.efhg.thresholds.subheader": [0.45, 0.70],
+      "parser.efhg.stitching.adjacency_weight": [0.4, 1.2],
+      "parser.efhg.stitching.entropy_join_delta": [0.08, 0.22],
+      "parser.efhg.stitching.style_cont_threshold": [0.55, 0.85],
+      "parser.sequence_repair.hole_penalty": [0.2, 0.6],
+      "parser.sequence_repair.max_gap_span_pages": [1, 3],
+      "parser.sequence_repair.min_schema_support": [2, 4]
+    },
+    "artifact_path": "configs/tuned/header_detector.toml",
+    "persist_policy": "Write tuned values to configs/tuned/header_detector.toml and load on subsequent runs if newer than app defaults."
+  },
+  "artifacts": {
+    "base_dir": "storage/parser/{doc_id}",
+    "files": [
+      {
+        "name": "detected_headers.json",
+        "schema_ref": "docs/schemas/headers_tree.schema.json",
+        "description": "Ordered header tree with per-feature scores and stitch decisions."
+      },
+      {
+        "name": "gaps.json",
+        "schema_ref": "docs/schemas/gaps_report.schema.json",
+        "description": "Gap detection and repair report with confidence scores."
+      },
+      {
+        "name": "audit.html",
+        "description": "Human-readable audit pack summarizing detection and repairs."
+      },
+      {
+        "name": "audit.md",
+        "description": "Markdown audit summary for git diffs and CI logs."
+      },
+      {
+        "name": "results.junit.xml",
+        "description": "JUnit-compatible report of parser assertions."
+      },
+      {
+        "name": "configs/tuned/header_detector.toml",
+        "description": "Tuned global or project-specific header detector configuration."
+      }
+    ]
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/docs/{doc_id}",
+      "summary": "Return document metadata and current parser state.",
+      "response_schema": "docs/schemas/status_response.schema.json"
+    },
+    {
+      "method": "GET",
+      "path": "/api/docs/{doc_id}/headers",
+      "summary": "Return detected header tree, gaps, and artifact references.",
+      "response_schema": "docs/schemas/headers_tree.schema.json",
+      "includes": [
+        "gaps.json",
+        "audit artifacts"
+      ]
+    }
+  ],
+  "error_taxonomy": [
+    {
+      "category": "validation",
+      "codes": [
+        {"code": "parser.unsupported_pdf", "http_status": 422},
+        {"code": "parser.ocr_unavailable", "http_status": 503}
+      ]
+    },
+    {
+      "category": "processing",
+      "codes": [
+        {"code": "parser.extract_failed", "http_status": 500},
+        {"code": "parser.chunk_failed", "http_status": 500},
+        {"code": "parser.sequence_repair_failed", "http_status": 500}
+      ]
+    },
+    {
+      "category": "system",
+      "codes": [
+        {"code": "parser.storage_write_failed", "http_status": 500},
+        {"code": "parser.config_missing", "http_status": 500}
+      ]
+    }
+  ]
+}
