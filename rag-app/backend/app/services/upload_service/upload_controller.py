@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel
 
-from ...config import get_settings
+from ...adapters.storage import StorageAdapter
 from ...util.audit import stage_record
 from ...util.errors import AppError, NotFoundError, ValidationError
 from ...util.logging import get_logger
@@ -32,23 +31,37 @@ class NormalizedDocInternal(BaseModel):
     ocr_performed: bool
     source_checksum: str
     source_bytes: int
+    source_path: str
 
 
 def ensure_normalized(
-    file_id: str | None = None, file_name: str | None = None
+    file_id: str | None = None,
+    file_name: str | None = None,
+    *,
+    upload_bytes: bytes | None = None,
+    upload_filename: str | None = None,
 ) -> NormalizedDocInternal:
     """Controller: orchestrates validators, pdf normalize, OCR, manifest & DB."""
-    settings = get_settings()
+    storage = StorageAdapter()
     try:
-        validate_upload_inputs(file_id=file_id, file_name=file_name)
-        doc_id = make_doc_id(file_id=file_id, file_name=file_name)
-        artifact_root = Path(settings.artifact_root_path)
-        artifact_root.mkdir(parents=True, exist_ok=True)
-        doc_dir = artifact_root / doc_id
-        doc_dir.mkdir(parents=True, exist_ok=True)
+        validate_upload_inputs(
+            file_id=file_id,
+            file_name=file_name,
+            upload_bytes=upload_bytes,
+            upload_filename=upload_filename,
+        )
+        seed_filename = upload_filename or file_name
+        doc_id = make_doc_id(file_id=file_id, file_name=seed_filename)
 
-        source_bytes, source_path = _resolve_source_payload(
-            file_id=file_id, file_name=file_name
+        if upload_bytes is not None:
+            source_bytes = upload_bytes
+            original_source_path = None
+        else:
+            source_bytes, original_source_path = _resolve_source_payload(
+                file_id=file_id, file_name=file_name
+            )
+        source_storage_path = storage.save_source_pdf(
+            doc_id=doc_id, filename=seed_filename, payload=source_bytes
         )
         source_checksum = hashlib.sha256(source_bytes).hexdigest()
 
@@ -56,7 +69,7 @@ def ensure_normalized(
         normalized = normalize_pdf(
             doc_id=doc_id,
             file_id=file_id,
-            file_name=file_name,
+            file_name=seed_filename,
             source_bytes=source_bytes,
         )
         normalized = try_ocr_if_needed(normalized)
@@ -65,16 +78,15 @@ def ensure_normalized(
         )
 
         source_meta = normalized.setdefault("source", {})
-        if source_path is not None:
-            source_meta["resolved_path"] = str(source_path)
+        if original_source_path is not None:
+            source_meta["resolved_path"] = str(original_source_path)
+        source_meta["stored_path"] = str(source_storage_path)
         source_meta["checksum"] = source_checksum
         source_meta["bytes"] = len(source_bytes)
         normalized.setdefault("stats", {})["source_bytes"] = len(source_bytes)
 
-        normalized_path = doc_dir / "normalize.json"
-        normalized_path.write_text(
-            json.dumps(normalized, indent=2, ensure_ascii=False),
-            encoding="utf-8",
+        normalized_path = storage.save_json(
+            doc_id=doc_id, name="normalize.json", payload=normalized
         )
         manifest = write_manifest(
             doc_id=doc_id,
@@ -106,6 +118,7 @@ def ensure_normalized(
             ocr_performed=bool(normalized["stats"].get("ocr_performed", False)),
             source_checksum=source_checksum,
             source_bytes=len(source_bytes),
+            source_path=str(source_storage_path),
         )
     except Exception as exc:  # noqa: BLE001 - convert to domain errors
         handle_upload_errors(exc)

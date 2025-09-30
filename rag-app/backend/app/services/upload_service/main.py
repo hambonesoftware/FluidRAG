@@ -19,14 +19,22 @@ class NormalizedDoc(BaseModel):
     ocr_performed: bool = False
     source_checksum: str = Field(min_length=1)
     source_bytes: int = Field(default=0, ge=0)
+    source_path: str = Field(min_length=1)
 
 
 def ensure_normalized(
-    file_id: str | None = None, file_name: str | None = None
+    file_id: str | None = None,
+    file_name: str | None = None,
+    *,
+    upload_bytes: bytes | None = None,
+    upload_filename: str | None = None,
 ) -> NormalizedDoc:
     """Validate/normalize upload and emit normalize.json"""
     internal: NormalizedDocInternal = controller_ensure_normalized(
-        file_id=file_id, file_name=file_name
+        file_id=file_id,
+        file_name=file_name,
+        upload_bytes=upload_bytes,
+        upload_filename=upload_filename,
     )
     return NormalizedDoc(**internal.model_dump())
 

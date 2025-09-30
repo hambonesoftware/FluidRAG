@@ -3,8 +3,12 @@
 from .db import upsert_document_record
 from .llm import LLMClient, call_llm
 from .storage import (
+    StorageAdapter,
+    assert_no_unmanaged_writes,
     ensure_parent_dirs,
+    get_storage_guard,
     read_jsonl,
+    reset_storage_guard,
     stream_read,
     stream_write,
     write_json,
@@ -26,11 +30,15 @@ __all__ = [
     "hybrid_search",
     "LLMClient",
     "call_llm",
+    "StorageAdapter",
+    "assert_no_unmanaged_writes",
     "write_json",
     "write_jsonl",
     "read_jsonl",
     "stream_read",
     "stream_write",
     "ensure_parent_dirs",
+    "get_storage_guard",
+    "reset_storage_guard",
     "upsert_document_record",
 ]

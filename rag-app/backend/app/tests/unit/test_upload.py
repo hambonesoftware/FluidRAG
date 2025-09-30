@@ -27,6 +27,12 @@ def test_validate_upload_inputs_rejects_invalid() -> None:
         validate_upload_inputs(file_name="https://example.com/file.pdf")
     with pytest.raises(ValidationError):
         validate_upload_inputs(file_name="unsafe\nname.pdf")
+    with pytest.raises(ValidationError):
+        validate_upload_inputs(upload_bytes=b"", upload_filename="doc.pdf")
+    with pytest.raises(ValidationError):
+        validate_upload_inputs(
+            file_id="abc", upload_bytes=b"data", upload_filename="doc.pdf"
+        )
 
 
 def test_ensure_normalized_emits_manifest(sample_pdf_path: Path) -> None:
