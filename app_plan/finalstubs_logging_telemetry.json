@@ -1,0 +1,65 @@
+{
+  "module": "logging_telemetry",
+  "version": "phase2.v1",
+  "logging": {
+    "format": "structured_json",
+    "fields": {
+      "request_id": "propagated from upload controller into parser pipeline",
+      "doc_id": "present on every event after validation",
+      "job_id": "attached once parser job is enqueued",
+      "event": "short action string (upload.received, parser.chunking.started, parser.efhg.promote)",
+      "duration_ms": "optional timing information per stage",
+      "error_code": "populate when failures occur"
+    },
+    "levels": {
+      "upload.validation": "INFO",
+      "upload.rejection": "WARNING",
+      "parser.extract": "INFO",
+      "parser.efhg": "DEBUG",
+      "parser.sequence_repair": "DEBUG",
+      "parser.error": "ERROR"
+    },
+    "efhg_debug_payload": {
+      "enabled": true,
+      "fields": ["uf_chunk_id", "component_scores", "thresholds", "decision"],
+      "sampling": {
+        "mode": "probabilistic",
+        "rate": 1.0,
+        "config_key": "logging.efhg.debug_rate"
+      }
+    }
+  },
+  "telemetry": {
+    "metrics": {
+      "namespace": "fluidrag",
+      "counters": [
+        "upload.requests.total",
+        "upload.requests.rejected",
+        "parser.documents.completed",
+        "parser.documents.failed"
+      ],
+      "gauges": [
+        "parser.queue.depth"
+      ],
+      "histograms": [
+        "upload.duration.ms",
+        "parser.extract.duration.ms",
+        "parser.total.duration.ms"
+      ]
+    },
+    "tracing": {
+      "enabled": true,
+      "instrumentation": "OpenTelemetry FastAPI + background tasks",
+      "spans": [
+        "upload.receive",
+        "upload.save",
+        "parser.extract",
+        "parser.chunk",
+        "parser.efhg",
+        "parser.sequence_repair",
+        "parser.artifacts.write"
+      ],
+      "attributes": ["request_id", "doc_id", "job_id", "component"]
+    }
+  }
+}

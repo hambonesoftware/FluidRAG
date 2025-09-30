@@ -1,0 +1,91 @@
+{
+  "module": "upload_controller",
+  "version": "phase2.v1",
+  "overview": "Service-level orchestration that bridges the upload route with the parser job queue, manages metadata, and exposes request lifecycle IDs.",
+  "doc_id_policy": {
+    "format": "ulid",
+    "prefix": "doc_",
+    "collision_strategy": "Regenerate on collision before metadata commit.",
+    "exposure": "Returned in upload response and reused by parser + status routes."
+  },
+  "sequence": [
+    "Validate multipart payload using rules from finalstubs_upload.json.",
+    "Stream file into temp_dir while computing sha256 incrementally.",
+    "Persist index.json metadata and move file into final_dir/doc_id/filename.",
+    "Record upload event in persistence layer (postgres table uploads or equivalent).",
+    "Submit parser job with document metadata and return response payload."
+  ],
+  "parser_job_submission": {
+    "mode": "async_queue",
+    "service": "parser.jobs",
+    "call_signature": "submit_job(doc: UploadMetadata) -> JobHandle",
+    "payload_contract": {
+      "doc_id": "string",
+      "source_path": "string",
+      "sha256": "string",
+      "size_bytes": "int",
+      "doc_label": "string | null",
+      "project_id": "string | null",
+      "request_id": "string",
+      "received_at": "datetime"
+    },
+    "response_contract": {
+      "job_id": "string",
+      "status": "queued",
+      "eta": "datetime | null"
+    },
+    "retry_policy": {
+      "max_attempts": 3,
+      "backoff_seconds": [1, 5, 15],
+      "failure_event": "emit parser.job_submission_failed log with request_id + doc_id"
+    },
+    "fallback": "If queue is unavailable, mark upload as failed and return 503 with error code parser_queue_unavailable."
+  },
+  "status_and_results_flow": {
+    "status_route": "/api/docs/{doc_id}",
+    "results_route": "/api/docs/{doc_id}/headers",
+    "job_id_propagation": "Upload response includes job_id when available; otherwise clients poll using doc_id only.",
+    "state_model": [
+      "uploaded",
+      "queued",
+      "processing",
+      "completed",
+      "failed"
+    ],
+    "persistence": "Track state transitions in uploads table with updated_at timestamps and failure reasons."
+  },
+  "observability": {
+    "request_id_generation": {
+      "source": "fastapi_request.state.request_id",
+      "fallback": "uuid4",
+      "propagate_to": ["logs", "parser job payload", "index.json"]
+    },
+    "structured_log_fields": ["request_id", "doc_id", "job_id", "client_ip", "mime", "size_bytes"],
+    "metrics": {
+      "enabled": true,
+      "counters": [
+        {"name": "upload.requests.total", "description": "Total upload attempts."},
+        {"name": "upload.requests.rejected", "description": "Validation rejections."},
+        {"name": "parser.jobs.submitted", "description": "Jobs successfully enqueued."}
+      ],
+      "histograms": [
+        {"name": "upload.save.duration_ms", "description": "Time to persist upload file."},
+        {"name": "upload.total.duration_ms", "description": "End-to-end upload controller latency."}
+      ]
+    }
+  },
+  "error_mapping": [
+    {
+      "code": "parser_queue_unavailable",
+      "http_status": 503,
+      "description": "Parser job queue could not accept new work.",
+      "client_action": "Retry later"
+    },
+    {
+      "code": "parser_submission_timeout",
+      "http_status": 504,
+      "description": "Parser job submission timed out after retries.",
+      "client_action": "Check status endpoint for eventual consistency"
+    }
+  ]
+}

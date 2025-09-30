@@ -1,0 +1,80 @@
+{
+  "module": "config",
+  "version": "phase2.v1",
+  "files": [
+    {
+      "path": "configs/app.toml",
+      "sections": {
+        "upload": {
+          "max_mb": {"type": "int", "default": 100, "description": "Maximum allowed upload size in megabytes."},
+          "allowed_ext": {"type": "list[str]", "default": [".pdf"], "description": "Allowed file extensions."},
+          "allowed_mime": {"type": "list[str]", "default": ["application/pdf"], "description": "Allowed MIME types after sniffing."},
+          "storage.temp": {"type": "str", "default": "storage/uploads/tmp", "description": "Temporary upload directory."},
+          "storage.final": {"type": "str", "default": "storage/uploads/final", "description": "Final upload directory."},
+          "rate_limit.per_minute": {"type": "int", "default": 60, "description": "Requests per minute allowed per client."}
+        },
+        "parser": {
+          "ocr.enabled": {"type": "bool", "default": true, "description": "Enable OCR fallback."},
+          "ocr.languages": {"type": "list[str]", "default": ["eng"], "description": "Languages to pass to Tesseract."},
+          "tuning.enabled": {"type": "bool", "default": true, "description": "Allow bounded coordinate search for EFHG parameters."},
+          "efhg.weights.regex": {"type": "float", "default": 1.0},
+          "efhg.weights.style": {"type": "float", "default": 1.0},
+          "efhg.weights.entropy": {"type": "float", "default": 0.8},
+          "efhg.weights.graph": {"type": "float", "default": 1.1},
+          "efhg.weights.fluid": {"type": "float", "default": 0.9},
+          "efhg.weights.llm_vote": {"type": "float", "default": 1.0},
+          "efhg.thresholds.header": {"type": "float", "default": 0.65},
+          "efhg.thresholds.subheader": {"type": "float", "default": 0.5},
+          "efhg.stitching.adjacency_weight": {"type": "float", "default": 0.8},
+          "efhg.stitching.entropy_join_delta": {"type": "float", "default": 0.15},
+          "efhg.stitching.style_cont_threshold": {"type": "float", "default": 0.7},
+          "sequence_repair.hole_penalty": {"type": "float", "default": 0.4},
+          "sequence_repair.max_gap_span_pages": {"type": "int", "default": 2},
+          "sequence_repair.min_schema_support": {"type": "int", "default": 2}
+        },
+        "cors": {
+          "allowed_origins": {"type": "list[str]", "default": ["*"]},
+          "allowed_methods": {"type": "list[str]", "default": ["GET", "POST"]},
+          "allowed_headers": {"type": "list[str]", "default": ["Authorization", "Content-Type"]}
+        },
+        "logging": {
+          "level": {"type": "str", "default": "INFO"},
+          "json": {"type": "bool", "default": true}
+        }
+      }
+    }
+  ],
+  "tuned_config": {
+    "path": "configs/tuned/header_detector.toml",
+    "precedence": {
+      "order": ["configs/tuned/header_detector.toml", "configs/app.toml"],
+      "merge_strategy": "Tuned config overrides parser.* keys when timestamp is newer; fallback to app defaults otherwise."
+    },
+    "schema": {
+      "efhg": {
+        "weights": {
+          "regex": "float",
+          "style": "float",
+          "entropy": "float",
+          "graph": "float",
+          "fluid": "float",
+          "llm_vote": "float"
+        },
+        "thresholds": {
+          "header": "float",
+          "subheader": "float"
+        },
+        "stitching": {
+          "adjacency_weight": "float",
+          "entropy_join_delta": "float",
+          "style_cont_threshold": "float"
+        }
+      },
+      "sequence_repair": {
+        "hole_penalty": "float",
+        "max_gap_span_pages": "int",
+        "min_schema_support": "int"
+      }
+    }
+  }
+}

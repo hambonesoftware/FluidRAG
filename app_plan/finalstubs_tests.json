@@ -1,0 +1,51 @@
+{
+  "module": "tests",
+  "version": "phase2.v1",
+  "test_cases": [
+    {
+      "path": "tests/test_upload_validation.py",
+      "description": "Validate upload size, extension, MIME, and duplicate detection policies.",
+      "fixtures": {
+        "large_file": "Temporary file exceeding upload.max_mb by 1 byte.",
+        "bad_extension": "File named payload.exe pretending to be PDF.",
+        "bad_mime": "PDF extension but plain text content.",
+        "duplicate": "Two uploads of same file verifying checksum short-circuit."
+      },
+      "assertions": [
+        "Uploading a file larger than max_mb returns 413 and error code file_too_large.",
+        "Double-extension payload.pdf.exe is rejected with error unsupported_extension.",
+        "MIME sniff mismatch returns 415 unsupported_mime despite extension.",
+        "Duplicate upload returns 200 with duplicate_document and existing doc_id."
+      ]
+    },
+    {
+      "path": "tests/test_parser_headers.py",
+      "description": "Ensure parser promotes headers with EFHG, handles OCR fallback, and produces gaps report.",
+      "fixtures": {
+        "text_pdf": "Sample multi-level PDF with numeric and appendix headers.",
+        "image_pdf": "Image-only PDF verifying OCR branch."
+      },
+      "assertions": [
+        "Detected headers include stable ids and per-component scores.",
+        "OCR fallback populates text for image-only pages when parser.ocr.enabled is true.",
+        "gaps.json lists repaired headers with confidence in [0,1].",
+        "Sequence repair does not promote literal titles but fills numbering gaps based on schema continuity."
+      ]
+    },
+    {
+      "path": "tests/test_api_flow.py",
+      "description": "Full API regression from upload through parser results endpoints.",
+      "fixtures": {
+        "client": "FastAPI test client or httpx.AsyncClient configured against app routes.",
+        "pdf_file": "Representative PDF from sample_docs/.",
+        "mock_parser_job": "Monkeypatched parser job to return deterministic artifacts for polling."
+      },
+      "assertions": [
+        "POST /api/uploads returns 201 with schema-compliant body.",
+        "GET /api/docs/{doc_id} transitions from queued to completed when mock job finishes.",
+        "GET /api/docs/{doc_id}/headers returns headers tree referencing artifacts in storage/parser/{doc_id}.",
+        "Logs capture request_id and doc_id across upload and parser events (inspect test logger)."
+      ]
+    }
+  ]
+}

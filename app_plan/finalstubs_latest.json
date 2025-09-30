@@ -1,0 +1,130 @@
+{
+  "version": "phase2.finalstubs.v1",
+  "generated_at": "2024-06-09T00:00:00Z",
+  "description": "Aggregator for Phase 2 upload and parser finalstubs. These definitions supersede earlier drafts and will drive Phase 3 implementation.",
+  "modules": [
+    {
+      "name": "upload_service",
+      "path": "app_plan/finalstubs_upload.json",
+      "version": "phase2.v1",
+      "summary": "Route contract, validation, storage, and error handling for POST /api/uploads."
+    },
+    {
+      "name": "upload_controller",
+      "path": "app_plan/finalstubs_upload_controller.json",
+      "version": "phase2.v1",
+      "summary": "Orchestration logic linking upload persistence with parser job submission and observability."
+    },
+    {
+      "name": "parser_pipeline",
+      "path": "app_plan/finalstubs_parser.json",
+      "version": "phase2.v1",
+      "summary": "Extractor hierarchy, normalization, UF chunking, EFHG scoring, sequence repair, artifacts, and result routes."
+    },
+    {
+      "name": "config",
+      "path": "app_plan/finalstubs_config.json",
+      "version": "phase2.v1",
+      "summary": "TOML configuration keys and tuned config precedence for upload and parser subsystems."
+    },
+    {
+      "name": "logging_telemetry",
+      "path": "app_plan/finalstubs_logging_telemetry.json",
+      "version": "phase2.v1",
+      "summary": "Structured logging, metrics, and tracing expectations across upload and parser flows."
+    },
+    {
+      "name": "tests",
+      "path": "app_plan/finalstubs_tests.json",
+      "version": "phase2.v1",
+      "summary": "Acceptance tests required in Phase 3 covering validation, parser correctness, and API flows."
+    }
+  ],
+  "contracts": {
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/api/uploads",
+        "module_ref": "upload_service",
+        "response_schema": "docs/schemas/upload_response.schema.json"
+      },
+      {
+        "method": "GET",
+        "path": "/api/docs/{doc_id}",
+        "module_ref": "parser_pipeline",
+        "response_schema": "docs/schemas/status_response.schema.json"
+      },
+      {
+        "method": "GET",
+        "path": "/api/docs/{doc_id}/headers",
+        "module_ref": "parser_pipeline",
+        "response_schema": "docs/schemas/headers_tree.schema.json"
+      }
+    ],
+    "job_flow": {
+      "submission": "upload_controller -> parser.jobs.submit_job",
+      "status_source": "uploads table state model",
+      "artifacts_dir": "storage/parser/{doc_id}"
+    },
+    "config_keys": [
+      "upload.max_mb",
+      "upload.allowed_ext",
+      "upload.allowed_mime",
+      "upload.storage.temp",
+      "upload.storage.final",
+      "upload.rate_limit.per_minute",
+      "parser.ocr.enabled",
+      "parser.ocr.languages",
+      "parser.tuning.enabled",
+      "parser.efhg.weights.regex",
+      "parser.efhg.weights.style",
+      "parser.efhg.weights.entropy",
+      "parser.efhg.weights.graph",
+      "parser.efhg.weights.fluid",
+      "parser.efhg.weights.llm_vote",
+      "parser.efhg.thresholds.header",
+      "parser.efhg.thresholds.subheader",
+      "parser.efhg.stitching.adjacency_weight",
+      "parser.efhg.stitching.entropy_join_delta",
+      "parser.efhg.stitching.style_cont_threshold",
+      "parser.sequence_repair.hole_penalty",
+      "parser.sequence_repair.max_gap_span_pages",
+      "parser.sequence_repair.min_schema_support",
+      "logging.level",
+      "logging.json",
+      "logging.efhg.debug_rate",
+      "cors.allowed_origins",
+      "cors.allowed_methods",
+      "cors.allowed_headers"
+    ],
+    "artifact_schemas": [
+      {
+        "schema": "docs/schemas/upload_response.schema.json",
+        "describes": "Response payload returned by POST /api/uploads"
+      },
+      {
+        "schema": "docs/schemas/headers_tree.schema.json",
+        "describes": "detected_headers.json file and GET /api/docs/{doc_id}/headers payload"
+      },
+      {
+        "schema": "docs/schemas/gaps_report.schema.json",
+        "describes": "gaps.json artifact"
+      },
+      {
+        "schema": "docs/schemas/status_response.schema.json",
+        "describes": "GET /api/docs/{doc_id} payload"
+      }
+    ],
+    "tests": {
+      "required": [
+        "tests/test_upload_validation.py",
+        "tests/test_parser_headers.py",
+        "tests/test_api_flow.py"
+      ]
+    }
+  },
+  "compatibility": {
+    "breaking_changes": false,
+    "notes": "Routes reuse existing /api/docs patterns; POST /api/uploads replaces prior /pipeline/run upload semantics with richer validation."
+  }
+}

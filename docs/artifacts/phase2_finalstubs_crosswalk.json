@@ -1,0 +1,116 @@
+{
+  "items": [
+    {
+      "type": "route",
+      "name": "POST /api/uploads",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_upload.json",
+      "runtime_targets": ["rag-app/backend/app/api/routes/uploads.py::post_upload"],
+      "public_signature": "POST /api/uploads -> upload_response.schema.json"
+    },
+    {
+      "type": "route",
+      "name": "GET /api/docs/{doc_id}",
+      "status": "updated",
+      "plan_module": "app_plan/finalstubs_parser.json",
+      "runtime_targets": ["rag-app/backend/app/api/routes/docs.py::get_doc_status"],
+      "public_signature": "GET /api/docs/{doc_id} -> status_response.schema.json"
+    },
+    {
+      "type": "route",
+      "name": "GET /api/docs/{doc_id}/headers",
+      "status": "updated",
+      "plan_module": "app_plan/finalstubs_parser.json",
+      "runtime_targets": ["rag-app/backend/app/api/routes/docs.py::get_doc_headers"],
+      "public_signature": "GET /api/docs/{doc_id}/headers -> headers_tree.schema.json"
+    },
+    {
+      "type": "module",
+      "name": "upload_service",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_upload.json",
+      "runtime_targets": ["rag-app/backend/app/services/upload_service.py"],
+      "public_signature": "save_upload(file, doc_label=None, project_id=None) -> UploadResult"
+    },
+    {
+      "type": "module",
+      "name": "upload_controller",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_upload_controller.json",
+      "runtime_targets": ["rag-app/backend/app/controllers/upload_controller.py"],
+      "public_signature": "handle_upload(request) -> UploadResponse"
+    },
+    {
+      "type": "module",
+      "name": "parser_pipeline",
+      "status": "updated",
+      "plan_module": "app_plan/finalstubs_parser.json",
+      "runtime_targets": ["rag-app/backend/app/services/parser_pipeline.py"],
+      "public_signature": "run_parser(doc_id, source_path, sha256, metadata) -> ParserResult"
+    },
+    {
+      "type": "config",
+      "name": "configs/app.toml::upload",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_config.json",
+      "runtime_targets": ["rag-app/backend/app/config.py"],
+      "public_signature": "upload.max_mb:int, upload.allowed_ext:list[str], ..."
+    },
+    {
+      "type": "config",
+      "name": "configs/app.toml::parser",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_config.json",
+      "runtime_targets": ["rag-app/backend/app/config.py"],
+      "public_signature": "parser.efhg.weights.*, parser.sequence_repair.*"
+    },
+    {
+      "type": "config",
+      "name": "configs/tuned/header_detector.toml",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_config.json",
+      "runtime_targets": ["rag-app/backend/app/config.py", "configs/tuned/header_detector.toml"],
+      "public_signature": "Overrides parser.* keys when present"
+    },
+    {
+      "type": "logging",
+      "name": "Structured logs",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_logging_telemetry.json",
+      "runtime_targets": ["rag-app/backend/app/logging.py"],
+      "public_signature": "log(event, request_id, doc_id, job_id, **kwargs)"
+    },
+    {
+      "type": "telemetry",
+      "name": "Metrics & tracing",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_logging_telemetry.json",
+      "runtime_targets": ["rag-app/backend/app/telemetry.py"],
+      "public_signature": "record_metric(name, value, tags); start_span(name, attrs)"
+    },
+    {
+      "type": "test",
+      "name": "tests/test_upload_validation.py",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_tests.json",
+      "runtime_targets": ["tests/test_upload_validation.py"],
+      "public_signature": "pytest file validating upload guardrails"
+    },
+    {
+      "type": "test",
+      "name": "tests/test_parser_headers.py",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_tests.json",
+      "runtime_targets": ["tests/test_parser_headers.py"],
+      "public_signature": "pytest file covering parser outputs"
+    },
+    {
+      "type": "test",
+      "name": "tests/test_api_flow.py",
+      "status": "added",
+      "plan_module": "app_plan/finalstubs_tests.json",
+      "runtime_targets": ["tests/test_api_flow.py"],
+      "public_signature": "pytest file covering upload->status->headers flow"
+    }
+  ]
+}

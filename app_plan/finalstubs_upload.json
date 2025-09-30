@@ -1,0 +1,172 @@
+{
+  "module": "upload_service",
+  "version": "phase2.v1",
+  "route": {
+    "method": "POST",
+    "path": "/api/uploads",
+    "summary": "Accept a single PDF upload and stage it for parsing.",
+    "content_type": "multipart/form-data",
+    "form_fields": {
+      "file": {
+        "type": "FileStorage",
+        "required": true,
+        "description": "Binary PDF payload submitted by the user interface or client."
+      },
+      "doc_label": {
+        "type": "string",
+        "required": false,
+        "max_length": 200,
+        "description": "Optional human-readable label retained with document metadata."
+      },
+      "project_id": {
+        "type": "string",
+        "required": false,
+        "description": "Optional grouping token for downstream project-specific routing."
+      }
+    }
+  },
+  "validation": {
+    "max_mb": {
+      "config_key": "upload.max_mb",
+      "default": 100,
+      "behavior": "Reject files whose size in mebibytes exceeds the configured limit before persisting to disk.",
+      "failure_error": "file_too_large"
+    },
+    "allowed_ext": {
+      "config_key": "upload.allowed_ext",
+      "default": [".pdf"],
+      "behavior": "Require file extensions to case-insensitively match the allow list; strip leading dots before comparison.",
+      "double_extension_guard": true,
+      "failure_error": "unsupported_extension"
+    },
+    "allowed_mime": {
+      "config_key": "upload.allowed_mime",
+      "default": ["application/pdf"],
+      "behavior": "Perform MIME sniffing on the buffered payload and reject mismatches.",
+      "failure_error": "unsupported_mime"
+    },
+    "mime_sniffing": {
+      "implementation": "Use python-magic (or equivalent libmagic binding) to detect the actual content type, falling back to PyPDF detection if magic is unavailable.",
+      "trust_boundary": "Form-submitted MIME types are ignored in favor of server-side detection.",
+      "failure_error": "mime_detection_failed"
+    },
+    "checksum": {
+      "algorithm": "sha256",
+      "hexdigest": true,
+      "normalize_before_hash": false,
+      "failure_error": "checksum_failed"
+    },
+    "duplicate_policy": {
+      "strategy": "checksum+size",
+      "action": "If an identical checksum+size pair already exists, short-circuit storage and return the canonical doc_id while updating metadata timestamps.",
+      "collision_resolution": "If checksum collision occurs with differing sizes, reject upload with conflict error."
+    }
+  },
+  "storage": {
+    "temp_dir": {
+      "config_key": "upload.storage.temp",
+      "default": "storage/uploads/tmp",
+      "behavior": "Write streamed chunks to a temp directory with per-request staging folders before validation completes."
+    },
+    "final_dir": {
+      "config_key": "upload.storage.final",
+      "default": "storage/uploads/final",
+      "behavior": "Move validated payloads into a deterministic directory keyed by doc_id."
+    },
+    "safe_filename_policy": {
+      "strategy": "Slugify filename base, preserve original extension, and collapse whitespace/unsafe characters into hyphens.",
+      "max_length": 180,
+      "unicode_normalization": "NFKC"
+    },
+    "staging_index": {
+      "path_template": "{final_dir}/{doc_id}/index.json",
+      "schema": {
+        "doc_id": "string",
+        "filename_original": "string",
+        "filename_stored": "string",
+        "size_bytes": "int",
+        "sha256": "string",
+        "doc_label": "string | null",
+        "project_id": "string | null",
+        "uploaded_at": "datetime",
+        "storage_path": "string"
+      }
+    }
+  },
+  "response": {
+    "status_code": 201,
+    "schema_ref": "docs/schemas/upload_response.schema.json",
+    "example": {
+      "doc_id": "d-20240601-abcdef",
+      "filename": "specification.pdf",
+      "size_bytes": 1048576,
+      "sha256": "d2a4d...",
+      "stored_path": "storage/uploads/final/d-20240601-abcdef/specification.pdf"
+    }
+  },
+  "security": {
+    "cors_policy_ref": "configs/app.toml::cors",
+    "auth": {
+      "mode": "optional",
+      "header": "Authorization",
+      "scheme": "Bearer",
+      "behavior": "If auth is enabled globally, require a valid bearer token; otherwise allow anonymous uploads for development."
+    },
+    "rate_limit": {
+      "enabled": true,
+      "config_key": "upload.rate_limit.per_minute",
+      "default": 60,
+      "notes": "Hook in FastAPI dependency for rate limiting; respond with 429 on exceedance."
+    }
+  },
+  "errors": [
+    {
+      "code": "file_too_large",
+      "http_status": 413,
+      "message": "Uploaded file exceeds maximum size.",
+      "log_level": "warning"
+    },
+    {
+      "code": "unsupported_extension",
+      "http_status": 400,
+      "message": "File extension is not allowed.",
+      "log_level": "info"
+    },
+    {
+      "code": "unsupported_mime",
+      "http_status": 415,
+      "message": "File MIME type is not supported.",
+      "log_level": "info"
+    },
+    {
+      "code": "mime_detection_failed",
+      "http_status": 500,
+      "message": "Server could not determine file MIME type.",
+      "log_level": "error"
+    },
+    {
+      "code": "checksum_failed",
+      "http_status": 500,
+      "message": "Failed to compute checksum for uploaded file.",
+      "log_level": "error"
+    },
+    {
+      "code": "duplicate_document",
+      "http_status": 200,
+      "message": "Document already uploaded; returning canonical reference.",
+      "log_level": "info"
+    },
+    {
+      "code": "checksum_collision",
+      "http_status": 409,
+      "message": "Checksum collision detected with mismatched metadata.",
+      "log_level": "warning"
+    },
+    {
+      "code": "storage_failure",
+      "http_status": 500,
+      "message": "Server failed to persist uploaded file.",
+      "log_level": "error"
+    }
+  ]
+}

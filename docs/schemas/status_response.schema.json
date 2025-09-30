@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluidrag.app/schemas/status_response.schema.json",
+  "title": "DocumentStatus",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "doc_id",
+    "status",
+    "uploaded_at",
+    "updated_at"
+  ],
+  "properties": {
+    "doc_id": {"type": "string"},
+    "filename": {"type": "string"},
+    "doc_label": {"type": ["string", "null"]},
+    "project_id": {"type": ["string", "null"]},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "status": {
+      "type": "string",
+      "enum": ["uploaded", "queued", "processing", "completed", "failed"]
+    },
+    "job_id": {"type": ["string", "null"]},
+    "uploaded_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "base_dir": {"type": "string"},
+        "detected_headers": {"type": "string"},
+        "gaps": {"type": "string"},
+        "audit_html": {"type": "string"},
+        "audit_md": {"type": "string"},
+        "results_junit": {"type": "string"}
+      }
+    },
+    "error": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"}
+      }
+    }
+  }
+}
