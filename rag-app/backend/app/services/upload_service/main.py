@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from backend.app.util.logging import get_logger
 
-from .upload_controller import NormalizedDocInternal
-from .upload_controller import ensure_normalized as controller_ensure_normalized
+from .upload_controller import (
+    NormalizedDocInternal,
+    UploadResponseModel,
+    ensure_normalized as controller_ensure_normalized,
+    get_headers as controller_get_headers,
+    get_status as controller_get_status,
+    process_upload as controller_process_upload,
+)
 
 
 logger = get_logger(__name__)
@@ -62,4 +70,83 @@ def ensure_normalized(
     return result
 
 
-__all__ = ["NormalizedDoc", "ensure_normalized"]
+class UploadResponse(BaseModel):
+    """API response model for direct uploads."""
+
+    doc_id: str
+    filename: str
+    size_bytes: int
+    sha256: str
+    stored_path: str
+    job_id: str | None = None
+    duplicate: bool = Field(default=False, exclude=True)
+
+
+def handle_upload(
+    *,
+    stream,
+    filename: str,
+    doc_label: str | None,
+    project_id: str | None,
+    request_id: str | None,
+    client_ip: str | None,
+) -> UploadResponse:
+    """Delegate direct upload processing to controller."""
+
+    logger.info(
+        "service.upload.handle_upload",
+        extra={
+            "filename": filename,
+            "doc_label": doc_label,
+            "project_id": project_id,
+            "request_id": request_id,
+        },
+    )
+    response_model, duplicate = controller_process_upload(
+        stream=stream,
+        filename=filename,
+        doc_label=doc_label,
+        project_id=project_id,
+        request_id=request_id,
+        client_ip=client_ip,
+    )
+    response: UploadResponseModel = response_model
+    result = UploadResponse(**response.model_dump(), duplicate=duplicate)
+    logger.info(
+        "service.upload.handle_upload.success",
+        extra={
+            "doc_id": result.doc_id,
+            "filename": result.filename,
+            "size_bytes": result.size_bytes,
+            "sha256": result.sha256,
+            "job_id": result.job_id,
+            "duplicate": duplicate,
+        },
+    )
+    return result
+
+
+def get_document_status(doc_id: str) -> dict[str, Any]:
+    """Return serialized document status payload."""
+
+    record = controller_get_status(doc_id)
+    payload = record.model_dump()
+    payload["uploaded_at"] = record.uploaded_at.isoformat()
+    payload["updated_at"] = record.updated_at.isoformat()
+    return payload
+
+
+def get_document_headers(doc_id: str) -> dict[str, Any]:
+    """Return headers tree artifact."""
+
+    return controller_get_headers(doc_id)
+
+
+__all__ = [
+    "NormalizedDoc",
+    "ensure_normalized",
+    "UploadResponse",
+    "handle_upload",
+    "get_document_status",
+    "get_document_headers",
+]
