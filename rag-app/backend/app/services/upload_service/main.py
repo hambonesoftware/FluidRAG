@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 from backend.app.util.logging import get_logger
@@ -130,9 +132,35 @@ def get_document_status(doc_id: str) -> dict[str, Any]:
     """Return serialized document status payload."""
 
     record = controller_get_status(doc_id)
-    payload = record.model_dump()
-    payload["uploaded_at"] = record.uploaded_at.isoformat()
-    payload["updated_at"] = record.updated_at.isoformat()
+    artifacts_allowed = {
+        "base_dir",
+        "detected_headers",
+        "gaps",
+        "audit_html",
+        "audit_md",
+        "results_junit",
+        "tuned_config",
+    }
+    artifacts = {
+        key: value
+        for key, value in (record.artifacts or {}).items()
+        if key in artifacts_allowed and value
+    }
+    payload: dict[str, Any] = {
+        "doc_id": record.doc_id,
+        "filename": record.filename_stored,
+        "doc_label": record.doc_label,
+        "project_id": record.project_id,
+        "size_bytes": record.size_bytes,
+        "sha256": record.sha256,
+        "status": record.status,
+        "job_id": record.job_id,
+        "uploaded_at": record.uploaded_at.isoformat(),
+        "updated_at": record.updated_at.isoformat(),
+    }
+    if artifacts:
+        payload["artifacts"] = artifacts
+    payload["error"] = record.error if record.error else None
     return payload
 
 

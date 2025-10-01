@@ -1,18 +1,21 @@
 [parser.efhg.weights]
-regex = 1.0
-style = 1.0
-entropy = 0.8
-graph = 1.1
-fluid = 0.9
-llm_vote = 1.0
+regex = 1.000
+style = 1.000
+entropy = 0.800
+graph = 1.100
+fluid = 0.900
+llm_vote = 1.000
+
 [parser.efhg.thresholds]
-header = 0.65
-subheader = 0.5
+header = 0.650
+subheader = 0.500
+
 [parser.efhg.stitching]
-adjacency_weight = 0.8
-entropy_join_delta = 0.15
-style_cont_threshold = 0.7
+adjacency_weight = 0.800
+entropy_join_delta = 0.150
+style_cont_threshold = 0.700
+
 [parser.sequence_repair]
-hole_penalty = 0.4
+hole_penalty = 0.400
 max_gap_span_pages = 2
 min_schema_support = 2

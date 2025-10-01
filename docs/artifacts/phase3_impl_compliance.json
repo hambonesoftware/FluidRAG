@@ -1,0 +1,41 @@
+[
+  {
+    "module": "parser_pipeline.artifacts",
+    "plan_ref": "app_plan/finalstubs_parser.json#artifacts",
+    "present": true,
+    "implemented": true,
+    "fixed_this_run": true,
+    "notes": {
+      "paths": [
+        "storage/parser/{doc_id}/detected_headers.json",
+        "storage/parser/{doc_id}/gaps.json",
+        "storage/parser/{doc_id}/audit.html",
+        "storage/parser/{doc_id}/audit.md",
+        "storage/parser/{doc_id}/results.junit.xml",
+        "storage/parser/{doc_id}/tuned.header_detector.toml"
+      ]
+    }
+  },
+  {
+    "module": "parser_pipeline.sequence_repair",
+    "plan_ref": "app_plan/finalstubs_parser.json#sequence_repair",
+    "present": true,
+    "implemented": true,
+    "fixed_this_run": true,
+    "notes": {
+      "gaps_report_schema": "docs/schemas/gaps_report.schema.json",
+      "generation": "_build_gap_report now emits doc_id, generated_at, schemas, holes_filled, unresolved_gaps"
+    }
+  },
+  {
+    "module": "parser_routes.status_headers",
+    "plan_ref": "app_plan/finalstubs_parser.json#routes",
+    "present": true,
+    "implemented": true,
+    "fixed_this_run": true,
+    "notes": {
+      "status_schema": "docs/schemas/status_response.schema.json",
+      "headers_schema": "docs/schemas/headers_tree.schema.json"
+    }
+  }
+]

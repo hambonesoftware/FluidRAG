@@ -33,7 +33,8 @@
         "gaps": {"type": "string"},
         "audit_html": {"type": "string"},
         "audit_md": {"type": "string"},
-        "results_junit": {"type": "string"}
+        "results_junit": {"type": "string"},
+        "tuned_config": {"type": "string"}
       }
     },
     "error": {
