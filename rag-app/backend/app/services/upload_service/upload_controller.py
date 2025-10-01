@@ -247,12 +247,13 @@ class ParserJobResult:
     """Artifacts produced by the synchronous parser pipeline."""
 
     headers_tree: dict[str, Any]
-    headers_path: Path
+    detected_headers_path: Path
     gaps_path: Path
     audit_html_path: Path
     audit_md_path: Path
     junit_path: Path
     job_id: str
+    base_dir: Path
     tuned_path: Path | None = None
 
 
@@ -283,6 +284,15 @@ def _flatten_app_path(path_str: str) -> Path:
         path = (base / path).resolve()
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _parser_storage_dir(doc_id: str) -> Path:
+    """Return the storage directory for parser artifacts."""
+
+    root = _flatten_app_path("storage/parser")
+    target = root / doc_id
+    target.mkdir(parents=True, exist_ok=True)
+    return target
 
 
 def _detect_mime(path: Path) -> str:
@@ -497,14 +507,21 @@ def _build_header_nodes(
     return nodes, gaps_debug
 
 
-def _build_gap_report(gaps_debug: list[dict[str, Any]]) -> dict[str, Any]:
-    holes: list[dict[str, Any]] = []
+def _build_gap_report(
+    doc_id: str, generated_at: str, gaps_debug: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Return a gaps report that matches the plan schema."""
+
+    schemas_seen: set[str] = set()
+    holes_filled: list[dict[str, Any]] = []
     headers_in_order = [payload["header"] for payload in gaps_debug]
     for index, payload in enumerate(gaps_debug):
-        header = payload["header"]
+        header = payload.get("header")
         if not isinstance(header, dict) or not header.get("recovered"):
             continue
         schema = payload.get("schema") or "numeric"
+        if schema in {"numeric", "appendix", "letter_numeric"}:
+            schemas_seen.add(schema)
         left = headers_in_order[index - 1]["text"] if index > 0 else None
         right = (
             headers_in_order[index + 1]["text"]
@@ -515,25 +532,32 @@ def _build_gap_report(gaps_debug: list[dict[str, Any]]) -> dict[str, Any]:
         page_start = int(metadata.get("page_start", metadata.get("page", 1)) or 1)
         page_end = int(metadata.get("page_end", page_start) or page_start)
         evidence: dict[str, Any] = {
-            "style_sim": round(0.7 + 0.05 * min(len(header.get("chunk_ids", [])), 4), 2),
+            "style_sim": round(
+                0.7 + 0.05 * min(len(header.get("chunk_ids", [])), 4), 2
+            ),
             "graph_adj": round(0.7 + (0.1 if schema != "numeric" else 0.0), 2),
+            "page_distance": max(0, abs(page_end - page_start)),
         }
-        if left:
-            evidence["left"] = left
-        if right:
-            evidence["right"] = right
-        holes.append(
-            {
-                "expected": header.get("text", ""),
-                "evidence": evidence,
-                "confidence": round(min(0.99, payload["scores"]["total"] / 2), 2),
-                "pages_spanned": max(0, page_end - page_start),
-            }
-        )
+        evidence["left"] = left
+        evidence["right"] = right
+        hole_payload: dict[str, Any] = {
+            "expected": header.get("text", ""),
+            "evidence": evidence,
+            "confidence": round(
+                min(0.99, float(payload["scores"]["total"]) / 2.0), 2
+            ),
+        }
+        node_id = header.get("id")
+        if node_id:
+            hole_payload["inserted_id"] = str(node_id)
+        holes_filled.append(hole_payload)
+
     return {
-        "schemas": ["numeric", "appendix", "letter_numeric"],
-        "holes_filled": holes,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "doc_id": doc_id,
+        "generated_at": generated_at,
+        "schemas": sorted(schemas_seen) or ["numeric"],
+        "holes_filled": holes_filled,
+        "unresolved_gaps": [],
     }
 
 
@@ -615,7 +639,7 @@ def _write_tuned_config(settings) -> Path | None:
     tuned_path = tuned_dir / "header_detector.toml"
     content = textwrap.dedent(
         f"""
-        [efhg.weights]
+        [parser.efhg.weights]
         regex = {settings.parser_efhg_weights_regex:.3f}
         style = {settings.parser_efhg_weights_style:.3f}
         entropy = {settings.parser_efhg_weights_entropy:.3f}
@@ -623,16 +647,16 @@ def _write_tuned_config(settings) -> Path | None:
         fluid = {settings.parser_efhg_weights_fluid:.3f}
         llm_vote = {settings.parser_efhg_weights_llm_vote:.3f}
 
-        [efhg.thresholds]
+        [parser.efhg.thresholds]
         header = {settings.parser_efhg_thresholds_header:.3f}
         subheader = {settings.parser_efhg_thresholds_subheader:.3f}
 
-        [efhg.stitching]
+        [parser.efhg.stitching]
         adjacency_weight = {settings.parser_efhg_stitching_adjacency_weight:.3f}
         entropy_join_delta = {settings.parser_efhg_stitching_entropy_join_delta:.3f}
         style_cont_threshold = {settings.parser_efhg_stitching_style_cont_threshold:.3f}
 
-        [sequence_repair]
+        [parser.sequence_repair]
         hole_penalty = {settings.parser_sequence_repair_hole_penalty:.3f}
         max_gap_span_pages = {settings.parser_sequence_repair_max_gap_span_pages}
         min_schema_support = {settings.parser_sequence_repair_min_schema_support}
@@ -731,8 +755,7 @@ def _run_parser_pipeline(
     project_id: str | None,
 ) -> ParserJobResult:
     settings = get_settings()
-    parser_dir = doc_dir / "parser"
-    parser_dir.mkdir(parents=True, exist_ok=True)
+    parser_dir = _parser_storage_dir(doc_id)
     pipeline_start = time.perf_counter()
     logger.info(
         "upload.parser_pipeline.start",
@@ -802,10 +825,10 @@ def _run_parser_pipeline(
         headers_payload,
         settings=settings,
     )
-    gaps_report = _build_gap_report(gaps_debug)
     now = datetime.now(timezone.utc).isoformat()
+    gaps_report = _build_gap_report(doc_id, now, gaps_debug)
 
-    headers_path = parser_dir / "headers.json"
+    detected_headers_path = parser_dir / "detected_headers.json"
     gaps_path = parser_dir / "gaps.json"
     audit_html_path = parser_dir / "audit.html"
     audit_md_path = parser_dir / "audit.md"
@@ -855,16 +878,17 @@ def _run_parser_pipeline(
         },
     )
 
-    _write_json(headers_path, headers_tree)
+    _write_json(detected_headers_path, headers_tree)
 
     return ParserJobResult(
         headers_tree=headers_tree,
-        headers_path=headers_path,
+        detected_headers_path=detected_headers_path,
         gaps_path=gaps_path,
         audit_html_path=audit_html_path,
         audit_md_path=audit_md_path,
         junit_path=junit_path,
         job_id=job_id,
+        base_dir=parser_dir,
         tuned_path=tuned_local_path,
     )
 
@@ -1028,8 +1052,8 @@ def process_upload(
         )
         span_meta["job_id"] = parser_result.job_id
         artifacts = {
-            "base_dir": str(doc_dir / "parser"),
-            "detected_headers": str(parser_result.headers_path),
+            "base_dir": str(parser_result.base_dir),
+            "detected_headers": str(parser_result.detected_headers_path),
             "gaps": str(parser_result.gaps_path),
             "audit_html": str(parser_result.audit_html_path),
             "audit_md": str(parser_result.audit_md_path),
