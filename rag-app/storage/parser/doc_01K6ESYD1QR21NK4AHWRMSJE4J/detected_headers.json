@@ -1,0 +1,1040 @@
+{
+  "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+  "generated_at": "2025-10-01T02:34:40.892896+00:00",
+  "source_sha256": "3fc4bc96df188d6e7412e56eb8a4e3b1c4196eab5a30850952ec9a52f83b14e5",
+  "tuning_profile": "header_detector.toml",
+  "nodes": [
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:1",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "0) Purpose",
+      "text_norm": "0) purpose",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.714,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.541
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:2",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "2) System",
+      "text_norm": "2) system",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.725,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.552
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:3",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Section 6",
+      "text_norm": "section 6",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 0.45,
+        "style": 0.714,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 3.991
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:4",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "3) Performance",
+      "text_norm": "3) performance",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.691,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.518
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:5",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Section 18",
+      "text_norm": "section 18",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 0.45,
+        "style": 0.714,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 3.991
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:6",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "4) Materials",
+      "text_norm": "4) materials",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.7,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.527
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:7",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "5) Mechanical",
+      "text_norm": "5) mechanical",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.695,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.522
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:8",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "6) Robotics,",
+      "text_norm": "6) robotics,",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:9",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "7) Controls,",
+      "text_norm": "7) controls,",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:10",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "1) plant",
+      "text_norm": "1) plant",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.65,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.477
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:11",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "8) Software",
+      "text_norm": "8) software",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:12",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "9) Documentation",
+      "text_norm": "9) documentation",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.685,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.512
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:13",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "79) and",
+      "text_norm": "79) and",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.65,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.477
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:14",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "10) Compliance",
+      "text_norm": "10) compliance",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.695,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.522
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:15",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Section 9",
+      "text_norm": "section 9",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 0.45,
+        "style": 0.714,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 3.991
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:16",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "12) Training",
+      "text_norm": "12) training",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:17",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "13) Warranty",
+      "text_norm": "13) warranty",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:18",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "14) Project",
+      "text_norm": "14) project",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.714,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.541
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:19",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "15) Commercial",
+      "text_norm": "15) commercial",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.695,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.522
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:20",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "16) Proposal",
+      "text_norm": "16) proposal",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:21",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Appendix A-D in",
+      "text_norm": "appendix a-d in",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.763,
+        "entropy": 0.78,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.85,
+        "total": 4.783
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:22",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "17) Evaluation",
+      "text_norm": "17) evaluation",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.695,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.522
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:23",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "19) Vendor",
+      "text_norm": "19) vendor",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.725,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.552
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:24",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "20) Exceptions",
+      "text_norm": "20) exceptions",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.695,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.522
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:25",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "21) Appendices",
+      "text_norm": "21) appendices",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.695,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.522
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:26",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Appendix A",
+      "text_norm": "appendix a",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.75,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.85,
+        "total": 4.777
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:27",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A1. Robot",
+      "text_norm": "a1. robot",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.8,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.847
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:28",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A2. Vision/Sensing",
+      "text_norm": "a2. vision/sensing",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.746,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.793
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:29",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A3. Conveyors",
+      "text_norm": "a3. conveyors",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.74,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.787
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:30",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A4. Controls",
+      "text_norm": "a4. controls",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.75,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.797
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:31",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A5. Utilities",
+      "text_norm": "a5. utilities",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.74,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.787
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:32",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A6. Performance",
+      "text_norm": "a6. performance",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.725,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.772
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:33",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A7. Layout",
+      "text_norm": "a7. layout",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.779,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.826
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:34",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "A8. Options",
+      "text_norm": "a8. options",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.763,
+        "entropy": 0.787,
+        "graph": 0.935,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.81
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:35",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Appendix B",
+      "text_norm": "appendix b",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.75,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.85,
+        "total": 4.777
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:36",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Appendix C",
+      "text_norm": "appendix c",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.75,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.85,
+        "total": 4.777
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:37",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Appendix D",
+      "text_norm": "appendix d",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.75,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.85,
+        "total": 4.777
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:38",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "Section Requirement Compliant",
+      "text_norm": "section requirement compliant",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 0.45,
+        "style": 0.7,
+        "entropy": 0.78,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 3.97
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:39",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "22) Proposal",
+      "text_norm": "22) proposal",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.706,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.533
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:40",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "60) days",
+      "text_norm": "60) days",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.65,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.477
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    },
+    {
+      "id": "header:doc_01K6ESYD1QR21NK4AHWRMSJE4J:41",
+      "parent_id": null,
+      "level": 1,
+      "text_raw": "23) Right",
+      "text_norm": "23) right",
+      "page_range": {
+        "start": 1,
+        "end": 1
+      },
+      "spans": [],
+      "scores": {
+        "regex": 1.0,
+        "style": 0.74,
+        "entropy": 0.787,
+        "graph": 0.715,
+        "fluid": 0.675,
+        "llm_vote": 0.65,
+        "total": 4.567
+      },
+      "decision": "promote.header",
+      "stitch": {
+        "joined": false
+      }
+    }
+  ],
+  "artifacts": {
+    "gaps_path": "/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/gaps.json",
+    "audit_html": "/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/audit.html",
+    "audit_md": "/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/audit.md",
+    "results_junit": "/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/results.junit.xml",
+    "tuned_config": "/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/tuned.header_detector.toml"
+  }
+}

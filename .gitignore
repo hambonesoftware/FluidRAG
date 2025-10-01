@@ -16,3 +16,7 @@ node_modules/
 *.log
 .coverage
 .pytest_cache/
+
+# Binary artifacts (avoid committing generated PDFs/zips)
+*.pdf
+*.zip

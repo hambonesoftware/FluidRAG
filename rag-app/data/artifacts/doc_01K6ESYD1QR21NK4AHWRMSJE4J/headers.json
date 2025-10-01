@@ -1,0 +1,617 @@
+[
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h1",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "0) Purpose",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 0,
+    "section_key": "0",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c1"
+    ],
+    "sentence_start": 5,
+    "sentence_end": 5
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h2",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "2) System",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 2,
+    "section_key": "2",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c4"
+    ],
+    "sentence_start": 18,
+    "sentence_end": 18
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h3",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Section 6",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": 6,
+    "section_key": "Section 6",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c4"
+    ],
+    "sentence_start": 19,
+    "sentence_end": 19
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h4",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "3) Performance",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 3,
+    "section_key": "3",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c5"
+    ],
+    "sentence_start": 27,
+    "sentence_end": 27
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h5",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Section 18",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": 18,
+    "section_key": "Section 18",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c5"
+    ],
+    "sentence_start": 30,
+    "sentence_end": 30
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h6",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "4) Materials",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 4,
+    "section_key": "4",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c6"
+    ],
+    "sentence_start": 35,
+    "sentence_end": 35
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h7",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "5) Mechanical",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 5,
+    "section_key": "5",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c8"
+    ],
+    "sentence_start": 43,
+    "sentence_end": 43
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h8",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "6) Robotics,",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 6,
+    "section_key": "6",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c9"
+    ],
+    "sentence_start": 50,
+    "sentence_end": 50
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h9",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "7) Controls,",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 7,
+    "section_key": "7",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c10"
+    ],
+    "sentence_start": 63,
+    "sentence_end": 63
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h10",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "1) plant",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 1,
+    "section_key": "1",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c11"
+    ],
+    "sentence_start": 69,
+    "sentence_end": 69
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h11",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "8) Software",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 8,
+    "section_key": "8",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c12"
+    ],
+    "sentence_start": 75,
+    "sentence_end": 75
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h12",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "9) Documentation",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 9,
+    "section_key": "9",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c12"
+    ],
+    "sentence_start": 76,
+    "sentence_end": 76
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h13",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "79) and",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 79,
+    "section_key": "79",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c12"
+    ],
+    "sentence_start": 77,
+    "sentence_end": 77
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h14",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "10) Compliance",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 10,
+    "section_key": "10",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c13"
+    ],
+    "sentence_start": 85,
+    "sentence_end": 85
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h15",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Section 9",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": 9,
+    "section_key": "Section 9",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c15"
+    ],
+    "sentence_start": 119,
+    "sentence_end": 119
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h16",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "12) Training",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 12,
+    "section_key": "12",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c15"
+    ],
+    "sentence_start": 121,
+    "sentence_end": 121
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h17",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "13) Warranty",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 13,
+    "section_key": "13",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c16"
+    ],
+    "sentence_start": 128,
+    "sentence_end": 128
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h18",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "14) Project",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 14,
+    "section_key": "14",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c17"
+    ],
+    "sentence_start": 142,
+    "sentence_end": 142
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h19",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "15) Commercial",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 15,
+    "section_key": "15",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c17"
+    ],
+    "sentence_start": 145,
+    "sentence_end": 145
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h20",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "16) Proposal",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 16,
+    "section_key": "16",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c18"
+    ],
+    "sentence_start": 151,
+    "sentence_end": 151
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h21",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Appendix A-D in",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "Appendix A-D",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c19"
+    ],
+    "sentence_start": 158,
+    "sentence_end": 158
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h22",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "17) Evaluation",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 17,
+    "section_key": "17",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c19"
+    ],
+    "sentence_start": 160,
+    "sentence_end": 160
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h23",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "19) Vendor",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 19,
+    "section_key": "19",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c20"
+    ],
+    "sentence_start": 178,
+    "sentence_end": 178
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h24",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "20) Exceptions",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 20,
+    "section_key": "20",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c21"
+    ],
+    "sentence_start": 184,
+    "sentence_end": 184
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h25",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "21) Appendices",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 21,
+    "section_key": "21",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c21"
+    ],
+    "sentence_start": 185,
+    "sentence_end": 185
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h26",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Appendix A",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "Appendix A",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c22"
+    ],
+    "sentence_start": 190,
+    "sentence_end": 190
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h27",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A1. Robot",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A1-ROBOT",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c23"
+    ],
+    "sentence_start": 191,
+    "sentence_end": 191
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h28",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A2. Vision/Sensing",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A2-VISION-SENSING",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c25"
+    ],
+    "sentence_start": 193,
+    "sentence_end": 193
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h29",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A3. Conveyors",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A3-CONVEYORS",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c27"
+    ],
+    "sentence_start": 200,
+    "sentence_end": 200
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h30",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A4. Controls",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A4-CONTROLS",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c29"
+    ],
+    "sentence_start": 202,
+    "sentence_end": 202
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h31",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A5. Utilities",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A5-UTILITIES",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c31"
+    ],
+    "sentence_start": 204,
+    "sentence_end": 204
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h32",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A6. Performance",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A6-PERFORMANCE",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c33"
+    ],
+    "sentence_start": 206,
+    "sentence_end": 206
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h33",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A7. Layout",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A7-LAYOUT",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c35"
+    ],
+    "sentence_start": 209,
+    "sentence_end": 209
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h34",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "A8. Options",
+    "level": 1,
+    "score": 0.8,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "A8-OPTIONS",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c37"
+    ],
+    "sentence_start": 211,
+    "sentence_end": 211
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h35",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Appendix B",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "Appendix B",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c37"
+    ],
+    "sentence_start": 212,
+    "sentence_end": 212
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h36",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Appendix C",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "Appendix C",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c38"
+    ],
+    "sentence_start": 225,
+    "sentence_end": 225
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h37",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Appendix D",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "Appendix D",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c39"
+    ],
+    "sentence_start": 234,
+    "sentence_end": 234
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h38",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "Section Requirement Compliant",
+    "level": 1,
+    "score": 0.95,
+    "recovered": false,
+    "ordinal": null,
+    "section_key": "Section REQUIREMENT",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c39"
+    ],
+    "sentence_start": 238,
+    "sentence_end": 238
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h39",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "22) Proposal",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 22,
+    "section_key": "22",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c40"
+    ],
+    "sentence_start": 249,
+    "sentence_end": 249
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h40",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "60) days",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 60,
+    "section_key": "60",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c40"
+    ],
+    "sentence_start": 250,
+    "sentence_end": 250
+  },
+  {
+    "header_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J:h41",
+    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
+    "text": "23) Right",
+    "level": 1,
+    "score": 0.77,
+    "recovered": false,
+    "ordinal": 23,
+    "section_key": "23",
+    "chunk_ids": [
+      "doc_01K6ESYD1QR21NK4AHWRMSJE4J:c40"
+    ],
+    "sentence_start": 251,
+    "sentence_end": 251
+  }
+]
