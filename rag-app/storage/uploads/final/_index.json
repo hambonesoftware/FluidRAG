@@ -4,5 +4,11 @@
     "size_bytes": 8039,
     "stored_path": "/workspace/FluidRAG/rag-app/storage/uploads/final/doc_01K6GRMA79RKV1PGANHCS6BGNH/Epf-Co.pdf",
     "filename": "Epf-Co.pdf"
+  },
+  "20aab150a3e3a4842d8788e5721e122529927c70d6103c5d2530c4288876920f": {
+    "doc_id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX",
+    "size_bytes": 7563,
+    "stored_path": "/workspace/FluidRAG/rag-app/storage/uploads/final/doc_01K6GS8ZKQ7874BG8P83PN0XBX/Epf-Co.pdf",
+    "filename": "Epf-Co.pdf"
   }
 }

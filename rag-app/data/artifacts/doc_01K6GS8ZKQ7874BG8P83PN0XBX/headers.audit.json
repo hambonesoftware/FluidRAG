@@ -1,0 +1,10 @@
+{
+  "stage": "headers.join",
+  "status": "ok",
+  "timestamp": "2025-10-01T21:01:27.705100+00:00",
+  "correlation_id": "d9b92a8a20994602afe1a42a379cf397",
+  "duration_ms": 4.077,
+  "doc_id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX",
+  "headers": 24,
+  "recovered": 0
+}
