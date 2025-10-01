@@ -1,0 +1,43 @@
+<testsuite name="parser" tests="41" failures="0">
+    <testcase classname="headers" name="0) Purpose" time="0"/>
+    <testcase classname="headers" name="2) System" time="0"/>
+    <testcase classname="headers" name="Section 6" time="0"/>
+    <testcase classname="headers" name="3) Performance" time="0"/>
+    <testcase classname="headers" name="Section 18" time="0"/>
+    <testcase classname="headers" name="4) Materials" time="0"/>
+    <testcase classname="headers" name="5) Mechanical" time="0"/>
+    <testcase classname="headers" name="6) Robotics," time="0"/>
+    <testcase classname="headers" name="7) Controls," time="0"/>
+    <testcase classname="headers" name="1) plant" time="0"/>
+    <testcase classname="headers" name="8) Software" time="0"/>
+    <testcase classname="headers" name="9) Documentation" time="0"/>
+    <testcase classname="headers" name="79) and" time="0"/>
+    <testcase classname="headers" name="10) Compliance" time="0"/>
+    <testcase classname="headers" name="Section 9" time="0"/>
+    <testcase classname="headers" name="12) Training" time="0"/>
+    <testcase classname="headers" name="13) Warranty" time="0"/>
+    <testcase classname="headers" name="14) Project" time="0"/>
+    <testcase classname="headers" name="15) Commercial" time="0"/>
+    <testcase classname="headers" name="16) Proposal" time="0"/>
+    <testcase classname="headers" name="Appendix A-D in" time="0"/>
+    <testcase classname="headers" name="17) Evaluation" time="0"/>
+    <testcase classname="headers" name="19) Vendor" time="0"/>
+    <testcase classname="headers" name="20) Exceptions" time="0"/>
+    <testcase classname="headers" name="21) Appendices" time="0"/>
+    <testcase classname="headers" name="Appendix A" time="0"/>
+    <testcase classname="headers" name="A1. Robot" time="0"/>
+    <testcase classname="headers" name="A2. Vision/Sensing" time="0"/>
+    <testcase classname="headers" name="A3. Conveyors" time="0"/>
+    <testcase classname="headers" name="A4. Controls" time="0"/>
+    <testcase classname="headers" name="A5. Utilities" time="0"/>
+    <testcase classname="headers" name="A6. Performance" time="0"/>
+    <testcase classname="headers" name="A7. Layout" time="0"/>
+    <testcase classname="headers" name="A8. Options" time="0"/>
+    <testcase classname="headers" name="Appendix B" time="0"/>
+    <testcase classname="headers" name="Appendix C" time="0"/>
+    <testcase classname="headers" name="Appendix D" time="0"/>
+    <testcase classname="headers" name="Section Requirement Compliant" time="0"/>
+    <testcase classname="headers" name="22) Proposal" time="0"/>
+    <testcase classname="headers" name="60) days" time="0"/>
+    <testcase classname="headers" name="23) Right" time="0"/>
+</testsuite>

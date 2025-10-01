@@ -21,7 +21,7 @@ _PATTERNS: list[tuple[re.Pattern[str], float]] = [
     ),
     (re.compile(r"^\d+(?:\.\d+)+\s+", re.I), 0.85),
     (re.compile(r"^\d+[\.)]\s+", re.I), 0.72),
-    (re.compile(r"^[A-Z]\d+(?:[\.\-]\d+)+\b", re.I), 0.75),
+    (re.compile(r"^[A-Z]\d+(?:[\.\-]\d+)*\b", re.I), 0.75),
     (re.compile(r"^(?:[IVXLCM]+\.)+\s+", re.I), 0.7),
     (
         re.compile(
@@ -45,6 +45,86 @@ _INLINE_PATTERNS: list[re.Pattern[str]] = [
         re.IGNORECASE,
     ),
 ]
+
+
+_WORD_PATTERN = re.compile(r"[A-Za-z]{1,}")
+_MEASURE_UNITS = {
+    "hz",
+    "khz",
+    "mhz",
+    "ghz",
+    "db",
+    "dba",
+    "dbm",
+    "vac",
+    "vdc",
+    "amp",
+    "amps",
+    "a",
+    "v",
+    "kv",
+    "mw",
+    "kw",
+    "hp",
+    "lb",
+    "lbs",
+    "kg",
+    "g",
+    "mm",
+    "cm",
+    "m",
+    "in",
+    "ft",
+    "psi",
+    "scfm",
+    "rpm",
+    "%",
+    "°c",
+    "°f",
+}
+
+
+def _has_meaningful_alpha(text: str) -> bool:
+    words = _WORD_PATTERN.findall(text)
+    if not words:
+        return False
+    for word in words:
+        if any(char.islower() for char in word) and len(word) >= 3:
+            return True
+        if word.lower() in {"appendix", "chapter", "section"}:
+            return True
+    return False
+
+
+def _looks_like_measurement(text: str) -> bool:
+    candidate = text.strip().lower().strip(".:;)")
+    if not candidate:
+        return False
+    match = re.match(r"^[\d\s.,/\-]+(?P<unit>[a-z°%]+)$", candidate)
+    if match and match.group("unit") in _MEASURE_UNITS:
+        return True
+    parts = candidate.split()
+    if len(parts) == 2:
+        number, unit = parts
+        try:
+            float(number.replace(",", ""))
+        except ValueError:
+            return False
+        unit = unit.strip("()%")
+        if unit in _MEASURE_UNITS:
+            return True
+    return False
+
+
+def _is_viable_header(text: str) -> bool:
+    candidate = text.strip()
+    if len(candidate) < 3:
+        return False
+    if not _has_meaningful_alpha(candidate):
+        return False
+    if _looks_like_measurement(candidate):
+        return False
+    return True
 
 
 def _uppercase_ratio(text: str) -> float:
@@ -112,6 +192,8 @@ def _extract_inline_headers(text: str) -> list[tuple[int, str]]:
             header_text = match.group("header").strip(" .:-)\n")
             header_text = _trim_header_text(header_text)
             if not header_text:
+                continue
+            if not _is_viable_header(header_text):
                 continue
             key = (match.start(), header_text.lower())
             if key in seen:
@@ -193,6 +275,8 @@ def find_header_candidates(chunks_artifact_path: str) -> list[dict[str, Any]]:
                     "recovered": False,
                 }
                 candidates.append(candidate_inline)
+            continue
+        if not _is_viable_header(normalized_text):
             continue
         base_score = _base_score(normalized_text)
         if base_score < 0.4 and base_score < 0.25:
