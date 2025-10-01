@@ -34,7 +34,7 @@ async def post_upload(
         "route.uploads.post",
         extra={
             "request_id": request_id,
-            "filename": filename,
+            "upload_filename": filename,
             "doc_label": doc_label,
             "project_id": project_id,
             "client_ip": client_ip,
