@@ -1,0 +1,6 @@
+{
+  "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH",
+  "chunk_count": 3,
+  "bm25_docs": 3,
+  "dense_index_path": "/workspace/FluidRAG/rag-app/data/artifacts/doc_01K6GRMA79RKV1PGANHCS6BGNH/vectors.faiss.json"
+}
