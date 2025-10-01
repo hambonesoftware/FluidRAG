@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ..services.upload_service import NormalizedDoc, ensure_normalized
 from ..util.errors import AppError, NotFoundError, ValidationError
 from ..util.logging import get_logger
-from .uploads import router
+
+legacy_router = APIRouter(tags=["upload"])
 
 logger = get_logger(__name__)
 
@@ -21,7 +22,7 @@ class UploadRequest(BaseModel):
     file_name: str | None = None
 
 
-@router.post("/upload/normalize", response_model=NormalizedDoc)
+@legacy_router.post("/upload/normalize", response_model=NormalizedDoc)
 async def normalize_upload(request: UploadRequest) -> NormalizedDoc:
     """Normalize an uploaded file and return artifact metadata."""
 
@@ -41,7 +42,7 @@ async def normalize_upload(request: UploadRequest) -> NormalizedDoc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/upload/pdf", response_model=NormalizedDoc)
+@legacy_router.post("/upload/pdf", response_model=NormalizedDoc)
 async def upload_pdf(file: UploadFile = File(...)) -> NormalizedDoc:
     """Accept a raw PDF upload and process it via the upload service."""
 
@@ -64,4 +65,9 @@ async def upload_pdf(file: UploadFile = File(...)) -> NormalizedDoc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-__all__ = ["router", "normalize_upload", "upload_pdf", "UploadRequest"]
+__all__ = [
+    "legacy_router",
+    "normalize_upload",
+    "upload_pdf",
+    "UploadRequest",
+]

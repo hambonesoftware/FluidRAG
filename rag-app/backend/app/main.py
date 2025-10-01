@@ -13,6 +13,7 @@ from .routes import (
     chunk_router,
     docs_router,
     headers_router,
+    legacy_upload_router,
     orchestrator_router,
     parser_router,
     passes_router,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(upload_router)
+    app.include_router(legacy_upload_router)
     app.include_router(docs_router)
     app.include_router(parser_router)
     app.include_router(chunk_router)

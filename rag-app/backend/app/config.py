@@ -71,6 +71,15 @@ class Settings(BaseSettings):
         ge=1,
         validation_alias=AliasChoices("UPLOAD_MAX_MB", "upload.max_mb"),
     )
+    upload_max_bytes: int | None = Field(
+        default=None,
+        ge=1,
+        validation_alias=AliasChoices(
+            "UPLOAD_MAX_BYTES",
+            "upload_max_bytes",
+            "upload.max_bytes",
+        ),
+    )
     upload_allowed_ext: tuple[str, ...] = Field(
         default=(".pdf",),
         validation_alias=AliasChoices(
@@ -442,6 +451,35 @@ class Settings(BaseSettings):
         """Return chunk size for streaming I/O operations."""
 
         return int(self.storage_stream_chunk_size)
+
+    def max_upload_bytes(self) -> int:
+        """Return the configured upload size ceiling in bytes."""
+
+        if self.upload_max_bytes is not None:
+            return int(self.upload_max_bytes)
+        return int(self.upload_max_mb * 1024 * 1024)
+
+    def openrouter_retry_schedule(self) -> list[float]:
+        """Return exponential backoff schedule for OpenRouter calls."""
+
+        retries = max(int(self.openrouter_max_retries), 0)
+        base = max(float(self.openrouter_backoff_base_seconds), 0.0)
+        cap = max(float(self.openrouter_backoff_cap_seconds), 0.0)
+
+        schedule: list[float] = [0.0]
+        if retries == 0:
+            return schedule
+
+        delay = base
+        for _ in range(retries):
+            if cap > 0.0:
+                schedule.append(min(delay, cap))
+            else:
+                schedule.append(delay)
+            delay = delay * 2 if delay > 0.0 else base
+            if cap > 0.0 and delay > cap:
+                delay = cap
+        return schedule
 
 
 @lru_cache(maxsize=1)
