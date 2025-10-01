@@ -13,6 +13,13 @@
 - `ruff check backend/app tests --fix` — no remaining lint violations after auto-fix.
 - `ruff format backend/app tests` — codebase formatted.
 
+## Verification Run — 2025-10-04
+- README audit confirmed quickstart, environment setup, and troubleshooting guidance remain aligned with Phase 11 scope.
+- Release tooling (`scripts/release_checklist.py`, `scripts/offline_pipeline_demo.py`) present and callable for handover workflows.
+- Changelog reflects Phase 11 deliverables with documentation of new scripts and README updates.
+- Backlog and outcome reports (`reports/post_phase_backlog.md`, this file) available for next-iteration planning.
+- `pytest` (full backend suite covering phases 1–11) — 107 passed on Python 3.12.10.
+
 ## Cross-Phase Adjustments
 - `pytest.ini` now includes `rag-app/tests` so frontend/demo suites remain part of the default run.
 
