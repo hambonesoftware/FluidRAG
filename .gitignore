@@ -18,5 +18,5 @@ node_modules/
 .pytest_cache/
 
 # Binary artifacts (avoid committing generated PDFs/zips)
-*.pdf
+
 *.zip
