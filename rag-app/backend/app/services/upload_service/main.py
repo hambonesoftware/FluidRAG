@@ -96,7 +96,7 @@ def handle_upload(
     logger.info(
         "service.upload.handle_upload",
         extra={
-            "filename": filename,
+            "upload_filename": filename,
             "doc_label": doc_label,
             "project_id": project_id,
             "request_id": request_id,
@@ -116,7 +116,7 @@ def handle_upload(
         "service.upload.handle_upload.success",
         extra={
             "doc_id": result.doc_id,
-            "filename": result.filename,
+            "stored_filename": result.filename,
             "size_bytes": result.size_bytes,
             "sha256": result.sha256,
             "job_id": result.job_id,

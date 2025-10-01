@@ -52,6 +52,14 @@ _HEADER_KEYWORDS = {
 
 
 
+def _json_default(value: Any) -> Any:
+    """Serialize non-JSON-native values."""
+
+    if isinstance(value, datetime):
+        return value.isoformat()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 class NormalizedDocInternal(BaseModel):
     """Internal normalized result."""
 
@@ -262,7 +270,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    serialized = json.dumps(
+        payload, indent=2, ensure_ascii=False, default=_json_default
+    )
+    path.write_text(serialized, encoding="utf-8")
 
 
 def _flatten_app_path(path_str: str) -> Path:
@@ -903,7 +914,7 @@ def process_upload(
         logger=logger,
         extra={
             "request_id": request_id,
-            "filename": filename,
+            "upload_filename": filename,
             "client_ip": client_ip,
         },
     ) as span_meta:
