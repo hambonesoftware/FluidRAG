@@ -22,7 +22,10 @@ def validate_upload_inputs(
         ext if ext.startswith(".") else f".{ext}"
         for ext in settings.upload_allowed_ext
     }
-    max_bytes = int(settings.upload_max_mb * 1024 * 1024)
+    fallback_extensions: set[str] = set()
+    if getattr(settings, "offline", False):
+        fallback_extensions.update({".txt", ".text"})
+    max_bytes = int(settings.max_upload_bytes())
 
     if upload_bytes is not None:
         if file_id or file_name:
@@ -73,7 +76,7 @@ def validate_upload_inputs(
     if not path.exists() or not path.is_file():
         raise ValidationError("file_name does not reference an existing file")
     suffix = path.suffix.lower()
-    if suffix not in allowed_extensions:
+    if suffix not in allowed_extensions | fallback_extensions:
         raise ValidationError(
             f"unsupported file extension: {suffix or '[none]'}"
         )
