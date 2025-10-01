@@ -1,0 +1,10 @@
+{
+  "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH",
+  "artifact_path": "/workspace/FluidRAG/rag-app/data/artifacts/doc_01K6GRMA79RKV1PGANHCS6BGNH/normalize.json",
+  "kind": "normalize",
+  "checksum": "4df85430aae4d446b0c6aa2d05afba449c3308cfef32131ce89e5ccd1054edb5",
+  "size": 20404,
+  "generated_at": "2025-10-01T20:50:10.549341+00:00",
+  "source_checksum": "a1c7f4ab4a8e1eb2a16aa300362e7c6937cf87c4620e01e736bc4660b1713d1a",
+  "source_bytes": 8039
+}

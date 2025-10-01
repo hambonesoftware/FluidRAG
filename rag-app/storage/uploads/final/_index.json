@@ -1,8 +1,8 @@
 {
-  "3fc4bc96df188d6e7412e56eb8a4e3b1c4196eab5a30850952ec9a52f83b14e5": {
-    "doc_id": "doc_01K6ESYD1QR21NK4AHWRMSJE4J",
-    "size_bytes": 47991,
-    "stored_path": "/workspace/FluidRAG/rag-app/storage/uploads/final/doc_01K6ESYD1QR21NK4AHWRMSJE4J/Epf-Co.pdf",
+  "a1c7f4ab4a8e1eb2a16aa300362e7c6937cf87c4620e01e736bc4660b1713d1a": {
+    "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH",
+    "size_bytes": 8039,
+    "stored_path": "/workspace/FluidRAG/rag-app/storage/uploads/final/doc_01K6GRMA79RKV1PGANHCS6BGNH/Epf-Co.pdf",
     "filename": "Epf-Co.pdf"
   }
 }

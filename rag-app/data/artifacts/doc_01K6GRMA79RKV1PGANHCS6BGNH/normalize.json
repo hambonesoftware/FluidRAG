@@ -1,0 +1,738 @@
+{
+  "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH",
+  "source": {
+    "file_id": null,
+    "file_name": "Epf-Co.pdf",
+    "stored_path": "/workspace/FluidRAG/rag-app/data/artifacts/doc_01K6GRMA79RKV1PGANHCS6BGNH/source.pdf",
+    "checksum": "a1c7f4ab4a8e1eb2a16aa300362e7c6937cf87c4620e01e736bc4660b1713d1a",
+    "bytes": 8039
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "text": "0. Purpose & Background\nOverview of the engagement goals and framing.\n1. Executive Summary\nKey highlights from the engagement presented in concise bullets.\n1.1 Scope\nDefines the boundaries of the analysis and the operating assumptions.\n1.2 Requirements\nLists the functional and non-functional expectations gathered from stakeholders.\n2. Methodology\nExplains the process and tooling used to evaluate performance.\n2.1 Data Collection\nDescribes how inputs were gathered, validated, and normalized.\n2.2 Analysis Framework\nSummarises the models used to interpret and benchmark results.\n3. Results\nPresents outcomes from simulations and real-world validation steps.\n3.1 Observations\nHighlights notable metrics and deviations requiring attention.\n3.2 Recommendations\nOffers prioritized remediation steps with owners and deadlines.\nAppendix A1 Supporting Tables\nDetailed measurements and lookup tables referenced in the main body.\nAppendix A2 Additional Charts\nSupplementary plots illustrating trends across time and regions.\nAppendix A3 Glossary\nDefinitions of terms and acronyms used throughout the document.",
+      "blocks": [
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b1",
+          "page": 1,
+          "text": "0. Purpose & Background",
+          "bbox": [
+            72.0,
+            54.8,
+            254.32,
+            76.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b2",
+          "page": 1,
+          "text": "Overview of the engagement goals and framing.",
+          "bbox": [
+            88.0,
+            78.175,
+            322.168,
+            93.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b3",
+          "page": 1,
+          "text": "1. Executive Summary",
+          "bbox": [
+            72.0,
+            108.8,
+            232.048,
+            130.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b4",
+          "page": 1,
+          "text": "Key highlights from the engagement presented in concise bullets.",
+          "bbox": [
+            88.0,
+            132.175,
+            405.933,
+            147.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b5",
+          "page": 1,
+          "text": "1.1 Scope",
+          "bbox": [
+            72.0,
+            162.8,
+            144.048,
+            184.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b6",
+          "page": 1,
+          "text": "Defines the boundaries of the analysis and the operating assumptions.",
+          "bbox": [
+            88.0,
+            186.175,
+            431.013,
+            201.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b7",
+          "page": 1,
+          "text": "1.2 Requirements",
+          "bbox": [
+            72.0,
+            216.8,
+            198.272,
+            238.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b8",
+          "page": 1,
+          "text": "Lists the functional and non-functional expectations gathered from stakeholders.",
+          "bbox": [
+            88.0,
+            240.175,
+            477.477,
+            255.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b9",
+          "page": 1,
+          "text": "2. Methodology",
+          "bbox": [
+            72.0,
+            270.8,
+            181.392,
+            292.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b10",
+          "page": 1,
+          "text": "Explains the process and tooling used to evaluate performance.",
+          "bbox": [
+            88.0,
+            294.175,
+            397.991,
+            309.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b11",
+          "page": 1,
+          "text": "2.1 Data Collection",
+          "bbox": [
+            72.0,
+            324.8,
+            207.168,
+            346.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b12",
+          "page": 1,
+          "text": "Describes how inputs were gathered, validated, and normalized.",
+          "bbox": [
+            88.0,
+            348.175,
+            400.411,
+            363.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b13",
+          "page": 1,
+          "text": "2.2 Analysis Framework",
+          "bbox": [
+            72.0,
+            378.8,
+            242.704,
+            400.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b14",
+          "page": 1,
+          "text": "Summarises the models used to interpret and benchmark results.",
+          "bbox": [
+            88.0,
+            402.175,
+            405.9,
+            417.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b15",
+          "page": 1,
+          "text": "3. Results",
+          "bbox": [
+            72.0,
+            432.8,
+            143.136,
+            454.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b16",
+          "page": 1,
+          "text": "Presents outcomes from simulations and real-world validation steps.",
+          "bbox": [
+            88.0,
+            456.175,
+            419.947,
+            471.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b17",
+          "page": 1,
+          "text": "3.1 Observations",
+          "bbox": [
+            72.0,
+            486.8,
+            192.944,
+            508.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b18",
+          "page": 1,
+          "text": "Highlights notable metrics and deviations requiring attention.",
+          "bbox": [
+            88.0,
+            510.175,
+            382.074,
+            525.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b19",
+          "page": 1,
+          "text": "3.2 Recommendations",
+          "bbox": [
+            72.0,
+            540.8,
+            232.064,
+            562.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b20",
+          "page": 1,
+          "text": "Offers prioritized remediation steps with owners and deadlines.",
+          "bbox": [
+            88.0,
+            564.175,
+            394.284,
+            579.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b21",
+          "page": 1,
+          "text": "Appendix A1 Supporting Tables",
+          "bbox": [
+            72.0,
+            594.8,
+            297.008,
+            616.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b22",
+          "page": 1,
+          "text": "Detailed measurements and lookup tables referenced in the main body.",
+          "bbox": [
+            88.0,
+            618.175,
+            435.886,
+            633.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b23",
+          "page": 1,
+          "text": "Appendix A2 Additional Charts",
+          "bbox": [
+            72.0,
+            648.8,
+            288.992,
+            670.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b24",
+          "page": 1,
+          "text": "Supplementary plots illustrating trends across time and regions.",
+          "bbox": [
+            88.0,
+            672.175,
+            397.342,
+            687.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b25",
+          "page": 1,
+          "text": "Appendix A3 Glossary",
+          "bbox": [
+            72.0,
+            702.8,
+            230.288,
+            724.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p1:b26",
+          "page": 1,
+          "text": "Definitions of terms and acronyms used throughout the document.",
+          "bbox": [
+            88.0,
+            726.175,
+            409.596,
+            741.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        }
+      ],
+      "images": [],
+      "coverage": 1.0
+    },
+    {
+      "page_number": 2,
+      "text": "Appendix A4 Abbreviations\nAlphabetized list of abbreviations with expansions for clarity.\nAppendix A5 Supplemental Data\nExtended datasets captured during extended testing windows.\nAppendix A6 Risk Register\nLog of identified risks with impact, likelihood, and mitigation owners.\nAppendix A7 Compliance Mapping\nTraceability between requirements and regulatory clauses.\nAppendix A8 Revision History\nChronological list of document revisions with authors and timestamps.",
+      "blocks": [
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b1",
+          "page": 2,
+          "text": "Appendix A4 Abbreviations",
+          "bbox": [
+            72.0,
+            54.8,
+            264.096,
+            76.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b2",
+          "page": 2,
+          "text": "Alphabetized list of abbreviations with expansions for clarity.",
+          "bbox": [
+            88.0,
+            78.175,
+            380.842,
+            93.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b3",
+          "page": 2,
+          "text": "Appendix A5 Supplemental Data",
+          "bbox": [
+            72.0,
+            108.8,
+            303.232,
+            130.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b4",
+          "page": 2,
+          "text": "Extended datasets captured during extended testing windows.",
+          "bbox": [
+            88.0,
+            132.175,
+            390.665,
+            147.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b5",
+          "page": 2,
+          "text": "Appendix A6 Risk Register",
+          "bbox": [
+            72.0,
+            162.8,
+            262.288,
+            184.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b6",
+          "page": 2,
+          "text": "Log of identified risks with impact, likelihood, and mitigation owners.",
+          "bbox": [
+            88.0,
+            186.175,
+            417.516,
+            201.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b7",
+          "page": 2,
+          "text": "Appendix A7 Compliance Mapping",
+          "bbox": [
+            72.0,
+            216.8,
+            317.44,
+            238.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b8",
+          "page": 2,
+          "text": "Traceability between requirements and regulatory clauses.",
+          "bbox": [
+            88.0,
+            240.175,
+            372.889,
+            255.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b9",
+          "page": 2,
+          "text": "Appendix A8 Revision History",
+          "bbox": [
+            72.0,
+            270.8,
+            282.736,
+            292.784
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 16.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        },
+        {
+          "id": "doc_01K6GRMA79RKV1PGANHCS6BGNH:p2:b10",
+          "page": 2,
+          "text": "Chronological list of document revisions with authors and timestamps.",
+          "bbox": [
+            88.0,
+            294.175,
+            427.9,
+            309.289
+          ],
+          "font": {
+            "family": "Helvetica",
+            "size": 11.0,
+            "weight": "normal",
+            "style": "normal"
+          },
+          "confidence": 1.0
+        }
+      ],
+      "images": [],
+      "coverage": 1.0
+    }
+  ],
+  "stats": {
+    "page_count": 2,
+    "block_count": 36,
+    "images": 0,
+    "avg_coverage": 1.0,
+    "source_bytes": 8039,
+    "ocr_performed": true
+  },
+  "audit": [
+    {
+      "stage": "normalize.load",
+      "status": "ok",
+      "timestamp": "2025-10-01T20:50:10.284663+00:00",
+      "correlation_id": "467bd78c295f48d28b6a30fb3035d7d3",
+      "duration_ms": 0.0,
+      "bytes": 8039,
+      "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH"
+    },
+    {
+      "stage": "normalize.extract",
+      "status": "ok",
+      "timestamp": "2025-10-01T20:50:10.545517+00:00",
+      "correlation_id": "467bd78c295f48d28b6a30fb3035d7d3",
+      "duration_ms": 0.0,
+      "extractor": "pymupdf",
+      "pages": 2,
+      "blocks": 36,
+      "avg_coverage": 0.15110872099243491
+    },
+    {
+      "stage": "normalize.summary",
+      "status": "ok",
+      "timestamp": "2025-10-01T20:50:10.545599+00:00",
+      "correlation_id": "467bd78c295f48d28b6a30fb3035d7d3",
+      "duration_ms": 0.0,
+      "pages": 2,
+      "blocks": 36,
+      "avg_coverage": 0.15110872099243491
+    },
+    {
+      "stage": "normalize.ocr",
+      "status": "ok",
+      "timestamp": "2025-10-01T20:50:10.546695+00:00",
+      "correlation_id": "467bd78c295f48d28b6a30fb3035d7d3",
+      "duration_ms": 0.0,
+      "avg_coverage": 1.0
+    },
+    {
+      "stage": "normalize.persist",
+      "status": "ok",
+      "timestamp": "2025-10-01T20:50:10.546991+00:00",
+      "correlation_id": "467bd78c295f48d28b6a30fb3035d7d3",
+      "duration_ms": 0.0,
+      "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH",
+      "bytes": 8039
+    }
+  ],
+  "meta": {
+    "doc_label": null,
+    "project_id": null,
+    "request_id": "467bd78c295f48d28b6a30fb3035d7d3"
+  }
+}

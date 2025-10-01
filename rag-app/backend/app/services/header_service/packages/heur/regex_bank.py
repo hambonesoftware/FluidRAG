@@ -46,6 +46,12 @@ _INLINE_PATTERNS: list[re.Pattern[str]] = [
     ),
 ]
 
+_HEADER_START_PATTERN = re.compile(
+    r"(?:appendix|chapter|section)\s+[A-Z\d]+(?:[\.\-][A-Z\d]+)*"
+    r"|[A-Z]?\d+(?:\.\d+)*(?:[\.)])?(?=\s+[A-Z])",
+    re.IGNORECASE,
+)
+
 
 _WORD_PATTERN = re.compile(r"[A-Za-z]{1,}")
 _MEASURE_UNITS = {
@@ -184,22 +190,43 @@ def _base_score(text: str) -> float:
     return min(score, 0.95)
 
 
+def _split_header_segment(segment: str) -> list[tuple[int, str]]:
+    if not segment:
+        return []
+    matches = list(_HEADER_START_PATTERN.finditer(segment))
+    if not matches:
+        cleaned = segment.strip()
+        return [(0, cleaned)] if cleaned else []
+    pieces: list[tuple[int, str]] = []
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(segment)
+        chunk = segment[start:end].strip()
+        if chunk:
+            pieces.append((start, chunk))
+    return pieces
+
+
 def _extract_inline_headers(text: str) -> list[tuple[int, str]]:
     results: list[tuple[int, str]] = []
     seen: set[tuple[int, str]] = set()
     for pattern in _INLINE_PATTERNS:
         for match in pattern.finditer(text):
-            header_text = match.group("header").strip(" .:-)\n")
-            header_text = _trim_header_text(header_text)
-            if not header_text:
-                continue
-            if not _is_viable_header(header_text):
-                continue
-            key = (match.start(), header_text.lower())
-            if key in seen:
-                continue
-            seen.add(key)
-            results.append((match.start(), header_text))
+            segment = match.group("header")
+            segment_offset = match.start()
+            for relative_start, piece in _split_header_segment(segment):
+                raw_header = piece.strip(" .:-)\n")
+                header_text = _trim_header_text(raw_header)
+                if not header_text:
+                    continue
+                if not _is_viable_header(header_text):
+                    continue
+                absolute_start = segment_offset + relative_start
+                key = (absolute_start, header_text.lower())
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append((absolute_start, header_text))
     results.sort(key=lambda item: item[0])
     return results
 

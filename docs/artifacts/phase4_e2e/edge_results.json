@@ -1,0 +1,25 @@
+{
+  "bad_extension": {
+    "status": 400,
+    "detail": {
+      "detail": "unsupported_extension"
+    }
+  },
+  "bad_mime": {
+    "status": 415,
+    "detail": {
+      "detail": "unsupported_mime"
+    }
+  },
+  "duplicate": {
+    "status": 200,
+    "payload": {
+      "doc_id": "doc_01K6GRMA79RKV1PGANHCS6BGNH",
+      "filename": "Epf-Co.pdf",
+      "size_bytes": 8039,
+      "sha256": "a1c7f4ab4a8e1eb2a16aa300362e7c6937cf87c4620e01e736bc4660b1713d1a",
+      "stored_path": "/workspace/FluidRAG/rag-app/storage/uploads/final/doc_01K6GRMA79RKV1PGANHCS6BGNH/Epf-Co.pdf",
+      "job_id": "job_01K6GRMAGRDTRAZ8DPJ0HKVY71"
+    }
+  }
+}
