@@ -1,0 +1,551 @@
+{
+  "doc_id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX",
+  "language": {
+    "code": "en",
+    "confidence": 0.795,
+    "method": "heuristic"
+  },
+  "blocks": [
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b1",
+      "page": 1,
+      "text": "0. Purpose & Background",
+      "bbox": [
+        72.0,
+        694.2,
+        345.48,
+        727.176
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 24.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b2",
+      "page": 1,
+      "text": "Overview of the engagement goals and framing. 1. Executive Summary",
+      "bbox": [
+        72.0,
+        646.2,
+        327.456,
+        693.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b3",
+      "page": 1,
+      "text": "Key highlights from the engagement presented in concise bullets. 1.1 Scope",
+      "bbox": [
+        72.0,
+        602.5,
+        418.836,
+        645.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 16.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b4",
+      "page": 1,
+      "text": "Defines the boundaries of the analysis and the operating assumptions. 1.2 Requirements",
+      "bbox": [
+        72.0,
+        558.5,
+        446.196,
+        601.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 16.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b5",
+      "page": 1,
+      "text": "Lists the functional and non-functional expectations gathered from stakeholders. 2. Methodology 2.1 Data Collection",
+      "bbox": [
+        72.0,
+        484.5,
+        496.884,
+        557.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.67,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b6",
+      "page": 1,
+      "text": "Describes how inputs were gathered, validated, and normalized. 2.2 Analysis Framework",
+      "bbox": [
+        72.0,
+        440.5,
+        412.812,
+        483.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 16.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b7",
+      "page": 1,
+      "text": "Summarizes the models used to interpret and benchmark results. 3. Results 3.1 Observations",
+      "bbox": [
+        72.0,
+        366.5,
+        418.8,
+        439.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.67,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b8",
+      "page": 1,
+      "text": "Highlights notable metrics and deviations requiring attention. 3.2 Recommendations",
+      "bbox": [
+        72.0,
+        322.5,
+        392.808,
+        365.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 16.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b9",
+      "page": 1,
+      "text": "Offers prioritized remediation steps with owners and deadlines. Appendix A1 Supporting Tables",
+      "bbox": [
+        72.0,
+        274.2,
+        409.512,
+        321.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b10",
+      "page": 1,
+      "text": "Detailed measurements and lookup tables referenced in the main body. Appendix A2 Additional Charts",
+      "bbox": [
+        72.0,
+        226.2,
+        451.512,
+        273.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b11",
+      "page": 1,
+      "text": "Supplementary plots illustrating trends across time and regions. Appendix A3 Glossary",
+      "bbox": [
+        72.0,
+        178.2,
+        409.464,
+        225.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b12",
+      "page": 1,
+      "text": "Definitions of terms and acronyms used throughout the document. Appendix A4 Abbreviations",
+      "bbox": [
+        72.0,
+        130.2,
+        422.832,
+        177.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b13",
+      "page": 1,
+      "text": "Alphabetized list of abbreviations with expansions for clarity. Appendix A5 Supplemental Data",
+      "bbox": [
+        72.0,
+        82.2,
+        418.848,
+        129.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b1",
+      "page": 2,
+      "text": "Extended datasets captured during extended testing windows. Appendix A6 Risk Register",
+      "bbox": [
+        72.0,
+        676.2,
+        402.18,
+        723.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b2",
+      "page": 2,
+      "text": "Log of identified risks with impact, likelihood, and mitigation owners. Appendix A7 Compliance Mapping",
+      "bbox": [
+        72.0,
+        628.2,
+        440.16,
+        675.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b3",
+      "page": 2,
+      "text": "Traceability between requirements and regulatory clauses. Appendix A8 Revision History",
+      "bbox": [
+        72.0,
+        580.2,
+        388.104,
+        627.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 18.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b4",
+      "page": 2,
+      "text": "Chronological list of document revisions with authors and timestamps.",
+      "bbox": [
+        72.0,
+        563.1,
+        442.8,
+        579.588
+      ],
+      "font": {
+        "family": "Helvetica",
+        "size": 12.0,
+        "weight": "normal",
+        "style": "normal"
+      },
+      "confidence": 1.0
+    }
+  ],
+  "tables": [],
+  "images": [],
+  "links": [],
+  "ocr": {
+    "performed": true,
+    "tokens": [
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b1",
+        "text": "0. Purpose & Background",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b2",
+        "text": "Overview of the engagement goals and framing. 1. Executive Summary",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b3",
+        "text": "Key highlights from the engagement presented in concise bullets. 1.1 Scope",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b4",
+        "text": "Defines the boundaries of the analysis and the operating assumptions. 1.2 Requirements",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b5",
+        "text": "Lists the functional and non-functional expectations gathered from stakeholders. 2. Methodology 2.1 Data Collection",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b6",
+        "text": "Describes how inputs were gathered, validated, and normalized. 2.2 Analysis Framework",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b7",
+        "text": "Summarizes the models used to interpret and benchmark results. 3. Results 3.1 Observations",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b8",
+        "text": "Highlights notable metrics and deviations requiring attention. 3.2 Recommendations",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b9",
+        "text": "Offers prioritized remediation steps with owners and deadlines. Appendix A1 Supporting Tables",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b10",
+        "text": "Detailed measurements and lookup tables referenced in the main body. Appendix A2 Additional Charts",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b11",
+        "text": "Supplementary plots illustrating trends across time and regions. Appendix A3 Glossary",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b12",
+        "text": "Definitions of terms and acronyms used throughout the document. Appendix A4 Abbreviations",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b13",
+        "text": "Alphabetized list of abbreviations with expansions for clarity. Appendix A5 Supplemental Data",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b1",
+        "text": "Extended datasets captured during extended testing windows. Appendix A6 Risk Register",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b2",
+        "text": "Log of identified risks with impact, likelihood, and mitigation owners. Appendix A7 Compliance Mapping",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b3",
+        "text": "Traceability between requirements and regulatory clauses. Appendix A8 Revision History",
+        "confidence": 1.0
+      },
+      {
+        "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b4",
+        "text": "Chronological list of document revisions with authors and timestamps.",
+        "confidence": 1.0
+      }
+    ]
+  },
+  "reading_order": [
+    12,
+    11,
+    10,
+    9,
+    8,
+    7,
+    6,
+    5,
+    4,
+    3,
+    2,
+    1,
+    0,
+    16,
+    15,
+    14,
+    13
+  ],
+  "semantics": [
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b1",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b2",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b3",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b4",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b5",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b6",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b7",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b8",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b9",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b10",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b11",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b12",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b13",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b1",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b2",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b3",
+      "role": "paragraph",
+      "confidence": 0.6
+    },
+    {
+      "id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p2:b4",
+      "role": "paragraph",
+      "confidence": 0.6
+    }
+  ],
+  "lists": [
+    {
+      "anchor_block": "doc_01K6GS8ZKQ7874BG8P83PN0XBX:p1:b1",
+      "ordered": true,
+      "items": [
+        {
+          "text": "Purpose & Background",
+          "prefix": "0."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "doc_id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX",
+    "language": {
+      "code": "en",
+      "confidence": 0.795,
+      "method": "heuristic"
+    },
+    "block_count": 17,
+    "table_count": 0,
+    "image_count": 0,
+    "link_count": 0,
+    "list_count": 1
+  },
+  "audit": [
+    {
+      "stage": "parser.merge",
+      "status": "ok",
+      "timestamp": "2025-10-01T21:01:27.697906+00:00",
+      "correlation_id": "d9b92a8a20994602afe1a42a379cf397",
+      "duration_ms": 6.776,
+      "doc_id": "doc_01K6GS8ZKQ7874BG8P83PN0XBX",
+      "blocks": 17
+    }
+  ]
+}

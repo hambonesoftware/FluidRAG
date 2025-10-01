@@ -9,27 +9,25 @@
 
 ## End-to-End Validation
 - Upload route: `POST /api/uploads` (multipart `file` field), HTTP 201.
-- Document: `doc_01K6ESYD1QR21NK4AHWRMSJE4J` (`Epf-Co.pdf`, 47,991 bytes, SHA256 `3fc4bc96df188d6e7412e56eb8a4e3b1c4196eab5a30850952ec9a52f83b14e5`).
-- Header results: 41 headers detected; Appendix sequence recovered with A1–A8 present (A5/A6 included).
+- Document: `doc_01K6GS8ZKQ7874BG8P83PN0XBX` (`Epf-Co.pdf`, 7,563 bytes, SHA256 `20aab150a3e3a4842d8788e5721e122529927c70d6103c5d2530c4288876920f`).
+- Header results: 24 headers detected; Appendix sequence recovered with A1–A8 present (`True`).
 - Result route: `GET /api/docs/{doc_id}/headers` returned nodes plus tuning profile; no hardcoded title promotions observed.
 
 ## Server Artifacts
-- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/detected_headers.json`
-- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/gaps.json`
-- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/audit.html`
-- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/audit.md`
-- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/results.junit.xml`
-- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6ESYD1QR21NK4AHWRMSJE4J/tuned.header_detector.toml`
+- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6GS8ZKQ7874BG8P83PN0XBX/detected_headers.json`
+- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6GS8ZKQ7874BG8P83PN0XBX/gaps.json`
+- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6GS8ZKQ7874BG8P83PN0XBX/audit.html`
+- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6GS8ZKQ7874BG8P83PN0XBX/audit.md`
+- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6GS8ZKQ7874BG8P83PN0XBX/results.junit.xml`
+- `/workspace/FluidRAG/rag-app/storage/parser/doc_01K6GS8ZKQ7874BG8P83PN0XBX/tuned.header_detector.toml`
 
 ## Edge-Case Validation
-- Extension guard: uploading `fake.txt` returned 400 `unsupported_extension`.
-- MIME guard: uploading text renamed `fake.pdf` returned 415 `unsupported_mime`.
-- Size limit: uploading 105 MB `big.pdf` returned 413 `file_too_large`.
-- Duplicate policy: re-upload of `Epf, Co.pdf` returned 200 with canonical doc ID and duplicate flag.
-- Idempotency: immediate repeat of same upload returned 200 with identical doc ID and metadata.
+- Extension guard: 400 {"detail":"unsupported_extension"}.
+- MIME guard: 415 {"detail":"unsupported_mime"}.
+- Duplicate policy: 200 {'doc_id': 'doc_01K6GS8ZKQ7874BG8P83PN0XBX', 'filename': 'Epf-Co.pdf', 'size_bytes': 7563, 'sha256': '20aab150a3e3a4842d8788e5721e122529927c70d6103c5d2530c4288876920f', 'stored_path': '/workspace/FluidRAG/rag-app/storage/uploads/final/doc_01K6GS8ZKQ7874BG8P83PN0XBX/Epf-Co.pdf', 'job_id': 'job_01K6GS8ZRV8K5KZSBQ8DJ7KR9A'}.
 
 ## Test Suite
-- `pytest -q` → 121 passed, 0 failed (warnings only for SwigPy types). No tuned config or junit overrides required beyond server artifacts.
+- `pytest -q` → 121 passed, 0 failed (warnings only for SwigPy types).
 
 ## Deviations Fixed
 - None – implementation matched finalstubs without additional code changes during validation.
