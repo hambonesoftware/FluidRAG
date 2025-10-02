@@ -13,6 +13,7 @@ class ParseResult(BaseModel):
 
     doc_id: str
     enriched_path: str
+    report_path: str | None = Field(default=None)
     language: str = Field(default="und", min_length=2)
     summary: dict[str, object] = Field(default_factory=dict)
     metrics: dict[str, float] = Field(default_factory=dict)

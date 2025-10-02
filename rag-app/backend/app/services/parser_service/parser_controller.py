@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ class ParseInternal(BaseModel):
 
     doc_id: str
     enriched_path: str
+    report_path: str | None
     language: str
     summary: dict[str, Any]
     metrics: dict[str, float]
@@ -168,6 +170,20 @@ def parse_and_enrich(doc_id: str, normalize_artifact: str) -> ParseInternal:
     enriched_path.write_text(
         json.dumps(enriched, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    report_path = artifact_root / "parse.report.json"
+    report_payload = {
+        "doc_id": doc_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "language": language.get("code", "und"),
+        "enriched_path": str(enriched_path),
+        "summary": enriched.get("summary", {}),
+        "metrics": metrics,
+        "block_count": len(enriched.get("blocks", [])),
+    }
+    report_path.write_text(
+        json.dumps(report_payload, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
     logger.info(
         "parser.parse_and_enrich.success",
         extra={
@@ -175,11 +191,13 @@ def parse_and_enrich(doc_id: str, normalize_artifact: str) -> ParseInternal:
             "language": language.get("code"),
             "blocks": len(enriched.get("blocks", [])),
             "tables": len(enriched.get("tables", [])),
+            "report_path": str(report_path),
         },
     )
     return ParseInternal(
         doc_id=doc_id,
         enriched_path=str(enriched_path),
+        report_path=str(report_path),
         language=language.get("code", "und"),
         summary=enriched.get("summary", {}),
         metrics=metrics,
