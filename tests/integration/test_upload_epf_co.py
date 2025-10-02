@@ -157,6 +157,12 @@ def test_repo_pdf_can_be_normalized_and_parsed(test_environment: Path) -> None:
     assert enriched_path.is_file()
     assert enriched.summary.get("block_count", 0) >= 50
 
+    report_path = Path(enriched.report_path)
+    assert report_path.is_file(), "parse report should be emitted alongside enriched artifact"
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_payload["doc_id"] == normalized.doc_id
+    assert report_payload["summary"] == enriched.summary
+
 
 def test_parsing_report_is_emitted_with_summary(test_environment: Path) -> None:
     """Persist a structured report showing the parse summary for the EPF PDF."""
@@ -166,25 +172,12 @@ def test_parsing_report_is_emitted_with_summary(test_environment: Path) -> None:
     normalized = ensure_normalized(file_name=str(pdf_path))
     parsed = parse_and_enrich(normalized.doc_id, normalized.normalized_path)
 
-    enriched_path = Path(parsed.enriched_path)
-    assert enriched_path.is_file(), "Missing enriched artifact"
-    enriched_payload = json.loads(enriched_path.read_text(encoding="utf-8"))
-    block_total = len(enriched_payload.get("blocks", []))
-    assert block_total == parsed.summary.get("block_count")
+    report_path = Path(parsed.report_path)
+    assert report_path.is_file(), "Parse report should be written by parser pipeline"
 
-    report_path = enriched_path.with_name("parse_report.json")
-    report_payload = {
-        "doc_id": parsed.doc_id,
-        "language": parsed.language,
-        "summary": parsed.summary,
-        "metrics": parsed.metrics,
-        "blocks": block_total,
-    }
-    report_path.write_text(json.dumps(report_payload, indent=2, ensure_ascii=False), encoding="utf-8")
-
-    assert report_path.is_file(), "Parse report was not written"
-    saved_report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert saved_report["doc_id"] == parsed.doc_id
-    assert saved_report["summary"].get("block_count", 0) >= 50
-    assert saved_report["language"] == parsed.language
-    assert saved_report["blocks"] == block_total
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_payload["doc_id"] == parsed.doc_id
+    assert report_payload["language"] == parsed.language
+    assert report_payload["summary"] == parsed.summary
+    assert report_payload["metrics"] == parsed.metrics
+    assert report_payload["block_count"] == parsed.summary.get("block_count")

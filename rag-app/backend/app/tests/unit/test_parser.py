@@ -37,6 +37,12 @@ def test_parse_and_enrich_generates_enriched_artifact(sample_pdf_path: Path) -> 
     assert payload["lists"], "list detection should capture bullet points"
     assert any(block["text"].startswith("2. Controls") for block in payload["blocks"])
 
+    report_path = Path(result.report_path)
+    assert report_path.exists()
+    report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_payload["doc_id"] == result.doc_id
+    assert report_payload["summary"] == result.summary
+
 
 def test_parse_and_enrich_missing_normalized(tmp_path: Path) -> None:
     with pytest.raises(NotFoundError):
